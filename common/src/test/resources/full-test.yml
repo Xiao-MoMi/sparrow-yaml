@@ -5,7 +5,7 @@
 test: &test
   empty_list: []
   empty_config: {}
-  null: ~
+#  null: ~
   string-1: "test"
   string-2: 'test'
   string-3: test
@@ -32,8 +32,12 @@ test: &test
   float: 0.0
   int_to_float: 0
   boolean: false
-  # 常规注释
   string_list:
+    - "qwq"
+    - "awa"
+    - "fwf"
+  # 常规注释
+  list:
     # 节点前部注释
     - # 节点内部注释
       "qwq" # 节点行内注释

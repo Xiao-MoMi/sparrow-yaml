@@ -7,7 +7,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.nodes.Node;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 

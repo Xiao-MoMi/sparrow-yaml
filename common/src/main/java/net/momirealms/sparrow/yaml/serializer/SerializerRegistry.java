@@ -16,6 +16,7 @@ public class SerializerRegistry {
 
     public SerializerRegistry(SparrowYaml holder) {
         this.holder = holder;
+        this.registerBaseSerializers();
     }
 
     /**
@@ -69,4 +70,20 @@ public class SerializerRegistry {
         return holder;
     }
 
+    /**
+     * 注册基础类型的序列化器
+     */
+    public void registerBaseSerializers() {
+        this.register(int.class, NodeSerializers.INT_SERIALIZER);
+        this.register(Integer.class, NodeSerializers.INT_SERIALIZER);
+        this.register(float.class, NodeSerializers.FLOAT_SERIALIZER);
+        this.register(Float.class, NodeSerializers.FLOAT_SERIALIZER);
+        this.register(double.class, NodeSerializers.DOUBLE_SERIALIZER);
+        this.register(Double.class, NodeSerializers.DOUBLE_SERIALIZER);
+        this.register(long.class, NodeSerializers.LONG_SERIALIZER);
+        this.register(Long.class, NodeSerializers.LONG_SERIALIZER);
+        this.register(boolean.class, NodeSerializers.BOOLEAN_SERIALIZER);
+        this.register(Boolean.class, NodeSerializers.BOOLEAN_SERIALIZER);
+        this.register(String.class, NodeSerializers.STRING_SERIALIZER);
+    }
 }

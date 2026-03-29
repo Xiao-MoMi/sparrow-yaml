@@ -25,6 +25,45 @@ public interface ParentNode<T extends YamlNode<?>> {
 
     /**
      * 根据路由, 从当前节点出发, 获得目标路由的节点;
+     * 然后尝试根据Class, 将目标节点使用序列化器进行序列化.
+     * @param clazz 目标类型
+     * @param route 路由
+     * @return 目标 JavaBean
+     */
+    @Nullable
+    default <R> R getAs(Class<R> clazz, Object... route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        return yamlNode != null ? yamlNode.getAs(clazz) : null;
+    }
+
+    /**
+     * 根据路由, 从当前节点出发, 获得目标路由的节点;
+     * 然后尝试根据Class, 将目标节点使用序列化器进行序列化.
+     * @param clazz 元素目标类型
+     * @param route 路由
+     * @return 目标 JavaBean
+     */
+    @Nullable
+    default <R> List<R> getAsList(Class<R> clazz, Object... route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        return yamlNode != null ? yamlNode.getAsList(clazz) : null;
+    }
+
+    /**
+     * 根据路由, 从当前节点出发, 获得目标路由的节点;
+     * 然后尝试根据Class, 将目标节点使用序列化器进行序列化.
+     * @param clazz 目标类型
+     * @param route 路由
+     * @return 目标 JavaBean
+     */
+    @Nullable
+    default <R> Map<String, R> getAsMap(Class<R> clazz, Object... route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        return yamlNode != null ? yamlNode.getAsMap(clazz) : null;
+    }
+
+    /**
+     * 根据路由, 从当前节点出发, 获得目标路由的节点;
      * 如果目标节点不存在, 则返回 null 值;
      * @param route 路由
      * @return 目标节点
@@ -57,6 +96,11 @@ public interface ParentNode<T extends YamlNode<?>> {
     @Nullable
     default YamlNode<?> getNodeOrNull(@NotNull Object... route) {
         return this.getNodeOrNull(Route.from(route));
+    }
+
+    @NotNull
+    default Optional<YamlNode<?>> getNodeOptional(@NotNull Object... route) {
+        return Optional.ofNullable(this.getNodeOrNull(Route.from(route)));
     }
 
     /**
@@ -127,7 +171,7 @@ public interface ParentNode<T extends YamlNode<?>> {
      * @return 目标节点
      */
     @NotNull
-    default YamlNode<?> getNodeOrThrow(@NotNull Route route, @Nullable Throwable exception) throws Throwable {
+    default YamlNode<?> getNodeOrThrow(@Nullable Throwable exception, @NotNull Route route) throws Throwable {
         YamlNode<?> yamlNode = this.getNodeOrNull(route);
         if (yamlNode == null) {
             throw exception != null ? exception : new NoSuchElementException("不存在的节点: " + route);
@@ -135,9 +179,14 @@ public interface ParentNode<T extends YamlNode<?>> {
         return yamlNode;
     }
 
-    @Nullable
+    @NotNull
     default YamlNode<?> getNodeOrThrow(@Nullable Throwable exception, @NotNull Object... route) throws Throwable {
-        return this.getNodeOrThrow(Route.from(route), exception);
+        return this.getNodeOrThrow(exception, Route.from(route));
+    }
+
+    @NotNull
+    default YamlNode<?> getNodeOrThrow(@NotNull Object... route) throws Throwable {
+        return this.getNodeOrThrow(null, route);
     }
 
     /**

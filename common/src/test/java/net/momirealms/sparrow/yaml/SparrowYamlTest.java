@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 
 public class SparrowYamlTest {
     public static void main(String[] args) throws IOException {
@@ -184,6 +185,24 @@ public class SparrowYamlTest {
         Assertions.assertEquals("single-value", yamlDocument.getScalarOrNull("mapping", "single").value());
         Assertions.assertEquals(100, yamlDocument.getScalarOrNull("mapping", "list", 0).value());
         Assertions.assertEquals("value", yamlDocument.getScalarOrNull("mapping", "list", 1, "key").value());
+    }
+
+    @Test
+    void readBySerializer() throws Throwable {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlDocument yamlDocument = sparrowYaml.loadFromResource("full-test.yml");
+
+        // 整数
+        Integer integer1 = yamlDocument.getAs(int.class, "test", "int");
+        Assertions.assertEquals(1314, integer1);
+        // 字符串
+        String string1 = yamlDocument.getAs(String.class, "test", "string-1");
+        Assertions.assertEquals("test", string1);
+        String quoted = yamlDocument.getAs(String.class, "test", "quoted");
+        Assertions.assertEquals("So does this quoted scalar.\n", quoted);
+        // 字符串列表
+        List<String> stringList = yamlDocument.getAsList(String.class, "test", "string_list");
+        Assertions.assertEquals(List.of("qwq", "awa", "fwf"), stringList);
     }
 
 }

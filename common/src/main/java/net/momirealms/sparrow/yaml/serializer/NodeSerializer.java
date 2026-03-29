@@ -1,6 +1,7 @@
 package net.momirealms.sparrow.yaml.serializer;
 
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 节点序列化器, 传入具体的Node节点, 将其通过该类序列化成目标 JavaBean
@@ -13,7 +14,8 @@ public interface NodeSerializer<T> {
      * @param node YamlNode 节点;
      * @return JavaBean;
      */
-    T deserialize(YamlNode node);
+    @Nullable
+    T deserialize(YamlNode<?> node);
 
     /**
      * 将一个 JavaBean 转换成 SnakeYAML 能够识别的原始对象;
@@ -21,6 +23,7 @@ public interface NodeSerializer<T> {
      * @param value JavaBean
      * @return 原始底层对象;
      */
+    @Nullable
     Object serialize(T value);
 
 }
