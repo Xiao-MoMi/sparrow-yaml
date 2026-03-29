@@ -74,6 +74,7 @@ public class SerializerRegistry {
      * 注册基础类型的序列化器
      */
     public void registerBaseSerializers() {
+        this.register(Object.class, NodeSerializers.OBJECT_SERIALIZER);
         this.register(int.class, NodeSerializers.INT_SERIALIZER);
         this.register(Integer.class, NodeSerializers.INT_SERIALIZER);
         this.register(float.class, NodeSerializers.FLOAT_SERIALIZER);
