@@ -1,28 +1,21 @@
 package net.momirealms.sparrow.yaml;
 
-import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
+import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.jetbrains.annotations.Nullable;
-import org.snakeyaml.engine.v2.api.DumpSettings;
-import org.snakeyaml.engine.v2.api.DumpSettingsBuilder;
-import org.snakeyaml.engine.v2.api.LoadSettings;
-import org.snakeyaml.engine.v2.api.LoadSettingsBuilder;
+import org.snakeyaml.engine.v2.api.*;
 import org.snakeyaml.engine.v2.representer.StandardRepresenter;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class SparrowYaml {
     private final LoadSettings loadSettings;
     private final DumpSettings dumpSettings;
-
     public final boolean allowObjectKey;
-
     private final StandardRepresenter representer;
     private final SerializerRegistry serializers = new SerializerRegistry(this);
 
@@ -35,34 +28,6 @@ public class SparrowYaml {
         this.dumpSettings = dumpSettings;
         this.allowObjectKey = allowObjectKey;
         this.representer =  new StandardRepresenter(dumpSettings);
-    }
-
-    /**
-     * 注册新的自定义序列化器;
-     * @param clazz 目标类
-     * @param serializer 序列化器
-     * @return 是否注册成功
-     */
-    public <T> boolean registerSerializer(Class<T> clazz, NodeSerializer<T> serializer) {
-        return this.serializers.register(clazz, serializer);
-    }
-
-    /**
-     * 注销已存在的自定义序列化器, 返回注销的序列化器;
-     * @param clazz 目标类
-     * @return 被移除的序列化器
-     */
-    @Nullable
-    public <T> NodeSerializer<T> unregisterSerializer(Class<T> clazz) {
-        return this.serializers.unregister(clazz);
-    }
-
-    /**
-     * 获取一个自定义序列化器;
-     */
-    @Nullable
-    public <T> NodeSerializer<T> getSerializer(Class<T> clazz) {
-        return this.serializers.get(clazz);
     }
 
     /**
@@ -148,6 +113,37 @@ public class SparrowYaml {
         return this.representer;
     }
 
+    public SerializerRegistry serializers() {
+        return this.serializers;
+    }
+
+    /**
+     * 读取本地文件, 传入定义文件, 然后尝试更新和保存文件, 最后返回一个完成更新的Yaml文档.
+     *
+     * @param localFile 本地文件
+     * @param defDocument 定义文件
+     * @param pipeline 更新管道
+     * @param backup 是否要备份文件
+     * @return 更新完成的Yaml文档
+     */
+    public YamlDocument upgradeFile(File localFile, YamlDocument defDocument, YamlUpgradePipeline pipeline, boolean backup) throws IOException {
+        // 备份
+        if (backup) {
+            Path backupPath = localFile.toPath().getParent().resolve(localFile.getName() + ".bak." + System.currentTimeMillis());
+            if (backupPath.equals(localFile.toPath())) {
+                throw new IllegalArgumentException("localFile path can not same with backup path!");
+            }
+            File backupFile = new File(backupPath.toUri());
+            Files.copy(localFile.toPath(), backupFile.toPath());
+        }
+        // 解析 & 更新
+        YamlDocument local = localFile.exists() ? new YamlDocument(this, Files.newInputStream(localFile.toPath())) : null;
+        YamlDocument upgraded = local == null ? defDocument : pipeline.upgrade(local, defDocument);
+        upgraded.save(localFile);
+        // 返回
+        return upgraded;
+    }
+
     /**
      * 建造者, 用于创建构建 SparrowYaml 对象的 builder;
      * @return SparrowYaml.Builder
@@ -158,9 +154,8 @@ public class SparrowYaml {
 
     public static class Builder {
         private final LoadSettingsBuilder loadSettingsBuilder = LoadSettings.builder().setAllowDuplicateKeys(false).setParseComments(true);
-        private final DumpSettingsBuilder dumpSettingsBuilder = DumpSettings.builder().setDumpComments(true);
+        private final DumpSettingsBuilder dumpSettingsBuilder = DumpSettings.builder().setDumpComments(true).setDefaultFlowStyle(org.snakeyaml.engine.v2.common.FlowStyle.BLOCK);
         private boolean allowObjectKey = false;
-        private final Map<Class<?>, NodeSerializer<?>> prepareRegisterSerializers = new ConcurrentHashMap<>();
 
         /**
          * 是否允许读取重复的 Key ?
@@ -175,7 +170,7 @@ public class SparrowYaml {
 
         /**
          * 是否允许出现 Object 作为 Key? (除 Null 外).
-         * 默认情况下, 所有加载的键都通过 Object.toString() 转换为字符串, (例如 5 -> "5" ).
+         * 默认情况下, 所有加载的键都通过 Object.toString() 转换为字符串, (例如 5 -> "5").
          * @param value DefaultValue: false
          */
         public Builder setAllowObjectKeys(boolean value) {
@@ -183,51 +178,12 @@ public class SparrowYaml {
             return this;
         }
 
-        /**
-         * 注册新的自定义序列化器;
-         * @param clazz 目标类
-         * @param serializer 序列化器
-         * @return 是否注册成功
-         */
-        public <T> boolean registerSerializer(Class<T> clazz, NodeSerializer<T> serializer) {
-            if (!prepareRegisterSerializers.containsKey(clazz)) {
-                prepareRegisterSerializers.put(clazz, serializer);
-                return true;
-            }
-            return false;
-        }
-
-        /**
-         * 注销已存在的自定义序列化器, 返回注销的序列化器;
-         * @param clazz 目标类
-         * @return 被移除的序列化器
-         */
-        @Nullable
-        @SuppressWarnings("unchecked")
-        public <T> NodeSerializer<T> unregisterSerializer(Class<T> clazz) {
-            return (NodeSerializer<T>) prepareRegisterSerializers.remove(clazz);
-        }
-
-        /**
-         * 获取一个自定义序列化器;
-         */
-        @Nullable
-        @SuppressWarnings("unchecked")
-        public <T> NodeSerializer<T> getSerializer(Class<T> clazz) {
-            return (NodeSerializer<T>) this.prepareRegisterSerializers.get(clazz);
-        }
-
-        /**
-         * 构建 SparrowYaml
-         */
         public SparrowYaml build() {
-            SparrowYaml sparrowYaml = new SparrowYaml(
+            return new SparrowYaml(
                     loadSettingsBuilder.build(),
                     dumpSettingsBuilder.build(),
                     allowObjectKey
             );
-            prepareRegisterSerializers.forEach(sparrowYaml.serializers::registerUnsafe);
-            return sparrowYaml;
         }
 
     }

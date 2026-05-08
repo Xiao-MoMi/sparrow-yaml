@@ -11,12 +11,9 @@ import org.snakeyaml.engine.v2.nodes.Node;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public abstract class AbstractYamlNode<T> implements YamlNode<T> {
-    protected YamlDocument root;
     protected ParentNode<?> parent;
-    protected Route route;
     protected Node keyNode;
     protected Node valueNode;
     protected Object key;
@@ -41,19 +38,16 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
 
     // 正常读取到的 Node 的构造函数;
     public AbstractYamlNode(
-            @NotNull YamlDocument root,
             @NotNull ParentNode<?> parent,
-            @NotNull Route route,
             @Nullable Node keyNode,
             @NotNull Node valueNode,
+            @Nullable Object key,
             @Nullable T value
     ) {
-        this.root = root;
         this.parent = parent;
-        this.route = route;
         this.keyNode = keyNode;
         this.valueNode = valueNode;
-        this.key = route.getRouteKey(route.length() - 1);
+        this.key = key;
         this.value = value;
         initComments(keyNode, valueNode);
     }
@@ -84,12 +78,20 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
 
     @Override
     public @Nullable RouteElement<?> keyRouteElement() {
+        Route route = route();
+        if (route == null) return null;
         return route.getRouteElement(route.length() - 1);
     }
 
     @Override
     public @NotNull YamlDocument root() {
-        return root;
+        if (this instanceof YamlDocument doc) {
+            return doc;
+        }
+        if (parent != null) {
+            return parent.yamlNode().root();
+        }
+        throw new IllegalStateException("当前 Node 尚未挂载到任何 YamlDocument 上!");
     }
 
     @Override
@@ -102,6 +104,11 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
         return valueNode;
     }
 
+    @ApiStatus.Internal
+    public void internalKeyNode(Node keyNode) {
+        this.keyNode = keyNode;
+    }
+
     @Override
     public @Nullable ParentNode<?> parentNode() {
         return parent;
@@ -111,10 +118,22 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
     public void parentNode(ParentNode<?> parentNode) {
         this.parent = parentNode;
     }
+    
+    @Override
+    public void key(Object key) {
+        this.key = key;
+    }
 
     @Override
     public Route route() {
-        return route;
+        if (parent == null) {
+            return this instanceof YamlDocument ? Route.empty() : null;
+        }
+        Route parentRoute = parent.yamlNode().route();
+        if (parentRoute == null) {
+            return Route.from(key);
+        }
+        return Route.addTo(parentRoute, key);
     }
 
     @Override
@@ -152,5 +171,52 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
         return afterValueComments;
     }
 
+    @Override
+    public void setBeforeKeyComments(List<CommentLine> comments) {
+        this.beforeKeyComments = comments;
+        if (keyNode != null) {
+            keyNode.setBlockComments(comments);
+        }
+    }
+
+    @Override
+    public void setInlineKeyComments(List<CommentLine> comments) {
+        this.inlineKeyComments = comments;
+        if (keyNode != null) {
+            keyNode.setInLineComments(comments);
+        }
+    }
+
+    @Override
+    public void setAfterKeyComments(List<CommentLine> comments) {
+        this.afterKeyComments = comments;
+        if (keyNode != null) {
+            keyNode.setEndComments(comments);
+        }
+    }
+
+    @Override
+    public void setBeforeValueComments(List<CommentLine> comments) {
+        this.beforeValueComments = comments;
+        if (valueNode != null) {
+            valueNode.setBlockComments(comments);
+        }
+    }
+
+    @Override
+    public void setInlineValueComments(List<CommentLine> comments) {
+        this.inlineValueComments = comments;
+        if (valueNode != null) {
+            valueNode.setInLineComments(comments);
+        }
+    }
+
+    @Override
+    public void setAfterValueComments(List<CommentLine> comments) {
+        this.afterValueComments = comments;
+        if (valueNode != null) {
+            valueNode.setEndComments(comments);
+        }
+    }
 
 }

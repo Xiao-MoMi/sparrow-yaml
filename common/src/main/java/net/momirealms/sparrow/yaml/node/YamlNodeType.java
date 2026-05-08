@@ -10,13 +10,4 @@ public final class YamlNodeType<T> {
     public static final YamlNodeType<List<YamlNode<?>>> SEQUENCE = new YamlNodeType<>();
     public static final YamlNodeType<Map<Object, YamlNode<?>>> SECTION = new YamlNodeType<>();
 
-    /**
-     * 传入节点的值, 返回一个
-     * @param value
-     * @return
-     */
-    public YamlNode<?> valueOf(T value) {
-        return null;
-    }
-
 }

@@ -10,10 +10,20 @@ import java.util.Arrays;
 import java.util.Objects;
 
 public class Route {
+    private static final Route EMPTY = new Route(new Object[0]);
+
     @NotNull
     private final RouteElement<?>[] routeElements;
     @NotNull
     private final Object[] routeKeys;
+
+    /**
+     * 获取一个空路由
+     * @return 空路由
+     */
+    public static Route empty() {
+        return EMPTY;
+    }
 
     /**
      * 构造一个多路由.
@@ -23,13 +33,14 @@ public class Route {
      * @param routeKeys 路由节点
      */
     public Route(@NotNull Object... routeKeys) {
-        if (Objects.requireNonNull(routeKeys, "用于路由定位的数组不能为 null !").length == 0) {
-            throw new IllegalArgumentException("用于路由定位的节点数组不能为空!");
+        this.routeKeys = routeKeys.clone();
+        if (this.routeKeys.length == 0) {
+            this.routeElements = new RouteElement[0];
+            return;
         }
-        for (Object key : routeKeys) {
+        for (Object key : this.routeKeys) {
             Objects.requireNonNull(key, "用于路由定位的数组中不可包含 null 节点!");
         }
-        this.routeKeys = routeKeys;
         this.routeElements = Arrays.stream(this.routeKeys)
                 .map(it -> {
                     if (it instanceof Integer integer && integer >= 0) {
@@ -89,7 +100,7 @@ public class Route {
      */
     @NotNull
     public Object[] routeKeys() {
-        return routeElements;
+        return routeKeys.clone();
     }
 
     /**
@@ -170,7 +181,9 @@ public class Route {
         if (route == null) {
             return this;
         }
-        return Route.from(this.routeElements, route.routeKeys());
+        Object[] newKeys = Arrays.copyOf(this.routeKeys, this.length() + route.length());
+        System.arraycopy(route.routeKeys, 0, newKeys, this.length(), route.length());
+        return new Route(newKeys);
     }
 
     /**
@@ -210,6 +223,34 @@ public class Route {
         return Route.from(Arrays.copyOf(routeKeys, routeKeys.length - 1));
     }
 
+    /**
+     * 检查当前路由是否是传入路由的父路由.
+     * @param subRoute 需要检查的路由.
+     */
+    public boolean isParentRouteOf(Route subRoute) {
+        if (this.length() >= subRoute.length()) return false;
+        for (int i = 0; i < this.length(); i++) {
+            if (!Objects.equals(this.getRouteElement(i).key(), subRoute.getRouteElement(i).key())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 检查当前路由是否是传入路由的子路由.
+     * @param parentRoute 需要检查的路由.
+     */
+    public boolean isSubRouteOf(Route parentRoute) {
+        if (this.length() <= parentRoute.length()) return false;
+        for (int i = 0; i < parentRoute.length(); i++) {
+            if (!Objects.equals(this.getRouteElement(i).key(), parentRoute.getRouteElement(i).key())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -221,6 +262,7 @@ public class Route {
 
     @Override
     public int hashCode() {
+        if (length() == 0) return 0;
         return length() > 1 ? Arrays.hashCode(routeKeys) : Objects.hashCode(routeKeys[0]);
     }
 

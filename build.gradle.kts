@@ -1,15 +1,21 @@
 plugins {
-    id("java")
+    `java-library`
     id("com.gradleup.shadow") version "9.2.2"
+    id("maven-publish")
+}
+
+dependencies {
+    implementation(project(":common"))
 }
 
 allprojects {
     // 插件
-    apply(plugin = "java")
+    apply(plugin = "java-library")
     apply(plugin = "com.gradleup.shadow")
+    apply(plugin = "maven-publish")
 
     // 属性
-    val version = "1.0.0"
+    version = "1.0.0"
     java.sourceCompatibility = JavaVersion.VERSION_17
     java.targetCompatibility = JavaVersion.VERSION_17
 
@@ -21,10 +27,13 @@ allprojects {
 
     // 依赖
     dependencies {
-        compileOnly("org.jetbrains:annotations:26.0.2")
-        // implementation("org.snakeyaml:snakeyaml-engine:3.0.1")
+        implementation("org.jetbrains:annotations:26.0.2")
         implementation(rootProject.files("libs/snakeyaml-engine-3.1-SNAPSHOT-forked.jar"))
+        implementation("org.joml:joml:1.10.8")
+        implementation("com.google.code.gson:gson:2.13.2")
+        implementation("org.ow2.asm:asm:9.7")
 
+        testImplementation(rootProject.files("libs/snakeyaml-engine-3.1-SNAPSHOT-forked.jar"))
         testImplementation(platform("org.junit:junit-bom:5.10.0"))
         testImplementation("org.junit.jupiter:junit-jupiter")
         testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -46,7 +55,7 @@ tasks {
     shadowJar {
         archiveFileName = "${rootProject.name}-${versionBanner()}.jar"
         // 重定位
-        relocate("org.snakeyaml.engine", "net.momirealms.sparrow.libs.org.snakeyaml.engine")
+        relocate("org.snakeyaml.engine", "net.momirealms.sparrow.libs.snakeyaml.engine")
     }
 }
 

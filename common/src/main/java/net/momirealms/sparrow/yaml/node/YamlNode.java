@@ -2,10 +2,15 @@ package net.momirealms.sparrow.yaml.node;
 
 import net.momirealms.sparrow.yaml.YamlDocument;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.serializer.NodeDecoder;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
+import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
+import net.momirealms.sparrow.yaml.serializer.TypeRef;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.comments.CommentLine;
+import org.snakeyaml.engine.v2.nodes.CollectionNode;
 import org.snakeyaml.engine.v2.nodes.Node;
 
 import java.util.*;
@@ -18,6 +23,13 @@ public interface YamlNode<T> {
      */
     @Nullable
     Object key();
+    
+    /**
+     * 设置当前 Node 的 Key;
+     * 该方法通常由框架内部调用, 不建议外部使用;
+     */
+    @ApiStatus.Internal
+    void key(Object key);
 
     /**
      * 获取当前 Node 的 Key;
@@ -50,154 +62,63 @@ public interface YamlNode<T> {
      */
     @Nullable
     Route route();
-
+    
     /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 JavaBean 对象; </br>
-     * 如果序列化器没有找到, 则会抛出 {@link UnsupportedOperationException}. </br>
-     * @param clazz 目标类
-     * @return 目标 JavaBean
+     * 使用指定的 NodeDecoder 将当前 YamlNode 转换成目标对象。
+     * @param decoder 指定的解码器
+     * @return 目标对象
      */
     @Nullable
-    default <R> R getAs(Class<R> clazz) {
-        NodeSerializer<R> serializer = this.root().sparrowYaml().getSerializer(clazz);
-        if (serializer == null) {
-            throw new UnsupportedOperationException("未注册序列化器的Class类型: " + clazz.getSimpleName());
+    default <R> R get(NodeDecoder<R> decoder) {
+        return decoder.deserialize(this);
+    }
+
+    /**
+     * 根据指定的 Class 从 {@link SerializerRegistry} 获取对应的反序列化器，将当前 YamlNode 转换成目标对象。
+     * @param clazz 目标对象的 Class
+     * @return 目标对象
+     */
+    @Nullable
+    default <R> R get(Class<R> clazz) {
+        NodeSerializer<R> serializer = root().sparrowYaml().serializers().get(clazz);
+        if (serializer != null) {
+            return serializer.deserialize(this);
         }
-        return serializer.deserialize(this);
+        return null;
     }
 
-    /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 JavaBean 对象; </br>
-     * 如果序列化器没有找到, 则会抛出 {@link UnsupportedOperationException}. </br>
-     * @param clazz 目标类
-     * @param defaultValue 当无法搜索到序列化器或结果为空时, 使用的默认值;
-     * @return 目标 JavaBean
-     */
-    @NotNull
-    default <R> R getAsOrDefault(Class<R> clazz, R defaultValue) {
-        R value = this.getAs(clazz);
-        return value != null ? value : defaultValue;
-    }
-
-    /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 Optional 对象; </br>
-     * 如果序列化器没有找到, 则会抛出 {@link UnsupportedOperationException}. </br>
-     * @param clazz 目标类
-     * @return 搜索结果; 当无法搜索到序列化器或结果为空时, 返回 Optional.empty();
-     */
-    @NotNull
-    default <R> Optional<R> getAsOptional(Class<R> clazz) {
-        return Optional.ofNullable(this.getAs(clazz));
-    }
-
-    /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 List 对象, 其中元素使用 elementClass 对应的序列化器; </br>
-     * 这个方法无法解析异构列表, 如果遇到非目标元素则会直接返回 null.
-     * @param elementClass 元素的类型
-     * @return List, 其中元素是 elementClass.
-     */
     @Nullable
-    default <R> List<R> getAsList(Class<R> elementClass) {
-        if (this instanceof SequenceNode sequenceNode) {
-            // 如果没值则返回 null, 空列表则返回 List.of().
-            List<YamlNode<?>> nodeList = sequenceNode.value();
-            if (nodeList == null) return null;
-            if (nodeList.isEmpty()) return List.of();
-            // 遍历元素, 如果元素中有无法被反序列化的, 则整个结果返回 null.
-            List<R> result = new ArrayList<>(nodeList.size());
-            for (int i = 0; i < nodeList.size(); i++) {
-                YamlNode<?> yamlNode = nodeList.get(i);
-                R deserialize = yamlNode.getAs(elementClass);
-                if (deserialize == null) {
-                    return null;
-                }
-                result.add(deserialize);
-            }
-            return result;
+    default <R> R get(TypeRef<R> typeRef) {
+        NodeSerializer<R> serializer = root().sparrowYaml().serializers().get(typeRef);
+        if (serializer != null) {
+            return serializer.deserialize(this);
         }
         return null;
     }
 
     /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 List 对象, 其中元素使用 elementClass 对应的序列化器; </br>
-     * 这个方法无法解析异构列表, 如果遇到非目标元素则会直接返回 defaultValue.
-     * @param elementClass 元素的类型
-     * @return List, 其中元素是 elementClass.
+     * 根据指定的 Class 从 {@link SerializerRegistry} 获取对应的序列化器，将目标对象序列化并设置到当前 YamlNode。
+     * @param clazz 目标对象的 Class
+     * @param value 目标对象
      */
-    @NotNull
-    default <R> List<R> getAsListOrDefault(Class<R> elementClass, List<R> defaultValue) {
-        List<R> result = this.getAsList(elementClass);
-        return result == null ? defaultValue : result;
-    }
-
-    /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 List 对象, 其中元素使用 elementClass 对应的序列化器; </br>
-     * 这个方法无法解析异构列表, 如果遇到非目标元素将会返回 Optional.empty().
-     * @param elementClass 元素的类型
-     * @return List, 其中元素是 elementClass.
-     */
-    @NotNull
-    default <R> Optional<List<R>> getAsListOptional(Class<R> elementClass) {
-        return Optional.ofNullable(this.getAsList(elementClass));
-    }
-
-    /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 Map 对象, 其中Value使用 elementClass 对应的序列化器; </br>
-     * 如果遇到非目标元素则会直接返回 null.
-     * @param elementClass 元素的类型
-     * @return List, 其中元素是 elementClass.
-     */
-    @Nullable
-    default <R> Map<String, R> getAsMap(Class<R> elementClass) {
-        if (this instanceof SectionNode sectionNode) {
-            // 如果没值则返回 null, 空列表则返回 List.of().
-            Map<Object, YamlNode<?>> nodeMap = sectionNode.value();
-            if (nodeMap == null) return null;
-            if (nodeMap.isEmpty()) return Map.of();
-            // 遍历元素, 如果元素中有无法被反序列化的, 则整个结果返回 null.
-            Map<String, R> result = new LinkedHashMap<>(nodeMap.size());
-            for (Map.Entry<Object, YamlNode<?>> entry : nodeMap.entrySet()) {
-                YamlNode<?> valueNode = entry.getValue();
-                String key = String.valueOf(entry.getKey());
-                R valueDeserialize = valueNode.getAs(elementClass);
-                if (key == null || valueDeserialize == null) return null;
-                result.put(key, valueDeserialize);
-            }
-            return result;
+    @SuppressWarnings("unchecked")
+    default <R> void set(Class<R> clazz, R value) {
+        NodeSerializer<R> serializer = root().sparrowYaml().serializers().get(clazz);
+        if (serializer != null) {
+            this.setValue((T) serializer.serialize(value));
+        } else {
+            this.setValue((T) value);
         }
-        return null;
     }
 
-    /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 Map 对象, 其中元素使用 elementClass 对应的序列化器; </br>
-     * 如果遇到非目标元素则会直接返回 defaultValue.
-     * @param elementClass 元素的类型
-     * @return List, 其中元素是 elementClass.
-     */
-    @NotNull
-    default <R> Map<String, R> getAsMapOrDefault(Class<R> elementClass, Map<String, R> defaultValue) {
-        Map<String, R> result = this.getAsMap(elementClass);
-        return result == null ? defaultValue : result;
-    }
-
-    /**
-     * 搜索 YamlDocument 维护的序列化器; </br>
-     * 尝试将当前 YamlNode 读取转换成一个 Map 对象, 其中元素使用 elementClass 对应的序列化器; </br>
-     * 如果遇到非目标元素将会返回 Optional.empty().
-     * @param elementClass 元素的类型
-     * @return List, 其中元素是 elementClass.
-     */
-    @NotNull
-    default <R> Optional<Map<String, R>> getAsMapOptional(Class<R> elementClass) {
-        return Optional.ofNullable(this.getAsMap(elementClass));
+    @SuppressWarnings("unchecked")
+    default <R> void set(TypeRef<R> typeRef, R value) {
+        NodeSerializer<R> serializer = root().sparrowYaml().serializers().get(typeRef);
+        if (serializer != null) {
+            this.setValue((T) serializer.serialize(value));
+        } else {
+            this.setValue((T) value);
+        }
     }
 
     /**
@@ -260,6 +181,42 @@ public interface YamlNode<T> {
     Node internalValueNode();
 
     /**
+     * 设置当前节点的 Key 的行前注释.
+     * @param comments 注释列表
+     */
+    void setBeforeKeyComments(List<CommentLine> comments);
+
+    /**
+     * 设置当前节点的 Key 的行中注释.
+     * @param comments 注释列表
+     */
+    void setInlineKeyComments(List<CommentLine> comments);
+
+    /**
+     * 设置当前节点的 Key 的行尾注释.
+     * @param comments 注释列表
+     */
+    void setAfterKeyComments(List<CommentLine> comments);
+
+    /**
+     * 设置当前节点的 Value 的行前注释.
+     * @param comments 注释列表
+     */
+    void setBeforeValueComments(List<CommentLine> comments);
+
+    /**
+     * 设置当前节点的 Value 的行中注释.
+     * @param comments 注释列表
+     */
+    void setInlineValueComments(List<CommentLine> comments);
+
+    /**
+     * 设置当前节点的 Value 的行尾注释.
+     * @param comments 注释列表
+     */
+    void setAfterValueComments(List<CommentLine> comments);
+
+    /**
      * 对于当前节点的 Key 的行前注释.
      * @return 注释
      */
@@ -294,5 +251,105 @@ public interface YamlNode<T> {
      * @return 注释
      */
     List<CommentLine> afterValueComments();
+
+    /**
+     * 提取当前节点可用于重新表示的 Java 值.
+     */
+    default Object representValue() {
+        if (this instanceof ScalarNode scalar) {
+            return scalar.value() == null ? "null" : scalar.value();
+        } else if (this instanceof SectionNode section) {
+            Map<Object, Object> map = new LinkedHashMap<>();
+            for (Map.Entry<Object, YamlNode<?>> entry : section.value().entrySet()) {
+                map.put(entry.getKey(), entry.getValue().representValue());
+            }
+            return map;
+        } else if (this instanceof SequenceNode sequence) {
+            List<Object> list = new ArrayList<>();
+            for (YamlNode<?> element : sequence.value()) {
+                list.add(element.representValue());
+            }
+            return list;
+        }
+        return "null";
+    }
+
+    /**
+     * 复制当前节点的表层注释到目标节点.
+     */
+    default void copyCommentsTo(@Nullable YamlNode<?> target) {
+        if (this instanceof AbstractYamlNode<?> sourceNode && target instanceof AbstractYamlNode<?> targetNode) {
+            targetNode.setBeforeKeyComments(copyCommentLines(sourceNode.beforeKeyComments()));
+            targetNode.setInlineKeyComments(copyCommentLines(sourceNode.inlineKeyComments()));
+            targetNode.setAfterKeyComments(copyCommentLines(sourceNode.afterKeyComments()));
+            targetNode.setBeforeValueComments(copyCommentLines(sourceNode.beforeValueComments()));
+            targetNode.setInlineValueComments(copyCommentLines(sourceNode.inlineValueComments()));
+            targetNode.setAfterValueComments(copyCommentLines(sourceNode.afterValueComments()));
+        }
+    }
+
+    /**
+     * 仅复制当前节点中非空的注释到目标节点.
+     */
+    default void copyNonEmptyCommentsTo(@Nullable YamlNode<?> target) {
+        if (this instanceof AbstractYamlNode<?> sourceNode && target instanceof AbstractYamlNode<?> targetNode) {
+            if (sourceNode.beforeKeyComments() != null && !sourceNode.beforeKeyComments().isEmpty()) {
+                targetNode.setBeforeKeyComments(copyCommentLines(sourceNode.beforeKeyComments()));
+            }
+            if (sourceNode.inlineKeyComments() != null && !sourceNode.inlineKeyComments().isEmpty()) {
+                targetNode.setInlineKeyComments(copyCommentLines(sourceNode.inlineKeyComments()));
+            }
+            if (sourceNode.afterKeyComments() != null && !sourceNode.afterKeyComments().isEmpty()) {
+                targetNode.setAfterKeyComments(copyCommentLines(sourceNode.afterKeyComments()));
+            }
+            if (sourceNode.beforeValueComments() != null && !sourceNode.beforeValueComments().isEmpty()) {
+                targetNode.setBeforeValueComments(copyCommentLines(sourceNode.beforeValueComments()));
+            }
+            if (sourceNode.inlineValueComments() != null && !sourceNode.inlineValueComments().isEmpty()) {
+                targetNode.setInlineValueComments(copyCommentLines(sourceNode.inlineValueComments()));
+            }
+            if (sourceNode.afterValueComments() != null && !sourceNode.afterValueComments().isEmpty()) {
+                targetNode.setAfterValueComments(copyCommentLines(sourceNode.afterValueComments()));
+            }
+        }
+    }
+
+    /**
+     * 深度复制当前节点及其子节点的全部注释到目标节点.
+     */
+    default void deepCopyCommentsTo(@Nullable YamlNode<?> target) {
+        if (target == null) return;
+        this.copyCommentsTo(target);
+        if (this instanceof SectionNode sourceSection && target instanceof SectionNode targetSection) {
+            for (Map.Entry<Object, YamlNode<?>> entry : sourceSection.value().entrySet()) {
+                YamlNode<?> targetChild = targetSection.value().get(entry.getKey());
+                if (targetChild != null) {
+                    entry.getValue().deepCopyCommentsTo(targetChild);
+                }
+            }
+        } else if (this instanceof SequenceNode sourceSeq && target instanceof SequenceNode targetSeq) {
+            for (int i = 0; i < Math.min(sourceSeq.size(), targetSeq.size()); i++) {
+                YamlNode<?> sourceChild = sourceSeq.value().get(i);
+                YamlNode<?> targetChild = targetSeq.value().get(i);
+                sourceChild.deepCopyCommentsTo(targetChild);
+            }
+        }
+    }
+
+    /**
+     * 将当前节点的集合 flow style 同步到目标节点.
+     */
+    default void preserveFlowStyleTo(@Nullable YamlNode<?> target) {
+        if (target != null && target.internalValueNode() != null && this.internalValueNode() != null) {
+            if (target.internalValueNode() instanceof CollectionNode<?> targetCollection
+                    && this.internalValueNode() instanceof CollectionNode<?> sourceCollection) {
+                targetCollection.setFlowStyle(sourceCollection.getFlowStyle());
+            }
+        }
+    }
+
+    private static List<CommentLine> copyCommentLines(@Nullable List<CommentLine> comments) {
+        return comments == null ? null : new ArrayList<>(comments);
+    }
 
 }
