@@ -65,7 +65,7 @@ public class YamlMapperFactory {
     public static class Builder {
         private SparrowYaml sparrowYaml;
         private YamlUpgradePipeline upgradePipeline;
-        private boolean backupOnUpgrade;
+        private boolean backupOnUpgrade = false;
         private Function<Path, Path> backupPathResolver = SparrowYaml.defaultBackupPathResolver();
 
         public Builder sparrowYaml(SparrowYaml sparrowYaml) {

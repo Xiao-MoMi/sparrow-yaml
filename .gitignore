@@ -37,6 +37,3 @@ build/
 .gradle/
 out/
 bin/
-
-# Trae AI
-.trae/
