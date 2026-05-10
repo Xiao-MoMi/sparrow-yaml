@@ -29,7 +29,7 @@ public class FieldVersionExtractor implements VersionExtractor {
     }
 
     /**
-     * 从文档中提取并解析版本号.
+     * 从文档中提取版本号.
      */
     @Override
     public String extractVersion(YamlDocument doc) throws InvalidConfigVersionException {
@@ -40,7 +40,7 @@ public class FieldVersionExtractor implements VersionExtractor {
 
         if (node instanceof ScalarNode scalarNode) {
             Object value = scalarNode.value();
-            if (value instanceof String str){
+            if (value instanceof String str) {
                 return str;
             }
             else if (value instanceof Number number) {
@@ -55,7 +55,12 @@ public class FieldVersionExtractor implements VersionExtractor {
     }
 
     @Override
-    public Route versionRoute() {
-        return this.versionRoute;
+    public void writeVersion(YamlDocument doc, String version) {
+        YamlNode<?> versionNode = doc.getNodeOrNull(versionRoute);
+        if (versionNode instanceof ScalarNode scalarNode) {
+            scalarNode.setValue(version);
+        } else {
+            doc.setAndGet(versionRoute, version);
+        }
     }
 }

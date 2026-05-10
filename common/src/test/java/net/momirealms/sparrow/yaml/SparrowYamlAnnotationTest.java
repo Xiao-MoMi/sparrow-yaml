@@ -314,6 +314,26 @@ class SparrowYamlAnnotationTest {
     }
 
     @Test
+    void should_WriteStaticTargetVersion_When_MapperCreatesMissingConfig() throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder()
+                .sparrowYaml(sparrowYaml)
+                .upgradePipeline(YamlUpgradePipeline.builder().targetVersion("5").build())
+                .build();
+        YamlMapper<TestConfig> mapper = factory.create(TestConfig.class, TestConfig::new);
+
+        Path tempFile = Files.createTempFile("mapper_static_version_config", ".yml");
+        Files.delete(tempFile);
+
+        TestConfig config = mapper.load(tempFile);
+        YamlDocument savedDocument = sparrowYaml.load(tempFile);
+
+        assertEquals("127.0.0.1", config.getHost());
+        assertEquals("5", savedDocument.getNodeOrNull("config-version").value());
+        assertEquals("127.0.0.1", savedDocument.getNodeOrNull("host").value());
+    }
+
+    @Test
     void should_UpgradeExistingConfig_When_MapperHasUpgradePipeline() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
         YamlMapperFactory factory = YamlMapperFactory.builder()

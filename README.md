@@ -163,7 +163,7 @@ if (host != null) {
 
 - 本地文档保存用户已经改过的值。
 - 默认文档代表当前程序版本需要的最新结构。
-- 当两份文档版本不同，先对本地文档执行补丁，再把本地文档合并到默认文档结构中。
+- 当本地版本和目标版本不同，先对本地文档执行补丁，再把本地文档合并到默认文档结构中。
 
 默认版本字段是 `config-version`，由 `FieldVersionExtractor` 读取。版本字段必须是标量；缺失或不是标量会抛出 `InvalidConfigVersionException`。
 
@@ -200,9 +200,9 @@ upgraded.save(Path.of("config.yml"));
 
 升级行为：
 
-- 如果本地版本和默认版本相同，直接返回本地文档，不合并默认文档新增节点。
+- 如果本地版本和目标版本相同，直接返回本地文档，不合并默认文档新增节点。
 - 如果版本不同，找出所有 `VersionMatcher` 命中的 `VersionPatch`，按 `Patch#getOrder()` 排序执行。
-- 补丁执行完成后，把本地文档版本写成默认文档版本。
+- 合并和清理完成后，通过 `VersionExtractor#writeVersion(...)` 把本地文档版本写成目标版本。
 - 合并阶段保留本地已有值，只补齐默认文档中存在但本地缺失的节点。
 - 合并后会按默认文档 key 顺序重排；本地独有 key 会保留在最后。
 - `updateComments(true)` 会把默认文档中的非空注释同步到已有本地节点。
@@ -454,7 +454,7 @@ mapper.save(Path.of("config.yml"), config);
 
 - 文件不存在时，调用 `defaultInstanceSupplier` 创建默认配置实例，将它序列化成 YAML 文件并返回该实例。
 - 文件存在时，读取文件并反序列化成配置对象。
-- 配置了 `YamlUpgradePipeline` 时，会把 `defaultInstanceSupplier` 返回的默认实例序列化成默认文档，再和本地文档比较版本；版本不同则升级、保存、再反序列化。
+- 配置了 `YamlUpgradePipeline` 时，会把 `defaultInstanceSupplier` 返回的默认实例序列化成默认文档，再用升级管线比较本地版本和目标版本；版本不同则升级、保存、再反序列化。
 - `backupOnUpgrade(true)` 只会在实际发生升级且写回文件前备份原文件；`backupPathResolver(...)` 可以自定义备份路径，默认路径为 `原文件名.bak.<timestamp>`。
 - 同一个 mapper 会缓存最近一次加载的实例；当路径、最后修改时间和文件大小都没变时，`load` 返回缓存实例。
 - `loadForce(path)` 会忽略缓存，强制重新读取。

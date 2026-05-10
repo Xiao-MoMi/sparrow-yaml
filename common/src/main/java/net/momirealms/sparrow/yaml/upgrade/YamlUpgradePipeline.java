@@ -47,8 +47,16 @@ public class YamlUpgradePipeline {
      */
     public boolean needsUpgrade(YamlDocument localDocument, YamlDocument defDocument) {
         String localVersion = versionExtractor.extractVersion(localDocument);
-        String defVersion = versionExtractor.extractVersion(defDocument);
-        return !localVersion.equals(defVersion);
+        String targetVersion = versionExtractor.extractTargetVersion(defDocument);
+        return !localVersion.equals(targetVersion);
+    }
+
+    /**
+     * 将当前目标版本写入文档.
+     */
+    public void writeTargetVersion(YamlDocument document) {
+        String targetVersion = versionExtractor.extractTargetVersion(document);
+        versionExtractor.writeVersion(document, targetVersion);
     }
 
     /**
@@ -60,8 +68,8 @@ public class YamlUpgradePipeline {
      */
     public YamlDocument upgrade(YamlDocument localDocument, YamlDocument defDocument) {
         String localVersion = versionExtractor.extractVersion(localDocument);
-        String defVersion = versionExtractor.extractVersion(defDocument);
-        if (localVersion.equals(defVersion)) {
+        String targetVersion = versionExtractor.extractTargetVersion(defDocument);
+        if (localVersion.equals(targetVersion)) {
             return localDocument;
         }
 
@@ -73,15 +81,11 @@ public class YamlUpgradePipeline {
             try {
                 localDocument = patch.apply(defDocument, localDocument, patchContext);
             } catch (PatchValidationException e) {
-                throw new YamlUpgradeException(localVersion, defVersion, patch, "Validation failed", e);
+                throw new YamlUpgradeException(localVersion, targetVersion, patch, "Validation failed", e);
             } catch (Exception e) {
-                throw new YamlUpgradeException(localVersion, defVersion, patch, "Patch application failed", e);
+                throw new YamlUpgradeException(localVersion, targetVersion, patch, "Patch application failed", e);
             }
         }
-
-        // 设置版本号到最新
-        Route versionRoute = versionExtractor.versionRoute();
-        this.setDocumentVersion(localDocument, versionRoute, defVersion);
 
         // 合并和清理节点
         IgnoredRouteMatcher ignoredRouteMatcher = upgradePlan.ignoredRouteMatcher();
@@ -90,6 +94,8 @@ public class YamlUpgradePipeline {
             clean(localDocument, defDocument, Route.empty(), ignoredRouteMatcher);
         }
 
+        // 设置版本号到最新
+        versionExtractor.writeVersion(localDocument, targetVersion);
         return localDocument;
     }
 
@@ -120,18 +126,6 @@ public class YamlUpgradePipeline {
             executablePatches.addAll(versionPatch.orderedPatches());
         }
         return new ResolvedUpgradePlan(List.copyOf(executablePatches), ignoredRouteMatcherBuilder.build());
-    }
-
-    /**
-     * 将文档的版本号更新为当前补丁链阶段的目标版本.
-     */
-    private void setDocumentVersion(YamlDocument document, Route versionRoute, String version) {
-        YamlNode<?> versionNode = document.getNodeOrNull(versionRoute);
-        if (versionNode instanceof ScalarNode scalarNode) {
-            scalarNode.setValue(version);
-        } else {
-            document.set(versionRoute, version);
-        }
     }
 
     /**

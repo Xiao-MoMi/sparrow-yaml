@@ -100,6 +100,16 @@ class YamlUpgradePipelineTest {
         }
 
         @Test
+        void should_WriteVersion_When_UsingFieldVersionExtractor() throws IOException {
+            YamlDocument doc = loadDoc("name: test");
+            FieldVersionExtractor extractor = new FieldVersionExtractor();
+
+            extractor.writeVersion(doc, "8");
+
+            assertEquals("8", doc.getNodeOrNull("config-version").value());
+        }
+
+        @Test
         void should_ReportWhetherUpgradeIsNeeded_When_ComparingVersions() throws IOException {
             YamlDocument localDoc = loadDoc("config-version: 1\nvalue: local");
             YamlDocument sameVersionDoc = loadDoc("config-version: 1\nvalue: default");
@@ -108,6 +118,35 @@ class YamlUpgradePipelineTest {
 
             assertFalse(pipeline.needsUpgrade(localDoc, sameVersionDoc));
             assertTrue(pipeline.needsUpgrade(localDoc, newerVersionDoc));
+        }
+
+        @Test
+        void should_UseFixedTargetVersion_When_DefaultDocumentHasNoVersion() throws IOException {
+            YamlDocument localDoc = loadDoc("config-version: 1\nvalue: local");
+            YamlDocument defDoc = loadDoc("value: default\nadded: created");
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
+                    .targetVersion("2")
+                    .build();
+
+            assertTrue(pipeline.needsUpgrade(localDoc, defDoc));
+
+            YamlDocument upgraded = pipeline.upgrade(localDoc, defDoc);
+
+            assertEquals("2", upgraded.getNodeOrNull("config-version").value());
+            assertEquals("local", upgraded.getNodeOrNull("value").value());
+            assertEquals("created", upgraded.getNodeOrNull("added").value());
+        }
+
+        @Test
+        void should_WriteFixedTargetVersion_When_PreparingDefaultDocument() throws IOException {
+            YamlDocument defDoc = loadDoc("value: default");
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
+                    .targetVersion("3")
+                    .build();
+
+            pipeline.writeTargetVersion(defDoc);
+
+            assertEquals("3", defDoc.getNodeOrNull("config-version").value());
         }
     }
 

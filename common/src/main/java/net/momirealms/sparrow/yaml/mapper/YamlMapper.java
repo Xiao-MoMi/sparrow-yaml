@@ -84,6 +84,7 @@ public class YamlMapper<T> {
         if (!Files.exists(path)) {
             T defaultInstance = this.defaultInstanceSupplier.get();
             YamlDocument defaultDocument = documentMapper.toDocument(defaultInstance, sparrowYaml);
+            if (upgradePipeline != null) upgradePipeline.writeTargetVersion(defaultDocument);
             saveDocument(path, defaultDocument);
             updateCache(path, defaultInstance);
             return defaultInstance;

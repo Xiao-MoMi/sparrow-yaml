@@ -2,7 +2,9 @@ package net.momirealms.sparrow.yaml.upgrade;
 
 import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.upgrade.patch.VersionPatch;
-import net.momirealms.sparrow.yaml.upgrade.version.*;
+import net.momirealms.sparrow.yaml.upgrade.version.FieldVersionExtractor;
+import net.momirealms.sparrow.yaml.upgrade.version.VersionExtractor;
+import net.momirealms.sparrow.yaml.upgrade.version.VersionMatcher;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -20,7 +22,7 @@ public class YamlUpgradeBuilder {
 
     // 设置版本提取器
     public YamlUpgradeBuilder versionExtractor(VersionExtractor extractor) {
-        this.versionExtractor = extractor;
+        this.versionExtractor = Objects.requireNonNull(extractor, "extractor");
         return this;
     }
 

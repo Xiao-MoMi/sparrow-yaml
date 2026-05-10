@@ -147,6 +147,29 @@ class SparrowYamlTest {
         }
 
         @Test
+        void should_WriteStaticTargetVersion_When_UpgradeFileTargetIsMissing() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            Path tempDir = Files.createTempDirectory("sparrow_missing_static_version");
+            Path configPath = tempDir.resolve("config.yml");
+            YamlDocument defDocument = sparrowYaml.load("value: default");
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
+                    .targetVersion("4")
+                    .build();
+
+            YamlDocument upgraded = sparrowYaml.upgradeFile(
+                    configPath.toFile(),
+                    defDocument,
+                    pipeline,
+                    false
+            );
+
+            YamlDocument saved = sparrowYaml.load(configPath);
+            assertSame(defDocument, upgraded);
+            assertEquals("4", saved.getNodeOrNull("config-version").value());
+            assertEquals("default", saved.getNodeOrNull("value").value());
+        }
+
+        @Test
         void should_CreateParentDirectories_When_UpgradeFileSavesDefaultDocument() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             Path tempDir = Files.createTempDirectory("sparrow_nested_upgrade");

@@ -147,7 +147,13 @@ public class SparrowYaml {
         backupFileIfNeeded(localPath, backupPath);
 
         YamlDocument localDocument = Files.exists(localPath) ? load(localPath) : null;
-        YamlDocument upgradedDocument = localDocument == null ? defDocument : pipeline.upgrade(localDocument, defDocument);
+        YamlDocument upgradedDocument;
+        if (localDocument == null) {
+            pipeline.writeTargetVersion(defDocument);
+            upgradedDocument = defDocument;
+        } else {
+            upgradedDocument = pipeline.upgrade(localDocument, defDocument);
+        }
         saveDocument(localPath, upgradedDocument);
         return upgradedDocument;
     }
