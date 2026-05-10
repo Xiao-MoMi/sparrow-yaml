@@ -98,6 +98,17 @@ class YamlUpgradePipelineTest {
             // 2 & 3. 执行并断言 (Act & Assert)
             assertThrows(InvalidConfigVersionException.class, () -> extractor.extractVersion(doc), "版本号不能为 Section 嵌套节点");
         }
+
+        @Test
+        void should_ReportWhetherUpgradeIsNeeded_When_ComparingVersions() throws IOException {
+            YamlDocument localDoc = loadDoc("config-version: 1\nvalue: local");
+            YamlDocument sameVersionDoc = loadDoc("config-version: 1\nvalue: default");
+            YamlDocument newerVersionDoc = loadDoc("config-version: 2\nvalue: default");
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder().build();
+
+            assertFalse(pipeline.needsUpgrade(localDoc, sameVersionDoc));
+            assertTrue(pipeline.needsUpgrade(localDoc, newerVersionDoc));
+        }
     }
 
     @Nested

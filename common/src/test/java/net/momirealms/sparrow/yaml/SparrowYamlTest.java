@@ -8,6 +8,7 @@ import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.NodeDecoder;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
+import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.snakeyaml.engine.v2.comments.CommentLine;
@@ -16,6 +17,8 @@ import org.snakeyaml.engine.v2.comments.CommentType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.*;
 import java.util.*;
 
@@ -116,6 +119,97 @@ class SparrowYamlTest {
             
             // 3. 断言阶段 (Assert)
             assertTrue(yamlDocument.isEmptyDocument(), "加载空字符串应返回空文档状态");
+        }
+
+        @Test
+        void should_CreateDefaultFileWithoutBackup_When_UpgradeFileTargetIsMissing() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            Path tempDir = Files.createTempDirectory("sparrow_missing_upgrade");
+            Path configPath = tempDir.resolve("config.yml");
+            YamlDocument defDocument = sparrowYaml.load("""
+                    config-version: 1
+                    value: default
+                    """);
+
+            YamlDocument upgraded = sparrowYaml.upgradeFile(
+                    configPath.toFile(),
+                    defDocument,
+                    YamlUpgradePipeline.builder().build(),
+                    true
+            );
+
+            assertSame(defDocument, upgraded);
+            assertTrue(Files.exists(configPath));
+            assertEquals("default", sparrowYaml.load(configPath).getNodeOrNull("value").value());
+            try (var paths = Files.list(tempDir)) {
+                assertEquals(1, paths.count(), "目标文件不存在时不应创建备份文件");
+            }
+        }
+
+        @Test
+        void should_CreateParentDirectories_When_UpgradeFileSavesDefaultDocument() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            Path tempDir = Files.createTempDirectory("sparrow_nested_upgrade");
+            Path configPath = tempDir.resolve("nested").resolve("config.yml");
+            YamlDocument defDocument = sparrowYaml.load("""
+                    config-version: 1
+                    value: default
+                    """);
+
+            YamlDocument upgraded = sparrowYaml.upgradeFile(
+                    configPath.toFile(),
+                    defDocument,
+                    YamlUpgradePipeline.builder().build(),
+                    false
+            );
+
+            assertSame(defDocument, upgraded);
+            assertTrue(Files.exists(configPath));
+            assertEquals("default", sparrowYaml.load(configPath).getNodeOrNull("value").value());
+        }
+
+        @Test
+        void should_CreateBackup_When_UpgradeFileUsesExplicitBackupPath() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            Path tempDir = Files.createTempDirectory("sparrow_backup_upgrade");
+            Path configPath = tempDir.resolve("config.yml");
+            Path backupPath = tempDir.resolve("backup").resolve("config.yml.bak");
+            Files.writeString(configPath, """
+                    config-version: 1
+                    old: keep
+                    """);
+            YamlDocument defDocument = sparrowYaml.load("""
+                    config-version: 2
+                    value: default
+                    """);
+
+            YamlDocument upgraded = sparrowYaml.upgradeFile(
+                    configPath.toFile(),
+                    defDocument,
+                    YamlUpgradePipeline.builder().build(),
+                    backupPath
+            );
+
+            assertTrue(Files.exists(backupPath));
+            assertTrue(Files.readString(backupPath).contains("old: keep"));
+            assertEquals("2", upgraded.getNodeOrNull("config-version").value().toString());
+            assertEquals("default", upgraded.getNodeOrNull("value").value());
+            assertNull(upgraded.getNodeOrNull("old"));
+        }
+
+        @Test
+        void should_RejectBackupPath_When_ItMatchesLocalFilePath() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            Path configPath = Files.createTempFile("sparrow_same_backup", ".yml");
+            YamlDocument defDocument = sparrowYaml.load("config-version: 1\n");
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder().build();
+
+            assertThrows(IllegalArgumentException.class, () -> sparrowYaml.upgradeFile(
+                    configPath.toFile(),
+                    defDocument,
+                    pipeline,
+                    configPath
+            ));
         }
     }
 

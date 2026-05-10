@@ -43,6 +43,15 @@ public class YamlUpgradePipeline {
     }
 
     /**
+     * 判断本地文档是否需要根据模板文档执行升级.
+     */
+    public boolean needsUpgrade(YamlDocument localDocument, YamlDocument defDocument) {
+        String localVersion = versionExtractor.extractVersion(localDocument);
+        String defVersion = versionExtractor.extractVersion(defDocument);
+        return !localVersion.equals(defVersion);
+    }
+
+    /**
      * 根据模板文档升级本地文档.
      *
      * @param localDocument 本地 YAML 文档
@@ -52,7 +61,9 @@ public class YamlUpgradePipeline {
     public YamlDocument upgrade(YamlDocument localDocument, YamlDocument defDocument) {
         String localVersion = versionExtractor.extractVersion(localDocument);
         String defVersion = versionExtractor.extractVersion(defDocument);
-        if (localVersion.equals(defVersion)) return localDocument;
+        if (localVersion.equals(defVersion)) {
+            return localDocument;
+        }
 
         ResolvedUpgradePlan upgradePlan = this.resolveUpgradePlan(localVersion);
         PatchContext patchContext = new PatchContext();

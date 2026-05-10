@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.function.Function;
 
 public class SparrowYaml {
     private final LoadSettings loadSettings;
@@ -127,21 +128,81 @@ public class SparrowYaml {
      * @return 更新完成的Yaml文档
      */
     public YamlDocument upgradeFile(File localFile, YamlDocument defDocument, YamlUpgradePipeline pipeline, boolean backup) throws IOException {
-        // 备份
-        if (backup) {
-            Path backupPath = localFile.toPath().getParent().resolve(localFile.getName() + ".bak." + System.currentTimeMillis());
-            if (backupPath.equals(localFile.toPath())) {
-                throw new IllegalArgumentException("localFile path can not same with backup path!");
+        Objects.requireNonNull(localFile, "localFile");
+        Function<Path, Path> backupPathResolver = backup ? defaultBackupPathResolver() : null;
+        return this.upgradeFile(localFile, defDocument, pipeline, backupPathResolver);
+    }
+
+    public YamlDocument upgradeFile(File localFile, YamlDocument defDocument, YamlUpgradePipeline pipeline, @Nullable Path backupPath) throws IOException {
+        return this.upgradeFile(localFile, defDocument, pipeline, backupPath == null ? null : path -> backupPath);
+    }
+
+    public YamlDocument upgradeFile(File localFile, YamlDocument defDocument, YamlUpgradePipeline pipeline, @Nullable Function<Path, Path> backupPathResolver) throws IOException {
+        Objects.requireNonNull(localFile, "localFile");
+        Objects.requireNonNull(defDocument, "defDocument");
+        Objects.requireNonNull(pipeline, "pipeline");
+
+        Path localPath = localFile.toPath();
+        Path backupPath = backupPathResolver != null ? backupPathResolver.apply(localPath) : null;
+        backupFileIfNeeded(localPath, backupPath);
+
+        YamlDocument localDocument = Files.exists(localPath) ? load(localPath) : null;
+        YamlDocument upgradedDocument = localDocument == null ? defDocument : pipeline.upgrade(localDocument, defDocument);
+        saveDocument(localPath, upgradedDocument);
+        return upgradedDocument;
+    }
+
+    // 默认备份配置路径解析器
+    public static Function<Path, Path> defaultBackupPathResolver() {
+        return localPath -> {
+            Objects.requireNonNull(localPath, "localPath");
+            Path parent = localPath.getParent();
+            if (parent == null) {
+                parent = Path.of(".");
             }
-            File backupFile = new File(backupPath.toUri());
-            Files.copy(localFile.toPath(), backupFile.toPath());
+            return parent.resolve(localPath.getFileName() + ".bak." + System.currentTimeMillis());
+        };
+    }
+
+    /**
+     * 将指定文件备份到目标路径.
+     *
+     * @param localPath 需要备份的源文件路径
+     * @param backupPath 备份文件路径
+     */
+    public void backupFile(Path localPath, Path backupPath) throws IOException {
+        Objects.requireNonNull(backupPath, "backupPath");
+        backupFileIfNeeded(localPath, backupPath);
+    }
+
+    private static void backupFileIfNeeded(Path localPath, @Nullable Path backupPath) throws IOException {
+        Objects.requireNonNull(localPath, "localPath");
+        if (backupPath == null) {
+            return;
         }
-        // 解析 & 更新
-        YamlDocument local = localFile.exists() ? new YamlDocument(this, Files.newInputStream(localFile.toPath())) : null;
-        YamlDocument upgraded = local == null ? defDocument : pipeline.upgrade(local, defDocument);
-        upgraded.save(localFile);
-        // 返回
-        return upgraded;
+
+        Path normalizedLocalPath = localPath.toAbsolutePath().normalize();
+        Path normalizedBackupPath = backupPath.toAbsolutePath().normalize();
+        if (normalizedBackupPath.equals(normalizedLocalPath)) {
+            throw new IllegalArgumentException("localFile path can not same with backup path!");
+        }
+        if (!Files.exists(localPath)) {
+            return;
+        }
+
+        Path backupParent = backupPath.getParent();
+        if (backupParent != null) {
+            Files.createDirectories(backupParent);
+        }
+        Files.copy(localPath, backupPath);
+    }
+
+    private static void saveDocument(Path path, YamlDocument document) throws IOException {
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        document.save(path);
     }
 
     /**
