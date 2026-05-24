@@ -140,7 +140,7 @@ public class SerializerRegistry {
      * @param <T>             目标类型
      * @return 自动生成或现存的序列化器
      */
-    public <T> NodeSerializer<T> registerAuto(Class<T> clazz, Consumer<AutoSerializerBinding> bindingConsumer) {
+    public <T> NodeSerializer<T> register(Class<T> clazz, Consumer<AutoSerializerBinding> bindingConsumer) {
         // 如果已经生成过, 则直接返回.
         NodeSerializer<T> existing = this.get(clazz);
         if (existing != null) {
@@ -152,7 +152,7 @@ public class SerializerRegistry {
     }
 
     public <T> NodeSerializer<T> register(Class<T> clazz) {
-        return this.registerAuto(clazz, null);
+        return this.register(clazz, (Consumer<AutoSerializerBinding>) null);
     }
 
     /**
@@ -163,7 +163,7 @@ public class SerializerRegistry {
      * @param <T>             目标类型
      * @return 自动生成或现存的序列化器
      */
-    public <T> NodeSerializer<T> registerAuto(TypeRef<T> typeRef, Consumer<AutoSerializerBinding> bindingConsumer) {
+    public <T> NodeSerializer<T> register(TypeRef<T> typeRef, Consumer<AutoSerializerBinding> bindingConsumer) {
         NodeSerializer<T> existing = this.get(typeRef);
         if (existing != null) {
             return existing;
@@ -173,7 +173,7 @@ public class SerializerRegistry {
     }
 
     public <T> NodeSerializer<T> register(TypeRef<T> typeRef) {
-        return this.registerAuto(typeRef, null);
+        return this.register(typeRef, (Consumer<AutoSerializerBinding>) null);
     }
 
     /**

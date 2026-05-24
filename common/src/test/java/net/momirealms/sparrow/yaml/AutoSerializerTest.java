@@ -550,7 +550,7 @@ class AutoSerializerTest {
             // 1. 准备阶段 (Arrange)
             SparrowYaml yaml = SparrowYaml.builder().build();
             // 手动绑定构造器和参数名
-            yaml.serializers().registerAuto(Models.ExternalUser.class, binding -> binding
+            yaml.serializers().register(Models.ExternalUser.class, binding -> binding
                     .constructor(String.class, int.class)
                     .param("name")
                     .param("age"));

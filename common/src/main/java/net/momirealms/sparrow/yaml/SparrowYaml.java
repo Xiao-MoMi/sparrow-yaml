@@ -4,6 +4,8 @@ import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.api.*;
+import org.snakeyaml.engine.v2.common.FlowStyle;
+import org.snakeyaml.engine.v2.common.ScalarStyle;
 import org.snakeyaml.engine.v2.representer.StandardRepresenter;
 
 import java.io.*;
@@ -231,7 +233,7 @@ public class SparrowYaml {
          * @param value DefaultValue: false
          */
         public Builder setAllowDuplicateKeys(boolean value) {
-            loadSettingsBuilder.setAllowDuplicateKeys(value);
+            this.loadSettingsBuilder.setAllowDuplicateKeys(value);
             return this;
         }
 
@@ -245,14 +247,42 @@ public class SparrowYaml {
             return this;
         }
 
-        public SparrowYaml build() {
-            return new SparrowYaml(
-                    loadSettingsBuilder.build(),
-                    dumpSettingsBuilder.build(),
-                    allowObjectKey
-            );
+        /**
+         * 设置 Dump 时的默认 Style.
+         * @return value DefaultValue
+         */
+        public Builder setDefaultFlowStyle(FlowStyle flowStyle) {
+            this.dumpSettingsBuilder.setDefaultFlowStyle(flowStyle);
+            return this;
         }
 
+        public Builder setScalarStyle(ScalarStyle scalarStyle) {
+            this.dumpSettingsBuilder.setDefaultScalarStyle(scalarStyle);
+            return this;
+        }
+
+        public Builder setIndent(int indent) {
+            this.dumpSettingsBuilder.setIndent(indent);
+            return this;
+        }
+
+        public Builder setIndicatorIndent(int indent) {
+            this.dumpSettingsBuilder.setIndicatorIndent(indent);
+            return this;
+        }
+
+        public Builder setSplitLines(boolean split) {
+            this.dumpSettingsBuilder.setSplitLines(split);
+            return this;
+        }
+
+        public SparrowYaml build() {
+            return new SparrowYaml(
+                    this.loadSettingsBuilder.build(),
+                    this.dumpSettingsBuilder.build(),
+                    this.allowObjectKey
+            );
+        }
     }
 
 }

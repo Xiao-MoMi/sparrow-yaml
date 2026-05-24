@@ -3,16 +3,9 @@ java {
 }
 
 tasks {
-    named<Jar>("jar") {
-        archiveClassifier.set("plain")
-    }
-
-    named<Jar>("shadowJar") {
-        archiveClassifier.set("")
-    }
-
-    named("assemble") {
-        dependsOn(named("shadowJar"))
+    shadowJar {
+        archiveClassifier = ""
+        relocate("org.snakeyaml.engine", "net.momirealms.sparrow.yaml.libs.snakeyaml.engine")
     }
 }
 
@@ -31,10 +24,8 @@ publishing {
             groupId = "net.momirealms"
             artifactId = "sparrow-yaml"
             version = version
-            artifact(tasks.named("shadowJar")) {
-                builtBy(tasks.named("shadowJar"))
-            }
-            artifact(tasks.named("sourcesJar"))
+            from(components["shadow"])
+            artifact(tasks["sourcesJar"])
             pom {
                 name = "Sparrow Yaml"
                 url = "https://github.com/Catnies/nyana-serialization"

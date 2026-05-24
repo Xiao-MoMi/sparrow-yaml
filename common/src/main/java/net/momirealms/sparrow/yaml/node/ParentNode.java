@@ -281,6 +281,7 @@ public interface ParentNode<T extends YamlNode<?>> {
 
     @Nullable
     YamlNode<?> removeSubNode(Object key);
+
     @Nullable
     default YamlNode<?> removeNode(@NotNull Route route) {
         if (route.length() == 0) {
@@ -322,7 +323,7 @@ public interface ParentNode<T extends YamlNode<?>> {
      * @return 创建完成的叶子节点
      */
     default <R> YamlNode<?> set(Class<R> clazz, @Nullable R value, @NotNull Route route) {
-        net.momirealms.sparrow.yaml.serializer.NodeSerializer<R> serializer = this.yamlNode().root().sparrowYaml().serializers().get(clazz);
+        NodeSerializer<R> serializer = this.yamlNode().root().sparrowYaml().serializers().get(clazz);
         if (serializer != null) {
             return this.set(route, serializer.serialize(value));
         }
@@ -337,13 +338,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return this.set(route, value);
     }
 
-    /**
-     * 根据路由, 从当前节点出发, 寻找子节点, 然后使用 SerializerRegistry 获取对应的序列化器序列化后设置其的值;
-     * @param clazz 目标对象的 Class
-     * @param value 目标对象
-     * @param route 从当前节点出发的路由
-     * @return 创建完成的叶子节点
-     */
     default <R> YamlNode<?> set(Class<R> clazz, @Nullable R value, @NotNull Object... route) {
         return this.set(clazz, value, Route.from(route));
     }
@@ -374,12 +368,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return this.setAndGet(route, value);
     }
 
-    /**
-     * 在指定路由处使用 SerializerRegistry 获取对应的序列化器序列化后设置节点, 并返回写入后的节点对象.
-     * @param clazz 目标对象的 Class
-     * @param value 目标对象
-     * @param route 路由
-     */
     default <R> YamlNode<?> setAndGet(Class<R> clazz, @Nullable R value, @NotNull Object... route) {
         return this.setAndGet(clazz, value, Route.from(route));
     }

@@ -15,7 +15,7 @@ allprojects {
     apply(plugin = "maven-publish")
 
     // 属性
-    version = "1.0.0"
+    version = "1.0.5"
     java.sourceCompatibility = JavaVersion.VERSION_17
     java.targetCompatibility = JavaVersion.VERSION_17
 
@@ -27,12 +27,14 @@ allprojects {
 
     // 依赖
     dependencies {
-        implementation("org.jetbrains:annotations:26.0.2")
+        compileOnly("org.ow2.asm:asm:9.7")
+        compileOnly("org.jetbrains:annotations:26.0.2")
         implementation(rootProject.files("libs/snakeyaml-engine-3.1-SNAPSHOT-forked.jar"))
-        implementation("org.joml:joml:1.10.8")
-        implementation("com.google.code.gson:gson:2.13.2")
-        implementation("org.ow2.asm:asm:9.7")
 
+        testImplementation("org.joml:joml:1.10.8")
+        testImplementation("org.ow2.asm:asm:9.7")
+        testImplementation("com.google.code.gson:gson:2.13.2")
+        testImplementation("org.jetbrains:annotations:26.0.2")
         testImplementation(rootProject.files("libs/snakeyaml-engine-3.1-SNAPSHOT-forked.jar"))
         testImplementation(platform("org.junit:junit-bom:5.10.0"))
         testImplementation("org.junit.jupiter:junit-jupiter")
