@@ -362,7 +362,7 @@ yaml.serializers().register(User.class);
 不能或不想在类上加注解时，可以使用外部绑定：
 
 ```java
-yaml.serializers().registerAuto(User.class, binding -> binding
+yaml.serializers().register(User.class, binding -> binding
         .constructor(String.class, int.class)
         .param("name")
         .param("age")
@@ -370,6 +370,20 @@ yaml.serializers().registerAuto(User.class, binding -> binding
 ```
 
 泛型根类型需要用 `TypeRef` 保留泛型信息：
+
+Automatic serializers use `AutoSerializerMode.ADAPTIVE` by default: Sparrow YAML tries the ASM
+bridge implementation when ASM is available at runtime, and falls back to reflection when ASM is
+not present. The ASM bridge is safe for target classes loaded by another ClassLoader because the
+generated serializer stays in Sparrow YAML's ClassLoader and accesses target fields through cached
+bridges.
+
+```java
+import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
+
+SparrowYaml yaml = SparrowYaml.builder()
+        .setAutoSerializerMode(AutoSerializerMode.ASM) // ADAPTIVE, ASM, or REFLECTION
+        .build();
+```
 
 ```java
 import net.momirealms.sparrow.yaml.serializer.TypeRef;

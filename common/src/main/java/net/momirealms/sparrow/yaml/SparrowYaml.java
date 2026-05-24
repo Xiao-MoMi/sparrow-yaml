@@ -1,6 +1,7 @@
 package net.momirealms.sparrow.yaml;
 
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
+import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.api.*;
@@ -21,17 +22,19 @@ public class SparrowYaml {
     private final DumpSettings dumpSettings;
     public final boolean allowObjectKey;
     private final StandardRepresenter representer;
-    private final SerializerRegistry serializers = new SerializerRegistry(this);
+    private final SerializerRegistry serializers;
 
     private SparrowYaml(
             LoadSettings loadSettings,
             DumpSettings dumpSettings,
-            boolean allowObjectKey
+            boolean allowObjectKey,
+            AutoSerializerMode autoSerializerMode
     ) {
         this.loadSettings = loadSettings;
         this.dumpSettings = dumpSettings;
         this.allowObjectKey = allowObjectKey;
         this.representer =  new StandardRepresenter(dumpSettings);
+        this.serializers = new SerializerRegistry(this, autoSerializerMode);
     }
 
     /**
@@ -230,6 +233,14 @@ public class SparrowYaml {
                 .setDumpComments(true)
                 .setDefaultFlowStyle(FlowStyle.BLOCK);
         private boolean allowObjectKey = false;
+        private AutoSerializerMode autoSerializerMode = AutoSerializerMode.ADAPTIVE;
+
+        // ──────────── GeneralSettings ────────────
+
+        public Builder setAutoSerializerMode(AutoSerializerMode autoSerializerMode) {
+            this.autoSerializerMode = Objects.requireNonNull(autoSerializerMode, "autoSerializerMode");
+            return this;
+        }
 
         // ──────────── LoadSettings ────────────
 
@@ -411,7 +422,8 @@ public class SparrowYaml {
             return new SparrowYaml(
                     this.loadSettingsBuilder.build(),
                     this.dumpSettingsBuilder.build(),
-                    this.allowObjectKey
+                    this.allowObjectKey,
+                    this.autoSerializerMode
             );
         }
     }
