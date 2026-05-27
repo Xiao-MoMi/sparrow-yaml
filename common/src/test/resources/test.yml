@@ -1,0 +1,12 @@
+first-key:
+  second-key: "value"
+  test: &a
+    key: value
+  2: !!int 111
+  2.0: !!int 222
+  anchor-key: *a
+  haha:
+    - 111
+    - gugu: gaga
+    - - 111
+      - 222
