@@ -1,6 +1,6 @@
 plugins {
     `java-library`
-    id("com.gradleup.shadow") version "9.2.2"
+    id("com.gradleup.shadow") version "9.4.1"
     id("maven-publish")
 }
 
@@ -15,7 +15,7 @@ allprojects {
     apply(plugin = "maven-publish")
 
     // 属性
-    version = "1.0.5"
+    version = "1.0"
     java.sourceCompatibility = JavaVersion.VERSION_17
     java.targetCompatibility = JavaVersion.VERSION_17
 

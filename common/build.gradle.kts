@@ -12,10 +12,12 @@ tasks {
 publishing {
     repositories {
         maven {
-            name = "Catnies"
-            url = uri("https://repo.catnies.top/releases")
+            name = "XiaoMoMi"
+            url = uri("https://repo.momirealms.net/releases")
             credentials(PasswordCredentials::class)
-            authentication { create<BasicAuthentication>("basic") }
+            authentication {
+                create<BasicAuthentication>("basic")
+            }
         }
     }
 
@@ -28,7 +30,7 @@ publishing {
             artifact(tasks["sourcesJar"])
             pom {
                 name = "Sparrow Yaml"
-                url = "https://github.com/Catnies/nyana-serialization"
+                url = "https://github.com/Xiao-MoMi/sparrow-yaml"
             }
         }
     }
