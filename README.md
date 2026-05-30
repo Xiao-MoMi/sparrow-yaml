@@ -371,11 +371,9 @@ yaml.serializers().register(User.class, binding -> binding
 
 泛型根类型需要用 `TypeRef` 保留泛型信息：
 
-Automatic serializers use `AutoSerializerMode.ADAPTIVE` by default: Sparrow YAML tries the ASM
-bridge implementation when ASM is available at runtime, and falls back to reflection when ASM is
-not present. The ASM bridge is safe for target classes loaded by another ClassLoader because the
-generated serializer stays in Sparrow YAML's ClassLoader and accesses target fields through cached
-bridges.
+自动序列化器默认使用 AutoSerializerMode.ADAPTIVE 模式。
+Sparrow YAML 在运行时，如果发现存在 ASM 桥接实现，就会尝试使用它，否则会回退到反射机制。
+ASM 桥接对于由其他类加载器加载的目标类是安全的，因为生成的序列化器会保留在 Sparrow YAML 的类加载器中，并通过缓存的桥接来访问目标字段。
 
 ```java
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
