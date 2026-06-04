@@ -1,10 +1,12 @@
 package net.momirealms.sparrow.yaml;
 
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
+import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.api.*;
 import org.snakeyaml.engine.v2.common.FlowStyle;
+import org.snakeyaml.engine.v2.common.NonPrintableStyle;
 import org.snakeyaml.engine.v2.common.ScalarStyle;
 import org.snakeyaml.engine.v2.representer.StandardRepresenter;
 
@@ -20,17 +22,19 @@ public class SparrowYaml {
     private final DumpSettings dumpSettings;
     public final boolean allowObjectKey;
     private final StandardRepresenter representer;
-    private final SerializerRegistry serializers = new SerializerRegistry(this);
+    private final SerializerRegistry serializers;
 
     private SparrowYaml(
             LoadSettings loadSettings,
             DumpSettings dumpSettings,
-            boolean allowObjectKey
+            boolean allowObjectKey,
+            AutoSerializerMode autoSerializerMode
     ) {
         this.loadSettings = loadSettings;
         this.dumpSettings = dumpSettings;
         this.allowObjectKey = allowObjectKey;
         this.representer =  new StandardRepresenter(dumpSettings);
+        this.serializers = new SerializerRegistry(this, autoSerializerMode);
     }
 
     /**
@@ -222,9 +226,23 @@ public class SparrowYaml {
     }
 
     public static class Builder {
-        private final LoadSettingsBuilder loadSettingsBuilder = LoadSettings.builder().setAllowDuplicateKeys(false).setParseComments(true);
-        private final DumpSettingsBuilder dumpSettingsBuilder = DumpSettings.builder().setDumpComments(true).setDefaultFlowStyle(org.snakeyaml.engine.v2.common.FlowStyle.BLOCK);
+        private final LoadSettingsBuilder loadSettingsBuilder = LoadSettings.builder()
+                .setAllowDuplicateKeys(false)
+                .setParseComments(true);
+        private final DumpSettingsBuilder dumpSettingsBuilder = DumpSettings.builder()
+                .setDumpComments(true)
+                .setDefaultFlowStyle(FlowStyle.BLOCK);
         private boolean allowObjectKey = false;
+        private AutoSerializerMode autoSerializerMode = AutoSerializerMode.ADAPTIVE;
+
+        // ──────────── GeneralSettings ────────────
+
+        public Builder setAutoSerializerMode(AutoSerializerMode autoSerializerMode) {
+            this.autoSerializerMode = Objects.requireNonNull(autoSerializerMode, "autoSerializerMode");
+            return this;
+        }
+
+        // ──────────── LoadSettings ────────────
 
         /**
          * 是否允许读取重复的 Key ?
@@ -248,39 +266,164 @@ public class SparrowYaml {
         }
 
         /**
+         * 限制解析的最大代码点数量, 防止恶意超大文件耗尽内存.
+         * 设为 0 表示不限制.
+         * @param value DefaultValue: 0 (不限制)
+         */
+        public Builder setCodePointLimit(int value) {
+            this.loadSettingsBuilder.setCodePointLimit(value);
+            return this;
+        }
+
+        /**
+         * 限制集合中允许的最大别名数量, 防止别名炸弹攻击.
+         * @param value DefaultValue: 50
+         */
+        public Builder setMaxAliasesForCollections(int value) {
+            this.loadSettingsBuilder.setMaxAliasesForCollections(value);
+            return this;
+        }
+
+        // ──────────── DumpSettings ────────────
+
+        /**
          * 设置 Dump 时的默认 Style.
-         * @return value DefaultValue
+         * @param flowStyle DefaultValue: BLOCK
          */
         public Builder setDefaultFlowStyle(FlowStyle flowStyle) {
             this.dumpSettingsBuilder.setDefaultFlowStyle(flowStyle);
             return this;
         }
 
+        /**
+         * 设置 Scalar 的默认标量样式.
+         * @param scalarStyle DefaultValue: PLAIN
+         */
         public Builder setScalarStyle(ScalarStyle scalarStyle) {
             this.dumpSettingsBuilder.setDefaultScalarStyle(scalarStyle);
             return this;
         }
 
+        /**
+         * 设置缩进宽度 (空格数).
+         * @param indent DefaultValue: 2
+         */
         public Builder setIndent(int indent) {
             this.dumpSettingsBuilder.setIndent(indent);
             return this;
         }
 
+        /**
+         * 设置指示符 (如 -, ?, :) 的缩进宽度.
+         * @param indent DefaultValue: 0
+         */
         public Builder setIndicatorIndent(int indent) {
             this.dumpSettingsBuilder.setIndicatorIndent(indent);
             return this;
         }
 
+        /**
+         * 缩进计数是否包含指示符长度.
+         * 启用后, 内容缩进会与指示符对齐而非额外缩进.
+         * @param indentWithIndicator DefaultValue: false
+         */
+        public Builder setIndentWithIndicator(boolean indentWithIndicator) {
+            this.dumpSettingsBuilder.setIndentWithIndicator(indentWithIndicator);
+            return this;
+        }
+
+        /**
+         * 是否拆分超长行.
+         * @param split DefaultValue: true
+         */
         public Builder setSplitLines(boolean split) {
             this.dumpSettingsBuilder.setSplitLines(split);
             return this;
         }
 
+        /**
+         * 设置每行的最大宽度, 超出后自动换行.
+         * @param width DefaultValue: 80
+         */
+        public Builder setWidth(int width) {
+            this.dumpSettingsBuilder.setWidth(width);
+            return this;
+        }
+
+        /**
+         * 设置简单 Key 的最大长度.
+         * 超过此长度的 Key 将自动转为 ? 块语法以避免歧义.
+         * @param maxSimpleKeyLength DefaultValue: 128
+         */
+        public Builder setMaxSimpleKeyLength(int maxSimpleKeyLength) {
+            this.dumpSettingsBuilder.setMaxSimpleKeyLength(maxSimpleKeyLength);
+            return this;
+        }
+
+        /**
+         * 是否在文档开头显式输出 --- 标记.
+         * @param explicitStart DefaultValue: false
+         */
+        public Builder setExplicitStart(boolean explicitStart) {
+            this.dumpSettingsBuilder.setExplicitStart(explicitStart);
+            return this;
+        }
+
+        /**
+         * 是否在文档结尾显式输出 ... 标记.
+         * @param explicitEnd DefaultValue: false
+         */
+        public Builder setExplicitEnd(boolean explicitEnd) {
+            this.dumpSettingsBuilder.setExplicitEnd(explicitEnd);
+            return this;
+        }
+
+        /**
+         * 设置换行符, 例如 \n (Unix) 或 \r\n (Windows).
+         * @param lineBreak DefaultValue: \n
+         */
+        public Builder setLineBreak(String lineBreak) {
+            this.dumpSettingsBuilder.setBestLineBreak(lineBreak);
+            return this;
+        }
+
+        /**
+         * 是否允许多行 Flow 样式的序列/映射.
+         * @param multiLineFlow DefaultValue: false
+         */
+        public Builder setMultiLineFlow(boolean multiLineFlow) {
+            this.dumpSettingsBuilder.setMultiLineFlow(multiLineFlow);
+            return this;
+        }
+
+        /**
+         * 设置无法直接打印的字符的处理方式.
+         * @param style DefaultValue: ESCAPE
+         */
+        public Builder setNonPrintableStyle(NonPrintableStyle style) {
+            this.dumpSettingsBuilder.setNonPrintableStyle(style);
+            return this;
+        }
+
+        /**
+         * Dump 时是否解引用锚点/别名, 展开为内联内容.
+         * 传入 null 表示由 SnakeYAML 自行决定.
+         * @param dereferenceAliases DefaultValue: null (自动)
+         */
+        public Builder setDereferenceAliases(Boolean dereferenceAliases) {
+            this.dumpSettingsBuilder.setDereferenceAliases(dereferenceAliases);
+            return this;
+        }
+
+        /**
+         * 构建 SparrowYaml 实例.
+         */
         public SparrowYaml build() {
             return new SparrowYaml(
                     this.loadSettingsBuilder.build(),
                     this.dumpSettingsBuilder.build(),
-                    this.allowObjectKey
+                    this.allowObjectKey,
+                    this.autoSerializerMode
             );
         }
     }

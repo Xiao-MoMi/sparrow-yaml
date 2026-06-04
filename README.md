@@ -362,7 +362,7 @@ yaml.serializers().register(User.class);
 不能或不想在类上加注解时，可以使用外部绑定：
 
 ```java
-yaml.serializers().registerAuto(User.class, binding -> binding
+yaml.serializers().register(User.class, binding -> binding
         .constructor(String.class, int.class)
         .param("name")
         .param("age")
@@ -370,6 +370,18 @@ yaml.serializers().registerAuto(User.class, binding -> binding
 ```
 
 泛型根类型需要用 `TypeRef` 保留泛型信息：
+
+自动序列化器默认使用 AutoSerializerMode.ADAPTIVE 模式。
+Sparrow YAML 在运行时，如果发现存在 ASM 桥接实现，就会尝试使用它，否则会回退到反射机制。
+ASM 桥接对于由其他类加载器加载的目标类是安全的，因为生成的序列化器会保留在 Sparrow YAML 的类加载器中，并通过缓存的桥接来访问目标字段。
+
+```java
+import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
+
+SparrowYaml yaml = SparrowYaml.builder()
+        .setAutoSerializerMode(AutoSerializerMode.ASM) // ADAPTIVE, ASM, or REFLECTION
+        .build();
+```
 
 ```java
 import net.momirealms.sparrow.yaml.serializer.TypeRef;
@@ -404,9 +416,11 @@ Box<String> box = document.get(boxType, "box");
 ```java
 import net.momirealms.sparrow.yaml.mapper.YamlMapper;
 import net.momirealms.sparrow.yaml.mapper.YamlMapperFactory;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.AfterComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.BlankLineBefore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Comment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Configuration;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.InlineComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
 
 import java.nio.file.Path;
@@ -415,21 +429,22 @@ import java.util.List;
 @Configuration
 class AppConfig {
     @YamlProperty("config-version")
-    @Comment(before = "Configuration version")
+    @Comment("Configuration version")
     private int configVersion = 2;
 
-    @Comment(before = "Server host")
+    @Comment("Server host")
     private String host = "127.0.0.1";
 
     @YamlProperty("server-port")
-    @Comment(before = {"Server port", "Must be > 1024"})
+    @Comment({"Server port", "Must be > 1024"})
     private int port = 8080;
 
-    @Comment(inline = "Allowed users")
+    @InlineComment("Allowed users")
+    @AfterComment("End of user allowlist")
     private List<String> users = List.of("admin", "guest");
 
     @BlankLineBefore
-    @Comment(before = "Debug options")
+    @Comment("Debug options")
     private DebugConfig debug = new DebugConfig();
 }
 
@@ -468,16 +483,18 @@ YamlMapper<ImmutableConfig> mapper = factory.create(
 );
 ```
 
-运行期 mapper 会把根配置类字段或 record 组件上的 `@Comment` 和 `@BlankLineBefore` 应用到顶层 YAML key。嵌套对象自身字段上的注释目前不会被递归写入。
+运行期 mapper 会把根配置类字段上的 `@Comment` 和 `@BlankLineBefore` 应用到顶层 YAML key。嵌套对象自身字段上的注释目前不会被递归写入。
 
 可用注解：
 
 - `@Configuration`：配置类标记，作为 mapper 使用约定。
 - `@YamlProperty("yaml-key")`：指定字段、record 组件或构造器参数对应的 YAML key。
-- `@YamlIgnore`：忽略字段或 record 组件。
+- `@YamlIgnore`：忽略字段。
 - `@YamlConstructor`：指定普通 class 反序列化使用的构造器。
-- `@Comment(before = ..., inline = ..., after = ...)`：为字段或 record 组件生成注释。
-- `@BlankLineBefore`：在字段或 record 组件前插入空行。
+- `@Comment(...)`：为字段生成前置块注释。
+- `@InlineComment(...)`：为字段生成行内注释。
+- `@AfterComment(...)`：为字段生成后置块注释。
+- `@BlankLineBefore`：在字段前插入空行。
 
 ## 注意事项
 
@@ -486,7 +503,7 @@ YamlMapper<ImmutableConfig> mapper = factory.create(
 - `Route.from(...)` 不能创建空路由；需要空路由时使用 `Route.empty()`。
 - `getOrDefault(...)` 只在目标节点缺失时返回默认值；节点存在但序列化器解析失败时会返回解析结果，也就是通常为 `null`。
 - 内置的字符串承载类型，例如 `UUID`、`Locale`、时间类型，会把 `null` 序列化为空字符串，并在读取空字符串时返回 `null`。
-- `ElementComment` / `ElementComments` 当前只是注解定义，运行期 mapper 尚未把它们应用到集合元素。
+- `ElementComment` / `InlineElementComment` / `AfterElementComment` 当前只是注解定义，运行期 mapper 尚未把它们应用到集合元素。
 
 ## License
 

@@ -6,13 +6,21 @@ import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.TypeRef;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerBinding;
+import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
 import net.momirealms.sparrow.yaml.serializer.auto.factory.AsmAutoSerializerFactory;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import javax.tools.JavaCompiler;
+import javax.tools.ToolProvider;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1124,7 +1132,139 @@ class AutoSerializerTest {
 
             // 尝试触发自动生成
             NodeSerializer<Models.CustomUser> autoSerializer = yaml.serializers().register(Models.CustomUser.class);
-            assertEquals(customSerializer, autoSerializer, "如果用户已经手动注册，则 registerAuto 应直接返回现有实例而不做覆盖");
+            assertEquals(customSerializer, autoSerializer, "如果用户已经手动注册，则 register 应直接返回现有实例而不做覆盖");
+        }
+    }
+
+    @Nested
+    class AutoSerializerModeTests {
+
+        @Test
+        void should_UseAdaptiveDefaultAcrossIsolatedClassLoader(@TempDir Path tempDir) throws Exception {
+            Class<?> type = compileAndLoadExternal(tempDir, "external.ExternalPojo", """
+                    package external;
+
+                    public class ExternalPojo {
+                        public String name;
+                        public int amount;
+
+                        public ExternalPojo() {
+                        }
+                    }
+                    """);
+            assertCannotSeeSparrowYaml(type);
+
+            SparrowYaml yaml = SparrowYaml.builder().build();
+            NodeSerializer<Object> serializer = registerRaw(yaml, type);
+
+            YamlDocument doc = yaml.load("""
+                    data:
+                      name: "adaptive"
+                      amount: 17
+                    """);
+
+            Object result = serializer.deserialize(doc.getNodeOrNull("data"));
+
+            assertNotNull(result);
+            assertEquals("adaptive", type.getField("name").get(result));
+            assertEquals(17, type.getField("amount").get(result));
+        }
+
+        @Test
+        void should_UseBridgeAsmForPrivateFieldsAcrossIsolatedClassLoader(@TempDir Path tempDir) throws Exception {
+            Class<?> type = compileAndLoadExternal(tempDir, "external.ExternalPrivatePojo", """
+                    package external;
+
+                    public class ExternalPrivatePojo {
+                        private String name;
+                        private int amount;
+
+                        public ExternalPrivatePojo() {
+                        }
+
+                        public String name() {
+                            return name;
+                        }
+
+                        public int amount() {
+                            return amount;
+                        }
+                    }
+                    """);
+            assertCannotSeeSparrowYaml(type);
+
+            SparrowYaml yaml = SparrowYaml.builder()
+                    .setAutoSerializerMode(AutoSerializerMode.ASM)
+                    .build();
+            NodeSerializer<Object> serializer = registerRaw(yaml, type);
+
+            YamlDocument doc = yaml.load("""
+                    data:
+                      name: "bridge"
+                      amount: 42
+                    """);
+
+            Object result = serializer.deserialize(doc.getNodeOrNull("data"));
+
+            assertNotNull(result);
+            assertEquals("bridge", type.getMethod("name").invoke(result));
+            assertEquals(42, type.getMethod("amount").invoke(result));
+        }
+
+        @Test
+        void should_UseReflectionModeWhenRequested(@TempDir Path tempDir) throws Exception {
+            Class<?> type = compileAndLoadExternal(tempDir, "external.ExternalReflectionPojo", """
+                    package external;
+
+                    public class ExternalReflectionPojo {
+                        public String name;
+
+                        public ExternalReflectionPojo() {
+                        }
+                    }
+                    """);
+
+            SparrowYaml yaml = SparrowYaml.builder()
+                    .setAutoSerializerMode(AutoSerializerMode.REFLECTION)
+                    .build();
+            NodeSerializer<Object> serializer = registerRaw(yaml, type);
+
+            YamlDocument doc = yaml.load("""
+                    data:
+                      name: "reflection"
+                    """);
+
+            Object result = serializer.deserialize(doc.getNodeOrNull("data"));
+
+            assertNotNull(result);
+            assertEquals("reflection", type.getField("name").get(result));
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private NodeSerializer<Object> registerRaw(SparrowYaml yaml, Class<?> type) {
+            return (NodeSerializer<Object>) yaml.serializers().register((Class) type);
+        }
+
+        private void assertCannotSeeSparrowYaml(Class<?> type) {
+            assertThrows(ClassNotFoundException.class, () ->
+                    Class.forName(NodeSerializer.class.getName(), false, type.getClassLoader()));
+        }
+
+        private Class<?> compileAndLoadExternal(Path tempDir, String binaryName, String source) throws Exception {
+            Path sourceFile = tempDir.resolve(binaryName.replace('.', '/') + ".java");
+            Files.createDirectories(sourceFile.getParent());
+            Files.writeString(sourceFile, source);
+
+            JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+            assertNotNull(compiler, "Tests require a JDK, not a JRE");
+            int compileResult = compiler.run(null, null, null, "-d", tempDir.toString(), sourceFile.toString());
+            assertEquals(0, compileResult);
+
+            URLClassLoader loader = new URLClassLoader(
+                    new URL[]{tempDir.toUri().toURL()},
+                    ClassLoader.getPlatformClassLoader()
+            );
+            return Class.forName(binaryName, true, loader);
         }
     }
 

@@ -2,12 +2,16 @@ package net.momirealms.sparrow.yaml.serializer;
 
 import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerBinding;
+import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
+import net.momirealms.sparrow.yaml.serializer.auto.factory.AdaptiveAutoSerializerFactory;
+import net.momirealms.sparrow.yaml.serializer.auto.factory.AsmAutoSerializerFactory;
 import net.momirealms.sparrow.yaml.serializer.auto.factory.AutoSerializerFactory;
 import net.momirealms.sparrow.yaml.serializer.auto.factory.ReflectionAutoSerializerFactory;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Type;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -18,11 +22,28 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SerializerRegistry {
     private final SparrowYaml holder;
     private final Map<Type, NodeSerializer<?>> serializers = new ConcurrentHashMap<>();
-    private final AutoSerializerFactory autoSerializerFactory = new ReflectionAutoSerializerFactory();
+    private final AutoSerializerFactory autoSerializerFactory;
 
     public SerializerRegistry(SparrowYaml holder) {
+        this(holder, AutoSerializerMode.ADAPTIVE);
+    }
+
+    public SerializerRegistry(SparrowYaml holder, AutoSerializerMode autoSerializerMode) {
+        this(holder, factoryFor(autoSerializerMode));
+    }
+
+    public SerializerRegistry(SparrowYaml holder, AutoSerializerFactory autoSerializerFactory) {
         this.holder = holder;
+        this.autoSerializerFactory = Objects.requireNonNull(autoSerializerFactory, "autoSerializerFactory");
         this.registerBaseSerializers();
+    }
+
+    private static AutoSerializerFactory factoryFor(AutoSerializerMode mode) {
+        return switch (Objects.requireNonNull(mode, "mode")) {
+            case ADAPTIVE -> new AdaptiveAutoSerializerFactory();
+            case ASM -> new AsmAutoSerializerFactory();
+            case REFLECTION -> new ReflectionAutoSerializerFactory();
+        };
     }
 
     /**

@@ -98,10 +98,9 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
                 meta,
                 allBindings,
                 fieldBindings,
-                constructorChoice,
-                Type.getDescriptor(rawType)
+                constructorChoice
         );
-        NodeSerializer<T> serializer = loadGeneratedSerializer(rawType, generatedBytes, allBindings);
+        NodeSerializer<T> serializer = loadGeneratedSerializer(rawType, generatedBytes, allBindings, constructorChoice);
 
         // 注册生成结果, 并结束当前递归解析状态.
         ctx.popResolving(resolved);
@@ -271,14 +270,18 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
 
         // 如果存在无参构造器, 使用无参构造 + 字段注入.
         try {
-            rawType.getDeclaredConstructor();
-            return AsmSerializerGenerator.ConstructorChoice.NO_ARGS;
+            Constructor<T> constructor = rawType.getDeclaredConstructor();
+            return AsmSerializerGenerator.ConstructorChoice.constructor(constructor, List.of(), List.of());
         } catch (NoSuchMethodException ignored) {
         }
 
         // 唯一构造器可通过参数名自动绑定.
         if (constructors.length == 1) {
             return singleBinding(rawType, ctx, constructors[0], bindings, typeVariables);
+        }
+
+        if (constructors.length > 1) {
+            return AsmSerializerGenerator.ConstructorChoice.unsafe();
         }
 
         throw new AutoSerializerException("No suitable constructor for " + rawType.getName());
@@ -295,7 +298,23 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
     ) {
         RecordComponent[] components = rawType.getRecordComponents();
         if (components == null || components.length == 0) {
-            return AsmSerializerGenerator.ConstructorChoice.NO_ARGS;
+            try {
+                Constructor<T> constructor = rawType.getDeclaredConstructor();
+                return AsmSerializerGenerator.ConstructorChoice.constructor(constructor, List.of(), List.of());
+            } catch (NoSuchMethodException e) {
+                throw new AutoSerializerException("Cannot find record constructor for " + rawType.getName(), e);
+            }
+        }
+
+        Class<?>[] parameterTypes = new Class<?>[components.length];
+        for (int i = 0; i < components.length; i++) {
+            parameterTypes[i] = components[i].getType();
+        }
+        Constructor<T> constructor;
+        try {
+            constructor = rawType.getDeclaredConstructor(parameterTypes);
+        } catch (NoSuchMethodException e) {
+            throw new AutoSerializerException("Cannot find record constructor for " + rawType.getName(), e);
         }
 
         List<String> keys = new ArrayList<>();
@@ -318,7 +337,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
             indices.add(appendSer(bindings, ctx.resolve(parameterType), descriptor));
         }
 
-        return new AsmSerializerGenerator.ConstructorChoice(true, keys, indices);
+        return AsmSerializerGenerator.ConstructorChoice.constructor(constructor, keys, indices);
     }
 
     /**
@@ -330,8 +349,9 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
             AutoSerializerBinding.ConstructorBinding binding,
             List<ClassMeta.FieldBinding> bindings
     ) {
+        Constructor<T> constructor;
         try {
-            rawType.getDeclaredConstructor(binding.parameterTypes());
+            constructor = rawType.getDeclaredConstructor(binding.parameterTypes());
         } catch (NoSuchMethodException e) {
             throw new AutoSerializerException("External ctor not found: " + rawType.getName(), e);
         }
@@ -344,7 +364,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
             indices.add(appendSer(bindings, ctx.resolve(parameterType), descriptor));
         }
 
-        return new AsmSerializerGenerator.ConstructorChoice(true, binding.parameterNames(), indices);
+        return AsmSerializerGenerator.ConstructorChoice.constructor(constructor, binding.parameterNames(), indices);
     }
 
     /**
@@ -377,7 +397,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
             indices.add(appendSer(bindings, ctx.resolve(parameterType), descriptor));
         }
 
-        return new AsmSerializerGenerator.ConstructorChoice(true, keys, indices);
+        return AsmSerializerGenerator.ConstructorChoice.constructor(constructor, keys, indices);
     }
 
     /**
@@ -410,7 +430,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
             indices.add(appendSer(bindings, ctx.resolve(parameterType), descriptor));
         }
 
-        return new AsmSerializerGenerator.ConstructorChoice(true, keys, indices);
+        return AsmSerializerGenerator.ConstructorChoice.constructor(constructor, keys, indices);
     }
 
     /**
@@ -450,17 +470,12 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
     private <T> NodeSerializer<T> loadGeneratedSerializer(
             Class<T> rawType,
             byte[] generatedBytes,
-            List<ClassMeta.FieldBinding> bindings
+            List<ClassMeta.FieldBinding> bindings,
+            AsmSerializerGenerator.ConstructorChoice constructorChoice
     ) {
         try {
-            // 内部类需要定义到最外层 nest host, 才能访问同一 nest 的私有成员.
-            Class<?> nestHost = rawType;
-            while (nestHost.getEnclosingClass() != null) {
-                nestHost = nestHost.getEnclosingClass();
-            }
-
-            MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(nestHost, MethodHandles.lookup());
-            Class<?> generatedClass = lookup.defineClass(generatedBytes);
+            MethodHandles.Lookup hiddenLookup = MethodHandles.lookup().defineHiddenClass(generatedBytes, true);
+            Class<?> generatedClass = hiddenLookup.lookupClass();
 
             NodeSerializer<?>[] serializers = new NodeSerializer<?>[bindings.size()];
             FieldAccessor[] accessors = new FieldAccessor[countAccessors(bindings)];
@@ -471,12 +486,15 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
                     accessors[binding.accessorIndex] = FieldAccessors.of(binding.field.reflectiveField);
                 }
             }
+            ObjectInstantiator instantiator = constructorChoice.unsafe
+                    ? new UnsafeObjectInstantiator(rawType)
+                    : new ConstructorObjectInstantiator(constructorChoice.constructor);
 
-            MethodHandle constructor = lookup.findConstructor(
+            MethodHandle constructor = hiddenLookup.findConstructor(
                     generatedClass,
-                    MethodType.methodType(void.class, NodeSerializer[].class, FieldAccessor[].class)
+                    MethodType.methodType(void.class, NodeSerializer[].class, FieldAccessor[].class, ObjectInstantiator.class)
             );
-            return (NodeSerializer<T>) constructor.invoke(serializers, accessors);
+            return (NodeSerializer<T>) constructor.invoke(serializers, accessors, instantiator);
         } catch (Throwable e) {
             throw new AutoSerializerException("Cannot load generated serializer for " + rawType.getName(), e);
         }
