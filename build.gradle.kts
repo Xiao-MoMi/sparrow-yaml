@@ -15,7 +15,7 @@ allprojects {
     apply(plugin = "maven-publish")
 
     // 属性
-    version = "1.0.7"
+    version = "1.0.1"
     java.sourceCompatibility = JavaVersion.VERSION_17
     java.targetCompatibility = JavaVersion.VERSION_17
 
