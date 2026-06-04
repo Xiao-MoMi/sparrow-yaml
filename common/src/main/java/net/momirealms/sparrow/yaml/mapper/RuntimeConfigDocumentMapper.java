@@ -6,8 +6,10 @@ import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.AfterComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.BlankLineBefore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Comment;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.InlineComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
 import org.snakeyaml.engine.v2.comments.CommentLine;
@@ -111,14 +113,16 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                     continue;
                 }
                 Comment comment = component.getAnnotation(Comment.class);
+                InlineComment inlineComment = component.getAnnotation(InlineComment.class);
+                AfterComment afterComment = component.getAnnotation(AfterComment.class);
                 BlankLineBefore blankLineBefore = component.getAnnotation(BlankLineBefore.class);
-                if (comment != null || blankLineBefore != null) {
+                if (comment != null || inlineComment != null || afterComment != null || blankLineBefore != null) {
                     result.add(new CommentBinding(
                             yamlKey(component),
                             blankLinesBefore(blankLineBefore),
                             before(comment),
-                            inline(comment),
-                            after(comment)
+                            inline(inlineComment),
+                            after(afterComment)
                     ));
                 }
             }
@@ -131,14 +135,16 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                 continue;
             }
             Comment comment = field.getAnnotation(Comment.class);
+            InlineComment inlineComment = field.getAnnotation(InlineComment.class);
+            AfterComment afterComment = field.getAnnotation(AfterComment.class);
             BlankLineBefore blankLineBefore = field.getAnnotation(BlankLineBefore.class);
-            if (comment != null || blankLineBefore != null) {
+            if (comment != null || inlineComment != null || afterComment != null || blankLineBefore != null) {
                 result.add(new CommentBinding(
                         yamlKey(field),
                         blankLinesBefore(blankLineBefore),
                         before(comment),
-                        inline(comment),
-                        after(comment)
+                        inline(inlineComment),
+                        after(afterComment)
                 ));
             }
         }
@@ -204,15 +210,15 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     }
 
     private static String[] before(Comment comment) {
-        return comment == null ? new String[0] : comment.before();
+        return comment == null ? new String[0] : comment.value();
     }
 
-    private static String[] inline(Comment comment) {
-        return comment == null ? new String[0] : comment.inline();
+    private static String[] inline(InlineComment comment) {
+        return comment == null ? new String[0] : comment.value();
     }
 
-    private static String[] after(Comment comment) {
-        return comment == null ? new String[0] : comment.after();
+    private static String[] after(AfterComment comment) {
+        return comment == null ? new String[0] : comment.value();
     }
 
     /**

@@ -2,6 +2,8 @@ package net.momirealms.sparrow.yaml.annotation;
 
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Comment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Configuration;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.AfterComment;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.InlineComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 
 import java.lang.reflect.Field;
@@ -23,21 +25,23 @@ public class AnnotationTest {
     }
 
     public static class TestClass {
-        @Comment(before = "test")
+        @Comment("test")
         private String field1;
 
-        @Comment(inline = "inline test", after = "after test")
+        @InlineComment("inline test")
+        @AfterComment("after test")
         private String field2;
     }
 
     public static void main(String[] args) throws Exception {
         Field field1 = TestClass.class.getDeclaredField("field1");
         Comment comment1 = field1.getAnnotation(Comment.class);
-        System.out.println(Arrays.toString(comment1.before()));
+        System.out.println(Arrays.toString(comment1.value()));
 
         Field field2 = TestClass.class.getDeclaredField("field2");
-        Comment comment2 = field2.getAnnotation(Comment.class);
-        System.out.println(Arrays.toString(comment2.inline()));
-        System.out.println(Arrays.toString(comment2.after()));
+        InlineComment inlineComment = field2.getAnnotation(InlineComment.class);
+        AfterComment afterComment = field2.getAnnotation(AfterComment.class);
+        System.out.println(Arrays.toString(inlineComment.value()));
+        System.out.println(Arrays.toString(afterComment.value()));
     }
 }

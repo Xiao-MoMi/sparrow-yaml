@@ -12,9 +12,5 @@ public @interface ElementComment {
 
     int index();
 
-    String[] before() default {};
-
-    String[] inline() default {};
-
-    String[] after() default {};
+    String[] value();
 }

@@ -2,6 +2,8 @@ package net.momirealms.sparrow.yaml;
 
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Comment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Configuration;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.AfterComment;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.InlineComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.BlankLineBefore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
@@ -28,17 +30,18 @@ class SparrowYamlAnnotationTest {
 
     @Configuration
     public static class TestConfig {
-        @Comment(before = "This is a host")
+        @Comment("This is a host")
         private String host = "127.0.0.1";
 
-        @Comment(before = {"Port number", "Must be > 1024"})
+        @Comment({"Port number", "Must be > 1024"})
         @YamlProperty("server-port")
         private int port = 8080;
 
-        @Comment(inline = "List of users")
+        @InlineComment("List of users")
+        @AfterComment("Generated users section")
         private List<String> users = List.of("admin", "guest");
 
-        @Comment(before = "Nested Config")
+        @Comment("Nested Config")
         private NestedConfig nested = new NestedConfig();
 
         public String getHost() { return host; }
@@ -52,7 +55,7 @@ class SparrowYamlAnnotationTest {
     }
 
     public static class NestedConfig {
-        @Comment(before = "Enable something")
+        @Comment("Enable something")
         private boolean enabled = true;
 
         public boolean isEnabled() { return enabled; }
@@ -61,11 +64,11 @@ class SparrowYamlAnnotationTest {
 
     @Configuration
     public static class FormattingConfig {
-        @Comment(before = "Forces locale")
+        @Comment("Forces locale")
         private Locale locale = null;
 
         @BlankLineBefore
-        @Comment(before = "Debug")
+        @Comment("Debug")
         private NestedConfig debug = new NestedConfig();
 
         public Locale getLocale() { return locale; }
@@ -87,11 +90,11 @@ class SparrowYamlAnnotationTest {
     }
 
     public static class InheritedBaseConfig {
-        @Comment(before = "Base host")
+        @Comment("Base host")
         protected String host = "127.0.0.1";
 
         @BlankLineBefore
-        @Comment(before = "Base locale")
+        @Comment("Base locale")
         protected Locale locale = Locale.US;
 
         public String getHost() { return host; }
@@ -100,7 +103,7 @@ class SparrowYamlAnnotationTest {
 
     @Configuration
     public static class InheritedConfig extends InheritedBaseConfig {
-        @Comment(before = "Child port")
+        @Comment("Child port")
         private int port = 25565;
 
         public int getPort() { return port; }
@@ -109,7 +112,7 @@ class SparrowYamlAnnotationTest {
     @Configuration
     public static class ImmutableConfig {
         @YamlProperty("server-name")
-        @Comment(before = "Immutable name")
+        @Comment("Immutable name")
         private final String name;
 
         private final int limit;
@@ -125,6 +128,14 @@ class SparrowYamlAnnotationTest {
 
         public String getName() { return name; }
         public int getLimit() { return limit; }
+    }
+
+    @Configuration
+    public record RecordConfig(
+            @Comment("Record host") String host,
+            @InlineComment("Record port")
+            @AfterComment("Generated record port") int port
+    ) {
     }
 
     @Test
@@ -154,6 +165,7 @@ class SparrowYamlAnnotationTest {
         assertTrue(yamlString.contains("enabled: true"));
         
         assertTrue(yamlString.contains("users:"));
+        assertTrue(yamlString.contains("# Generated users section"));
     }
 
     @Test
@@ -469,5 +481,23 @@ class SparrowYamlAnnotationTest {
         String saved = Files.readString(tempFile);
         assertTrue(saved.contains("# Immutable name"));
         assertTrue(saved.contains("server-name: runtime"));
+    }
+
+    @Test
+    void should_ApplyRecordComponentComments_When_SavingRecordConfig() throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+        YamlMapper<RecordConfig> mapper = factory.create(RecordConfig.class, () -> new RecordConfig("default", 25565));
+
+        Path tempFile = Files.createTempFile("record_config", ".yml");
+        mapper.save(tempFile, new RecordConfig("localhost", 24454));
+
+        String yamlString = Files.readString(tempFile).replace("\r\n", "\n");
+
+        assertTrue(yamlString.contains("# Record host\nhost: localhost"), yamlString);
+        assertTrue(yamlString.contains("port:"), yamlString);
+        assertTrue(yamlString.contains("24454"), yamlString);
+        assertTrue(yamlString.contains("# Record port"), yamlString);
+        assertTrue(yamlString.contains("# Generated record port"), yamlString);
     }
 }
