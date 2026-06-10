@@ -122,7 +122,7 @@ public class YamlMapper<T> {
     private static void saveDocument(Path path, YamlDocument document) throws IOException {
         Path parent = path.getParent();
         if (parent != null) {
-            Files.createDirectories(parent);
+            Files.createDirectories(Files.exists(parent) ? parent : parent.toRealPath());
         }
         document.save(path);
     }
