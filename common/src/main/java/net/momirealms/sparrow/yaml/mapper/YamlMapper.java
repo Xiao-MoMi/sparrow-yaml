@@ -127,6 +127,6 @@ public class YamlMapper<T> {
         document.save(path);
     }
 
-    public record Result<T>(YamlDocument document, T result) {
+    public record Result<T>(YamlDocument document, T value) {
     }
 }
