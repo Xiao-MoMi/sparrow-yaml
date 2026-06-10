@@ -2,6 +2,7 @@ package net.momirealms.sparrow.yaml.mapper;
 
 import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.YamlDocument;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 核心映射器, 实现配置类与 YamlDocument 的双向转换
@@ -15,7 +16,7 @@ public interface ConfigDocumentMapper<T> {
      * @param yaml     SparrowYaml 实例，用于反序列化嵌套复杂对象或提供配置
      * @return YamlDocument
      */
-    YamlDocument toDocument(T instance, SparrowYaml yaml);
+    YamlDocument toDocument(T instance, @Nullable YamlDocument existing, SparrowYaml yaml);
 
     /**
      * 从 YamlDocument 反序列化回 Java 实例

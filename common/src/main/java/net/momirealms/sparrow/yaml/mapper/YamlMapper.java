@@ -19,10 +19,7 @@ public class YamlMapper<T> {
     private final boolean backupOnUpgrade;
     private final Function<Path, Path> backupPathResolver;
     private final Supplier<T> defaultInstanceSupplier;
-    private Path configFilePath;
-    private T cachedInstance;
-    private long lastModified = -1;
-    private long size = -1;
+    private final Class<T> clazz;
 
     public YamlMapper(
             Class<T> clazz,
@@ -33,6 +30,7 @@ public class YamlMapper<T> {
             Function<Path, Path> backupPathResolver,
             Supplier<T> defaultInstanceSupplier
     ) {
+        this.clazz = clazz;
         this.sparrowYaml = sparrowYaml;
         this.documentMapper = documentMapper;
         this.upgradePipeline = upgradePipeline;
@@ -41,32 +39,8 @@ public class YamlMapper<T> {
         this.defaultInstanceSupplier = Objects.requireNonNull(defaultInstanceSupplier, "defaultInstanceSupplier");
     }
 
-    /**
-     * 加载指定的配置文件。
-     * 如果文件不存在，会自动使用配置类的默认值创建模板并保存。
-     * 如果文件存在，且指定了 upgradePipeline，会根据版本检查是否需要合并升级。
-     *
-     * @param path 配置文件路径
-     * @return 实例化并填充完毕的配置对象
-     * @throws IOException 如果出现 IO 异常
-     */
-    public synchronized T load(Path path) throws IOException {
-        Objects.requireNonNull(path, "path");
-        if (!Files.exists(path)) {
-            return loadForce(path);
-        }
-
-        BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
-        long currentLastModified = attributes.lastModifiedTime().toMillis();
-        long currentSize = attributes.size();
-        if (cachedInstance != null
-                && normalizePath(path).equals(configFilePath)
-                && currentLastModified == lastModified
-                && currentSize == size) {
-            return cachedInstance;
-        }
-
-        return loadForce(path);
+    public Class<T> clazz() {
+        return this.clazz;
     }
 
     /**
@@ -78,35 +52,32 @@ public class YamlMapper<T> {
      * @return 实例化并填充完毕的配置对象
      * @throws IOException 如果出现 IO 异常
      */
-    public synchronized T loadForce(Path path) throws IOException {
+    public synchronized Result<T> load(Path path) throws IOException {
         Objects.requireNonNull(path, "path");
         // 不存在则直接保存.
         if (!Files.exists(path)) {
             T defaultInstance = this.defaultInstanceSupplier.get();
-            YamlDocument defaultDocument = documentMapper.toDocument(defaultInstance, sparrowYaml);
+            YamlDocument defaultDocument = documentMapper.toDocument(defaultInstance, null, sparrowYaml);
             if (upgradePipeline != null) upgradePipeline.writeTargetVersion(defaultDocument);
             saveDocument(path, defaultDocument);
-            updateCache(path, defaultInstance);
-            return defaultInstance;
+            return new Result<>(defaultDocument, defaultInstance);
         }
         // 加载本地的配置, 然后尝试升级.
         YamlDocument localDocument = sparrowYaml.load(path);
         if (upgradePipeline != null) {
             T defaultInstance = this.defaultInstanceSupplier.get();
-            YamlDocument defDocument = documentMapper.toDocument(defaultInstance, sparrowYaml);
+            YamlDocument defDocument = documentMapper.toDocument(defaultInstance, null, sparrowYaml);
             if (upgradePipeline.needsUpgrade(localDocument, defDocument)) {
                 YamlDocument upgradedDocument = upgradePipeline.upgrade(localDocument, defDocument);
                 backupBeforeUpgrade(path);
                 saveDocument(path, upgradedDocument);
                 T upgradedInstance = documentMapper.fromDocument(upgradedDocument, sparrowYaml);
-                updateCache(path, upgradedInstance);
-                return upgradedInstance;
+                return new Result<>(upgradedDocument, upgradedInstance);
             }
         }
         // 将文档读取为对象
         T loadedInstance = documentMapper.fromDocument(localDocument, sparrowYaml);
-        updateCache(path, loadedInstance);
-        return loadedInstance;
+        return new Result<>(localDocument, loadedInstance);
     }
 
     /**
@@ -117,12 +88,20 @@ public class YamlMapper<T> {
      */
     public synchronized void save(Path path, T instance) throws IOException {
         Objects.requireNonNull(path, "path");
-        YamlDocument document = documentMapper.toDocument(instance, sparrowYaml);
+        YamlDocument document = documentMapper.toDocument(instance, null, sparrowYaml);
         if (path.getParent() != null && !Files.exists(path.getParent())) {
             Files.createDirectories(path.getParent());
         }
         document.save(path);
-        updateCache(path, instance);
+    }
+
+    public synchronized void save(Path path, YamlDocument existing, T instance) throws IOException {
+        Objects.requireNonNull(path, "path");
+        YamlDocument document = documentMapper.toDocument(instance, existing, sparrowYaml);
+        if (path.getParent() != null && !Files.exists(path.getParent())) {
+            Files.createDirectories(path.getParent());
+        }
+        document.save(path);
     }
 
     // 更新配置文件前的备份.
@@ -148,15 +127,6 @@ public class YamlMapper<T> {
         document.save(path);
     }
 
-    private void updateCache(Path path, T instance) throws IOException {
-        BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
-        this.configFilePath = normalizePath(path);
-        this.cachedInstance = instance;
-        this.lastModified = attributes.lastModifiedTime().toMillis();
-        this.size = attributes.size();
-    }
-
-    private static Path normalizePath(Path path) {
-        return path.toAbsolutePath().normalize();
+    public record Result<T>(YamlDocument document, T result) {
     }
 }

@@ -185,12 +185,12 @@ class SparrowYamlAnnotationTest {
         Path tempFile = Files.createTempFile("test_deserialize", ".yml");
         Files.writeString(tempFile, yamlContent);
         
-        TestConfig config = mapper.load(tempFile);
+        YamlMapper.Result<TestConfig> config = mapper.load(tempFile);
         
         assertNotNull(config);
-        assertEquals("localhost", config.getHost());
-        assertEquals(9090, config.getPort());
-        assertEquals(List.of("test1", "test2"), config.getUsers());
+        assertEquals("localhost", config.result().getHost());
+        assertEquals(9090, config.result().getPort());
+        assertEquals(List.of("test1", "test2"), config.result().getUsers());
     }
 
     @Test
@@ -207,9 +207,9 @@ class SparrowYamlAnnotationTest {
         assertTrue(yamlString.contains("locale: ''"));
         assertTrue(yamlString.contains("locale: ''\n\n# Debug\ndebug:"));
 
-        FormattingConfig loaded = mapper.loadForce(tempFile);
+        YamlMapper.Result<FormattingConfig> loaded = mapper.load(tempFile);
         assertNotNull(loaded);
-        assertNull(loaded.getLocale());
+        assertNull(loaded.result().getLocale());
     }
 
     @Test
@@ -234,34 +234,37 @@ class SparrowYamlAnnotationTest {
                 port: 24454
                 """);
 
-        InheritedConfig loaded = mapper.loadForce(tempFile);
+        InheritedConfig loaded = mapper.load(tempFile).result();
         assertEquals("0.0.0.0", loaded.getHost());
         assertEquals(new Locale("zh", "CN"), loaded.getLocale());
         assertEquals(24454, loaded.getPort());
     }
 
     @Test
-    void should_ReturnCachedInstance_When_FileAttributesAreUnchanged() throws IOException {
+    void should_AlwaysReturnNewResult_When_LoadIsCalled() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
         YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
         YamlMapper<TestConfig> mapper = factory.create(TestConfig.class, TestConfig::new);
 
-        Path tempFile = Files.createTempFile("cached_config", ".yml");
+        Path tempFile = Files.createTempFile("no_cache_config", ".yml");
         Files.writeString(tempFile, """
-                host: "cached"
+                host: "fresh"
                 server-port: 9090
                 users:
                   - "test"
                 """);
 
-        TestConfig first = mapper.load(tempFile);
-        TestConfig second = mapper.load(tempFile);
+        YamlMapper.Result<TestConfig> first = mapper.load(tempFile);
+        YamlMapper.Result<TestConfig> second = mapper.load(tempFile);
 
-        assertSame(first, second, "文件属性没有变化时, load 应返回缓存实例");
+        assertNotSame(first, second, "每次 load 都应返回新的 Result 对象（无缓存）");
+        assertNotSame(first.result(), second.result(), "每次 load 都应返回新的配置实例");
+        assertEquals("fresh", first.result().getHost());
+        assertEquals("fresh", second.result().getHost());
     }
 
     @Test
-    void should_Reload_When_FileAttributesAreChanged() throws IOException {
+    void should_LoadUpdatedContent_When_FileIsModified() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
         YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
         YamlMapper<TestConfig> mapper = factory.create(TestConfig.class, TestConfig::new);
@@ -272,7 +275,7 @@ class SparrowYamlAnnotationTest {
                 server-port: 9090
                 """);
 
-        TestConfig first = mapper.load(tempFile);
+        TestConfig first = mapper.load(tempFile).result();
         Files.writeString(tempFile, """
                 host: "after-with-different-size"
                 server-port: 9091
@@ -280,32 +283,33 @@ class SparrowYamlAnnotationTest {
                   - "changed"
                 """);
 
-        TestConfig second = mapper.load(tempFile);
+        TestConfig second = mapper.load(tempFile).result();
 
-        assertNotSame(first, second, "文件属性变化后, load 应重新加载配置对象");
+        assertNotSame(first, second, "文件修改后 load 应返回新的配置对象");
         assertEquals("after-with-different-size", second.getHost());
         assertEquals(9091, second.getPort());
         assertEquals(List.of("changed"), second.getUsers());
     }
 
     @Test
-    void should_ReloadEvenWhenUnchanged_When_LoadForceIsCalled() throws IOException {
+    void should_ReturnBothDocumentAndInstance_When_LoadIsCalled() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
         YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
         YamlMapper<TestConfig> mapper = factory.create(TestConfig.class, TestConfig::new);
 
-        Path tempFile = Files.createTempFile("force_config", ".yml");
+        Path tempFile = Files.createTempFile("result_config", ".yml");
         Files.writeString(tempFile, """
-                host: "force"
+                host: "with-doc"
                 server-port: 9092
                 """);
 
-        TestConfig first = mapper.load(tempFile);
-        TestConfig second = mapper.loadForce(tempFile);
+        YamlMapper.Result<TestConfig> result = mapper.load(tempFile);
 
-        assertNotSame(first, second, "loadForce 应忽略缓存并重新加载配置对象");
-        assertEquals("force", second.getHost());
-        assertEquals(9092, second.getPort());
+        assertNotNull(result);
+        assertNotNull(result.document(), "Result 应包含 YamlDocument");
+        assertNotNull(result.result(), "Result 应包含配置实例");
+        assertEquals("with-doc", result.result().getHost());
+        assertEquals(9092, result.result().getPort());
     }
 
     @Test
@@ -317,7 +321,7 @@ class SparrowYamlAnnotationTest {
         Path tempDir = Files.createTempDirectory("mapper_missing_config");
         Path configPath = tempDir.resolve("nested").resolve("config.yml");
 
-        VersionedConfig config = mapper.load(configPath);
+        VersionedConfig config = mapper.load(configPath).result();
 
         assertTrue(Files.exists(configPath));
         assertEquals("2", config.getVersion());
@@ -341,7 +345,7 @@ class SparrowYamlAnnotationTest {
                 legacy: old
                 """);
 
-        VersionedConfig config = mapper.loadForce(configPath);
+        VersionedConfig config = mapper.load(configPath).result();
         YamlDocument savedDocument = sparrowYaml.load(configPath);
 
         assertEquals("2", config.getVersion());
@@ -372,7 +376,7 @@ class SparrowYamlAnnotationTest {
                 legacy: old
                 """);
 
-        VersionedConfig config = mapper.loadForce(configPath);
+        VersionedConfig config = mapper.load(configPath).result();
         String backup = Files.readString(backupPath);
         YamlDocument savedDocument = sparrowYaml.load(configPath);
 
@@ -403,7 +407,7 @@ class SparrowYamlAnnotationTest {
                 legacy: keep
                 """);
 
-        VersionedConfig config = mapper.loadForce(configPath);
+        VersionedConfig config = mapper.load(configPath).result();
 
         assertEquals("2", config.getVersion());
         assertFalse(Files.exists(backupPath));
@@ -426,7 +430,7 @@ class SparrowYamlAnnotationTest {
                 legacy: keep
                 """);
 
-        VersionedConfig config = mapper.loadForce(configPath);
+        VersionedConfig config = mapper.load(configPath).result();
         String saved = Files.readString(configPath);
 
         assertEquals("2", config.getVersion());
@@ -448,7 +452,7 @@ class SparrowYamlAnnotationTest {
         Path tempFile = Files.createTempFile("immutable_default_config", ".yml");
         Files.delete(tempFile);
 
-        ImmutableConfig config = mapper.load(tempFile);
+        ImmutableConfig config = mapper.load(tempFile).result();
         String saved = Files.readString(tempFile);
 
         assertEquals("supplier-default", config.getName());
@@ -471,7 +475,7 @@ class SparrowYamlAnnotationTest {
         Path tempFile = Files.createTempFile("immutable_config", ".yml");
         Files.writeString(tempFile, yamlContent);
 
-        ImmutableConfig config = mapper.load(tempFile);
+        ImmutableConfig config = mapper.load(tempFile).result();
 
         assertNotNull(config);
         assertEquals("runtime", config.getName());

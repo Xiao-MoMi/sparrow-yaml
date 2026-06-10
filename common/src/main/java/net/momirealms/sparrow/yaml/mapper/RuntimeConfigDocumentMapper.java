@@ -45,9 +45,9 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
      * 将配置对象编码为新的 YAML 文档, 并应用字段注释.
      */
     @Override
-    public YamlDocument toDocument(T instance, SparrowYaml yaml) {
+    public YamlDocument toDocument(T instance, YamlDocument existing, SparrowYaml yaml) {
         try {
-            YamlDocument doc = yaml.load("");
+            YamlDocument doc = existing == null ? yaml.load("") : existing;
             NodeSerializer<T> serializer = yaml.serializers().register(type);
             Object encoded = serializer.serialize(instance);
 
