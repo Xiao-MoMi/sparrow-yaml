@@ -251,6 +251,25 @@ public class Route {
         return true;
     }
 
+    /**
+     * 解析当前路由打印时展示的路径名称
+     */
+    public static String pathName(@Nullable Route path) {
+        if (path == null || path.length() == 0) return "<unknown>";
+        StringBuilder builder = new StringBuilder();
+        for (Object key : path.routeKeys()) {
+            if (key instanceof Integer index && index >= 0) {
+                builder.append('[').append(index).append(']');
+                continue;
+            }
+            if (!builder.isEmpty()) {
+                builder.append('.');
+            }
+            builder.append(key);
+        }
+        return "\"" + builder + "\"";
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

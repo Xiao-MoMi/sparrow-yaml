@@ -1,5 +1,7 @@
 package net.momirealms.sparrow.yaml;
 
+import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
+import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Comment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Configuration;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.AfterComment;
@@ -9,6 +11,8 @@ import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
 import net.momirealms.sparrow.yaml.mapper.YamlMapper;
 import net.momirealms.sparrow.yaml.mapper.YamlMapperFactory;
+import net.momirealms.sparrow.yaml.node.SectionNode;
+import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.junit.jupiter.api.Test;
 
@@ -24,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SparrowYamlAnnotationTest {
@@ -131,6 +136,18 @@ class SparrowYamlAnnotationTest {
     }
 
     @Configuration
+    public static class RequiredConstructorConfig {
+        private final int port;
+
+        @YamlConstructor
+        public RequiredConstructorConfig(@YamlProperty("server-port") int port) {
+            this.port = port;
+        }
+
+        public int getPort() { return port; }
+    }
+
+    @Configuration
     public record RecordConfig(
             @Comment("Record host") String host,
             @InlineComment("Record port")
@@ -166,6 +183,129 @@ class SparrowYamlAnnotationTest {
         
         assertTrue(yamlString.contains("users:"));
         assertTrue(yamlString.contains("# Generated users section"));
+    }
+
+    @Test
+    void should_SaveNewTestConfigIntoResourcesDirectory() throws Exception {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+        YamlMapper<TestConfig> mapper = factory.create(TestConfig.class, TestConfig::new);
+
+        withMissingResourcePath("generated-test-config.yml", configPath -> {
+            TestConfig config = new TestConfig();
+            config.setHost("resources-host");
+
+            mapper.save(configPath, config);
+
+            assertTrue(Files.exists(configPath));
+            String saved = Files.readString(configPath).replace("\r\n", "\n");
+            assertTrue(saved.contains("# This is a host\nhost: resources-host"), saved);
+            assertTrue(saved.contains("# Port number\n# Must be > 1024\nserver-port: 8080"), saved);
+            assertTrue(saved.contains("users:"), saved);
+            assertTrue(saved.contains("# Nested Config\nnested:"), saved);
+        });
+    }
+
+    @Test
+    void should_ThrowInvalidNodeException_When_ResourceTestConfigContainsWrongType() throws Exception {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+        YamlMapper<TestConfig> mapper = factory.create(TestConfig.class, TestConfig::new);
+
+        withResourceFile("invalid-test-config.yml", """
+                host: "resource"
+                server-port:
+                  nested: true
+                users:
+                  - "admin"
+                """, configPath -> {
+            InvalidNodeException failure = assertThrows(InvalidNodeException.class, () -> mapper.load(configPath));
+
+            assertEquals(Route.from("server-port"), failure.path());
+            assertEquals(SectionNode.class, failure.actualType());
+            assertEquals(Integer.class, failure.targetType());
+            assertEquals("Invalid YAML value at path \"server-port\": actual Map, expected Integer", failure.getMessage());
+        });
+    }
+
+    @Test
+    void should_ThrowMissingNodeException_When_ResourceConstructorConfigMissesRequiredValue() throws Exception {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+        YamlMapper<RequiredConstructorConfig> mapper = factory.create(
+                RequiredConstructorConfig.class,
+                () -> new RequiredConstructorConfig(8080)
+        );
+
+        withResourceFile("missing-required-constructor-config.yml", """
+                unused: true
+                """, configPath -> {
+            MissingNodeException failure = assertThrows(MissingNodeException.class, () -> mapper.load(configPath));
+
+            assertEquals("server-port", failure.key());
+            assertEquals(Route.from("server-port"), failure.path());
+            assertEquals(Integer.class, failure.targetType());
+            assertEquals("Missing YAML value 'server-port' at path \"server-port\", expected Integer", failure.getMessage());
+        });
+    }
+
+    @Test
+    void should_PreserveLocalComments_When_ResourceTestConfigIsSavedAgain() throws Exception {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+        YamlMapper<TestConfig> mapper = factory.create(TestConfig.class, TestConfig::new);
+
+        withResourceFile("commented-test-config.yml", """
+                # Local host comment
+                host: "resource"
+                # Local port comment
+                server-port: 9090
+                # Local users comment
+                users:
+                  - "local"
+                nested:
+                  # Local nested enabled comment
+                  enabled: false
+                """, configPath -> {
+            YamlMapper.Result<TestConfig> loaded = mapper.load(configPath);
+
+            loaded.value().host = "new resource";
+            mapper.save(configPath, loaded.document(), loaded.value());
+
+            String saved = Files.readString(configPath).replace("\r\n", "\n");
+            assertTrue(saved.contains("# Local host comment\nhost: new resource"), saved);
+            assertTrue(saved.contains("# Local port comment\nserver-port: 9090"), saved);
+            assertTrue(saved.contains("# Local users comment\nusers:"), saved);
+            assertTrue(saved.contains("# Local nested enabled comment\n  enabled: false"), saved);
+        });
+    }
+
+    @Test
+    void should_PreserveLocalCommentsOnUnchangedNodes_When_ResourceConfigIsUpgraded() throws Exception {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder()
+                .sparrowYaml(sparrowYaml)
+                .upgradePipeline(YamlUpgradePipeline.builder().build())
+                .build();
+        YamlMapper<VersionedConfig> mapper = factory.create(VersionedConfig.class, VersionedConfig::new);
+
+        withResourceFile("commented-versioned-config.yml", """
+                config-version: 1
+                # Local value comment
+                value: local
+                # Local legacy comment
+                legacy: old
+                """, configPath -> {
+            VersionedConfig config = mapper.load(configPath).value();
+            String saved = Files.readString(configPath).replace("\r\n", "\n");
+
+            assertEquals("2", config.getVersion());
+            assertEquals("local", config.getValue());
+            assertEquals("created", config.getAdded());
+            assertTrue(saved.contains("# Local value comment\nvalue: local"), saved);
+            assertTrue(saved.contains("added: created"), saved);
+            assertFalse(saved.contains("legacy:"), saved);
+        });
     }
 
     @Test
@@ -503,5 +643,52 @@ class SparrowYamlAnnotationTest {
         assertTrue(yamlString.contains("24454"), yamlString);
         assertTrue(yamlString.contains("# Record port"), yamlString);
         assertTrue(yamlString.contains("# Generated record port"), yamlString);
+    }
+
+    private static void withMissingResourcePath(String fileName, ResourcePathTest test) throws Exception {
+        withResourcePath(fileName, path -> {
+            Files.deleteIfExists(path);
+            test.run(path);
+        });
+    }
+
+    private static void withResourceFile(String fileName, String content, ResourcePathTest test) throws Exception {
+        withResourcePath(fileName, path -> {
+            Files.writeString(path, content);
+            test.run(path);
+        });
+    }
+
+    private static void withResourcePath(String fileName, ResourcePathTest test) throws Exception {
+        Path path = testResourcesDir().resolve(fileName);
+        byte[] previousContent = Files.exists(path) ? Files.readAllBytes(path) : null;
+        try {
+            Files.createDirectories(path.getParent());
+            test.run(path);
+        } finally {
+            if (previousContent == null) {
+                Files.deleteIfExists(path);
+            } else {
+                Files.write(path, previousContent);
+            }
+        }
+    }
+
+    private static Path testResourcesDir() {
+        List<Path> candidates = List.of(
+                Path.of("src", "test", "resources"),
+                Path.of("common", "src", "test", "resources")
+        );
+        for (Path candidate : candidates) {
+            if (Files.isDirectory(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Cannot locate test resources directory");
+    }
+
+    @FunctionalInterface
+    private interface ResourcePathTest {
+        void run(Path path) throws Exception;
     }
 }

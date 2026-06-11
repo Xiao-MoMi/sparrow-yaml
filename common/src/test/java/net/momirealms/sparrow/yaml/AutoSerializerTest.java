@@ -3,6 +3,7 @@ package net.momirealms.sparrow.yaml;
 import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
+import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.TypeRef;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerBinding;
@@ -906,17 +907,10 @@ class AutoSerializerTest {
         void should_UseManuallyRegisteredSerializer_When_InterfaceField() {
             SparrowYaml yaml = SparrowYaml.builder().build();
             // 先手动注册接口的序列化器
-            yaml.serializers().register(Models.SomeInterface.class, new NodeSerializer<>() {
-                @Override
-                public Models.SomeInterface deserialize(YamlNode<?> node) {
-                    return new Models.SomeInterface() {};
-                }
-
-                @Override
-                public Object serialize(Models.SomeInterface value) {
-                    return Map.of("type", "some_impl");
-                }
-            });
+            yaml.serializers().register(Models.SomeInterface.class, NodeSerializers.STRING.xmap(
+                    ignored -> new Models.SomeInterface() {},
+                    ignored -> "some_impl"
+            ));
             // 注册包含该接口字段的类应不再抛出异常
             assertDoesNotThrow(
                     () -> yaml.serializers().register(Models.InterfaceFieldContainer.class),
@@ -1118,16 +1112,10 @@ class AutoSerializerTest {
             SparrowYaml yaml = SparrowYaml.builder().build();
             
             // 手动注册一个自定义的拦截序列化器
-            NodeSerializer<Models.CustomUser> customSerializer = new NodeSerializer<>() {
-                @Override
-                public Models.CustomUser deserialize(YamlNode<?> node) {
-                    return new Models.CustomUser("Custom", 999);
-                }
-                @Override
-                public Object serialize(Models.CustomUser value) {
-                    return "CustomString";
-                }
-            };
+            NodeSerializer<Models.CustomUser> customSerializer = NodeSerializers.STRING.xmap(
+                    ignored -> new Models.CustomUser("Custom", 999),
+                    ignored -> "CustomString"
+            );
             yaml.serializers().register(Models.CustomUser.class, customSerializer);
 
             // 尝试触发自动生成

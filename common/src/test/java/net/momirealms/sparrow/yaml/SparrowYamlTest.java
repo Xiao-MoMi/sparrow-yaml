@@ -5,9 +5,11 @@ import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.route.Route;
-import net.momirealms.sparrow.yaml.serializer.NodeDecoder;
+import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
+import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
+import net.momirealms.sparrow.yaml.serializer.TypeRef;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -505,6 +507,13 @@ class SparrowYamlTest {
             }
         }
 
+        record NamedValue(String value) {}
+
+        enum Mode {
+            EASY,
+            HARD
+        }
+
         @Test
         void should_DecodeMapOfList_When_UsingCombinatorCodec() throws IOException {
             // 1. 准备阶段 (Arrange)
@@ -519,8 +528,8 @@ class SparrowYamlTest {
             """);
 
             // 2. 执行阶段 (Act)
-            NodeDecoder<List<String>> stringListCodec = NodeSerializers.STRING.listOf();
-            NodeDecoder<java.util.Map<String, List<String>>> mapOfListCodec = stringListCodec.mapOf();
+            NodeSerializer<List<String>> stringListCodec = NodeSerializers.STRING.listOf();
+            NodeSerializer<java.util.Map<String, List<String>>> mapOfListCodec = stringListCodec.mapOf();
             java.util.Map<String, List<String>> users = yamlDocument.get(mapOfListCodec, "users");
 
             // 3. 断言阶段 (Assert)
@@ -551,6 +560,601 @@ class SparrowYamlTest {
             assertEquals(1, block.x());
             assertEquals(2, block.y());
             assertEquals(3, block.z());
+        }
+
+        @Test
+        void should_RoundTripMappingObject_When_UsingMappingBuilder() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> blockCodec = NodeSerializers.mapping(Block.class)
+                    .group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x),
+                            NodeSerializers.INT.fieldOf("y").forGetter(Block::y),
+                            NodeSerializers.INT.fieldOf("z").forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+            sparrowYaml.serializers().register(Block.class, blockCodec);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            data:
+              block:
+                x: 1
+                y: 2
+                z: 3
+            """);
+
+            Block decoded = yamlDocument.get(Block.class, "data", "block");
+            assertEquals(new Block(1, 2, 3), decoded);
+
+            yamlDocument.setAndGet(Block.class, new Block(4, 5, 6), "data", "other");
+            assertEquals(4, yamlDocument.get(NodeSerializers.INT, "data", "other", "x"));
+            assertEquals(5, yamlDocument.get(NodeSerializers.INT, "data", "other", "y"));
+            assertEquals(6, yamlDocument.get(NodeSerializers.INT, "data", "other", "z"));
+        }
+
+        @Test
+        void should_RoundTripSequenceObject_When_UsingSequenceBuilder() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> blockCodec = NodeSerializers.sequence(Block.class)
+                    .group(
+                            NodeSerializers.INT.element(0).forGetter(Block::x),
+                            NodeSerializers.INT.element(1).forGetter(Block::y),
+                            NodeSerializers.INT.element(2).forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+            sparrowYaml.serializers().register(Block.class, blockCodec);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            data:
+              block: [1, 2, 3]
+            """);
+
+            Block decoded = yamlDocument.get(Block.class, "data", "block");
+            assertEquals(new Block(1, 2, 3), decoded);
+
+            yamlDocument.setAndGet(Block.class, new Block(4, 5, 6), "data", "other");
+            assertEquals(List.of(4, 5, 6), yamlDocument.get(NodeSerializers.INT.listOf(), "data", "other"));
+        }
+
+        @Test
+        void should_ThrowMissingException_When_RequiredBuilderFieldIsMissing() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> blockCodec = NodeSerializers.mapping(Block.class)
+                    .group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x),
+                            NodeSerializers.INT.fieldOf("y").forGetter(Block::y),
+                            NodeSerializers.INT.fieldOf("z").forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            block:
+              x: 1
+              z: 3
+            """);
+
+            MissingNodeException missing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(blockCodec, "block"));
+            assertEquals("y", missing.key());
+            assertEquals(Route.from("block", "y"), missing.path());
+            assertEquals(Integer.class, missing.targetType());
+            assertEquals("Missing YAML value 'y' at path \"block.y\", expected Integer", missing.getMessage());
+        }
+
+        @Test
+        void should_UseDefaultOnlyWhenBuilderFieldIsMissing_AndThrowWhenInvalid() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> blockCodec = NodeSerializers.mapping(Block.class)
+                    .group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x),
+                            NodeSerializers.INT.fieldOf("y").defaulted(64).forGetter(Block::y),
+                            NodeSerializers.INT.fieldOf("z").forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+
+            YamlDocument missing = sparrowYaml.load("""
+            block:
+              x: 1
+              z: 3
+            """);
+            assertEquals(new Block(1, 64, 3), missing.get(blockCodec, "block"));
+
+            YamlDocument invalid = sparrowYaml.load("""
+            block:
+              x: 1
+              y:
+                nested: true
+              z: 3
+            """);
+            InvalidNodeException failure = assertThrows(InvalidNodeException.class, () -> invalid.get(blockCodec, "block"));
+            assertEquals(Route.from("block", "y"), failure.path());
+            assertEquals(SectionNode.class, failure.actualType());
+            assertEquals(Integer.class, failure.targetType());
+            assertEquals("Invalid YAML value at path \"block.y\": actual Map, expected Integer", failure.getMessage());
+        }
+
+        @Test
+        void should_ThrowMissingException_When_RequiredBuilderElementIsMissing() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> blockCodec = NodeSerializers.sequence(Block.class)
+                    .group(
+                            NodeSerializers.INT.element(0).forGetter(Block::x),
+                            NodeSerializers.INT.element(1).forGetter(Block::y),
+                            NodeSerializers.INT.element(2).forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            block:
+              - 1
+              - 2
+            """);
+
+            MissingNodeException missing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(blockCodec, "block"));
+            assertEquals(2, missing.key());
+            assertEquals(Route.from("block", 2), missing.path());
+            assertEquals(Integer.class, missing.targetType());
+            assertEquals("Missing YAML value '2' at path \"block[2]\", expected Integer", missing.getMessage());
+        }
+
+        @Test
+        void should_ThrowInvalidException_When_BuilderRootNodeHasWrongShape() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> mappingCodec = NodeSerializers.mapping(Block.class)
+                    .group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x),
+                            NodeSerializers.INT.fieldOf("y").forGetter(Block::y),
+                            NodeSerializers.INT.fieldOf("z").forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+            NodeSerializer<Block> sequenceCodec = NodeSerializers.sequence(Block.class)
+                    .group(
+                            NodeSerializers.INT.element(0).forGetter(Block::x),
+                            NodeSerializers.INT.element(1).forGetter(Block::y),
+                            NodeSerializers.INT.element(2).forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            sequence: [1, 2, 3]
+            mapping:
+              x: 1
+              y: 2
+              z: 3
+            """);
+
+            InvalidNodeException mappingFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(mappingCodec, "sequence")
+            );
+            assertEquals(Route.from("sequence"), mappingFailure.path());
+            assertEquals(SequenceNode.class, mappingFailure.actualType());
+            assertEquals(Block.class, mappingFailure.targetType());
+            assertEquals("Invalid YAML value at path \"sequence\": actual List, expected Block", mappingFailure.getMessage());
+
+            InvalidNodeException sequenceFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(sequenceCodec, "mapping")
+            );
+            assertEquals(Route.from("mapping"), sequenceFailure.path());
+            assertEquals(SectionNode.class, sequenceFailure.actualType());
+            assertEquals(Block.class, sequenceFailure.targetType());
+            assertEquals("Invalid YAML value at path \"mapping\": actual Map, expected Block", sequenceFailure.getMessage());
+        }
+
+        @Test
+        void should_UseFallback_When_BuilderFieldIsMissingOrInvalid() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            List<RuntimeException> failures = new ArrayList<>();
+            NodeSerializer<Block> blockCodec = NodeSerializers.mapping(Block.class)
+                    .group(
+                            NodeSerializers.INT.fieldOf("x").onFail(failure -> {
+                                failures.add(failure);
+                                return 10;
+                            }).forGetter(Block::x),
+                            NodeSerializers.INT.fieldOf("y").onFail(failure -> {
+                                failures.add(failure);
+                                return 20;
+                            }).forGetter(Block::y),
+                            NodeSerializers.INT.fieldOf("z").forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            block:
+              x:
+                bad: true
+              z: 3
+            """);
+
+            assertEquals(new Block(10, 20, 3), yamlDocument.get(blockCodec, "block"));
+            InvalidNodeException invalid = assertInstanceOf(InvalidNodeException.class, failures.get(0));
+            assertEquals(Route.from("block", "x"), invalid.path());
+            assertEquals(SectionNode.class, invalid.actualType());
+            assertEquals(Integer.class, invalid.targetType());
+            MissingNodeException missing = assertInstanceOf(MissingNodeException.class, failures.get(1));
+            assertEquals("y", missing.key());
+            assertEquals(Route.from("block", "y"), missing.path());
+            assertEquals(Integer.class, missing.targetType());
+        }
+
+        @Test
+        void should_UseFallback_When_BuilderElementIsMissingOrInvalid() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            List<RuntimeException> failures = new ArrayList<>();
+            NodeSerializer<Block> blockCodec = NodeSerializers.sequence(Block.class)
+                    .group(
+                            NodeSerializers.INT.element(0).onFail(failure -> {
+                                failures.add(failure);
+                                return 10;
+                            }).forGetter(Block::x),
+                            NodeSerializers.INT.element(1).forGetter(Block::y),
+                            NodeSerializers.INT.element(2).onFail(failure -> {
+                                failures.add(failure);
+                                return 30;
+                            }).forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            block:
+              - {bad: true}
+              - 20
+            """);
+
+            assertEquals(new Block(10, 20, 30), yamlDocument.get(blockCodec, "block"));
+            InvalidNodeException invalid = assertInstanceOf(InvalidNodeException.class, failures.get(0));
+            assertEquals(Route.from("block", 0), invalid.path());
+            assertEquals(SectionNode.class, invalid.actualType());
+            assertEquals(Integer.class, invalid.targetType());
+            MissingNodeException missing = assertInstanceOf(MissingNodeException.class, failures.get(1));
+            assertEquals(2, missing.key());
+            assertEquals(Route.from("block", 2), missing.path());
+            assertEquals(Integer.class, missing.targetType());
+        }
+
+        @Test
+        void should_PassSerializerExceptionToFallback_When_DelegateThrows() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            List<RuntimeException> failures = new ArrayList<>();
+            NodeSerializer<Integer> throwingInt = NodeSerializers.STRING.xmap(
+                    value -> {
+                        throw new InvalidNodeException(Route.from("inner"), String.class, Integer.class);
+                    },
+                    String::valueOf
+            );
+            NodeSerializer<Block> blockCodec = NodeSerializers.mapping(Block.class)
+                    .group(
+                            throwingInt.fieldOf("x").onFail(failure -> {
+                                failures.add(failure);
+                                return 10;
+                            }).forGetter(Block::x),
+                            NodeSerializers.INT.fieldOf("y").forGetter(Block::y),
+                            NodeSerializers.INT.fieldOf("z").forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            block:
+              x: 1
+              y: 2
+              z: 3
+            """);
+
+            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, "block"));
+            assertEquals(1, failures.size());
+            InvalidNodeException invalid = assertInstanceOf(InvalidNodeException.class, failures.get(0));
+            assertEquals(Route.from("inner"), invalid.path());
+            assertEquals(String.class, invalid.actualType());
+            assertEquals(Integer.class, invalid.targetType());
+        }
+
+        @Test
+        void should_DecodeSetInEncounterOrder_When_UsingSetOf() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            tags:
+              - alpha
+              - beta
+              - alpha
+            """);
+
+            Set<String> tags = yamlDocument.get(NodeSerializers.STRING.setOf(), "tags");
+
+            assertEquals(List.of("alpha", "beta"), new ArrayList<>(tags));
+        }
+
+        @Test
+        void should_ThrowInvalidException_When_CollectionCombinatorRootShapeIsWrong() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            scalar: value
+            mapping:
+              key: value
+            sequence:
+              - value
+            """);
+
+            InvalidNodeException listFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.STRING.listOf(), "mapping")
+            );
+            assertEquals(Route.from("mapping"), listFailure.path());
+            assertEquals(SectionNode.class, listFailure.actualType());
+            assertEquals(List.class, listFailure.targetType());
+
+            InvalidNodeException setFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.STRING.setOf(), "scalar")
+            );
+            assertEquals(Route.from("scalar"), setFailure.path());
+            assertEquals(String.class, setFailure.actualType());
+            assertEquals(Set.class, setFailure.targetType());
+
+            InvalidNodeException mapFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.STRING.mapOf(), "sequence")
+            );
+            assertEquals(Route.from("sequence"), mapFailure.path());
+            assertEquals(SequenceNode.class, mapFailure.actualType());
+            assertEquals(Map.class, mapFailure.targetType());
+        }
+
+        @Test
+        void should_ThrowInvalidException_When_XmapMapperFailsOrReturnsNull() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: cat
+            """);
+
+            NodeSerializer<NamedValue> nullingCodec = NodeSerializers.STRING.xmap(
+                    value -> null,
+                    NamedValue::value
+            );
+            InvalidNodeException nullFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(nullingCodec, "value")
+            );
+            assertEquals(Route.from("value"), nullFailure.path());
+            assertEquals(String.class, nullFailure.actualType());
+            assertEquals(Object.class, nullFailure.targetType());
+
+            NodeSerializer<NamedValue> throwingCodec = NodeSerializers.STRING.xmap(
+                    value -> {
+                        throw new IllegalArgumentException("bad value");
+                    },
+                    NamedValue::value
+            );
+            InvalidNodeException throwingFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(throwingCodec, "value")
+            );
+            assertEquals(Route.from("value"), throwingFailure.path());
+            assertEquals(String.class, throwingFailure.actualType());
+            assertEquals(Object.class, throwingFailure.targetType());
+            assertInstanceOf(IllegalArgumentException.class, throwingFailure.getCause());
+        }
+
+        @Test
+        void should_DecodeScalarListAndMap_When_UsingObjectSerializer() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            scalar: value
+            sequence:
+              - alpha
+              - 2
+            mapping:
+              name: cat
+              nested:
+                enabled: true
+            """);
+
+            assertEquals("value", yamlDocument.get(NodeSerializers.OBJECT, "scalar"));
+            assertEquals(List.of("alpha", 2), yamlDocument.get(NodeSerializers.OBJECT, "sequence"));
+
+            @SuppressWarnings("unchecked")
+            Map<Object, Object> mapping = (Map<Object, Object>) yamlDocument.get(NodeSerializers.OBJECT, "mapping");
+            assertEquals("cat", mapping.get("name"));
+            assertEquals(Map.of("enabled", true), mapping.get("nested"));
+        }
+
+        @Test
+        void should_RejectCollectionNodes_When_UsingScalarSerializer() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            mapping:
+              key: value
+            sequence:
+              - value
+            """);
+
+            InvalidNodeException mappingFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.SCALAR, "mapping")
+            );
+            assertEquals(Route.from("mapping"), mappingFailure.path());
+            assertEquals(SectionNode.class, mappingFailure.actualType());
+            assertEquals(Object.class, mappingFailure.targetType());
+
+            InvalidNodeException sequenceFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.SCALAR, "sequence")
+            );
+            assertEquals(Route.from("sequence"), sequenceFailure.path());
+            assertEquals(SequenceNode.class, sequenceFailure.actualType());
+            assertEquals(Object.class, sequenceFailure.targetType());
+        }
+
+        @Test
+        void should_ThrowMissingException_When_GetPathIsMissing_AndUseDefaultOnlyForMissingPath() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: 5
+            """);
+
+            MissingNodeException missing = assertThrows(
+                    MissingNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.INT, "missing")
+            );
+            assertEquals("missing", missing.key());
+            assertEquals(Route.from("missing"), missing.path());
+            assertEquals(Integer.class, missing.targetType());
+
+            MissingNodeException classMissing = assertThrows(
+                    MissingNodeException.class,
+                    () -> yamlDocument.get(Integer.class, "missing-class")
+            );
+            assertEquals("missing-class", classMissing.key());
+            assertEquals(Route.from("missing-class"), classMissing.path());
+            assertEquals(Integer.class, classMissing.targetType());
+
+            TypeRef<List<String>> listType = new TypeRef<>() {};
+            MissingNodeException typeRefMissing = assertThrows(
+                    MissingNodeException.class,
+                    () -> yamlDocument.get(listType, "missing-list")
+            );
+            assertEquals("missing-list", typeRefMissing.key());
+            assertEquals(Route.from("missing-list"), typeRefMissing.path());
+            assertEquals(List.class, typeRefMissing.targetType());
+
+            assertEquals(42, yamlDocument.getOrDefault(NodeSerializers.INT, 42, "missing"));
+            assertEquals(5, yamlDocument.getOrDefault(NodeSerializers.INT, 42, "value"));
+        }
+
+        @Test
+        void should_KeepInvalidException_When_GetOrDefaultReadsInvalidExistingValue() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: nope
+            """);
+
+            InvalidNodeException failure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.getOrDefault(NodeSerializers.INT, 42, "value")
+            );
+            assertEquals(Route.from("value"), failure.path());
+            assertEquals(String.class, failure.actualType());
+            assertEquals(Integer.class, failure.targetType());
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void should_DecodeRecursiveStructure_When_UsingNodeSerializersLazy() throws IOException {
+            record Tree(String name, List<Tree> children) {}
+
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Tree>[] ref = new NodeSerializer[1];
+            ref[0] = NodeSerializers.mapping(Tree.class)
+                    .group(
+                            NodeSerializers.STRING.fieldOf("name").forGetter(Tree::name),
+                            NodeSerializers.lazy(() -> ref[0]).listOf().fieldOf("children").defaulted(List.of()).forGetter(Tree::children)
+                    )
+                    .apply(Tree::new);
+
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            root:
+              name: parent
+              children:
+                - name: child
+            """);
+
+            Tree root = yamlDocument.get(ref[0], "root");
+
+            assertEquals("parent", root.name());
+            assertEquals(List.of(new Tree("child", List.of())), root.children());
+        }
+
+        @Test
+        void should_DecodeScalarValueObject_When_UsingStringBacked() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<NamedValue> namedValueCodec = NodeSerializers.stringBacked(
+                    value -> value.startsWith("name:") ? new NamedValue(value.substring(5)) : null,
+                    value -> "name:" + value.value()
+            );
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: "name:cat"
+            invalid: "cat"
+            """);
+
+            assertEquals(new NamedValue("cat"), yamlDocument.get(namedValueCodec, "value"));
+            InvalidNodeException invalid = assertThrows(InvalidNodeException.class, () -> yamlDocument.get(namedValueCodec, "invalid"));
+            assertEquals(Route.from("invalid"), invalid.path());
+            assertEquals(String.class, invalid.actualType());
+            assertEquals(Object.class, invalid.targetType());
+
+            yamlDocument.setAndGet(namedValueCodec, new NamedValue("dog"), "encoded");
+            assertEquals("name:dog", yamlDocument.get(NodeSerializers.STRING, "encoded"));
+        }
+
+        @Test
+        void should_ThrowInvalidException_When_BuiltInSerializerCannotParseValue() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            number: nope
+            bool: maybe
+            uuid: definitely-not-a-uuid
+            section:
+              nested: true
+            """);
+
+            InvalidNodeException numberFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.INT, "number")
+            );
+            assertEquals(Route.from("number"), numberFailure.path());
+            assertEquals(String.class, numberFailure.actualType());
+            assertEquals(Integer.class, numberFailure.targetType());
+
+            InvalidNodeException typeFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.STRING, "section")
+            );
+            assertEquals(Route.from("section"), typeFailure.path());
+            assertEquals(SectionNode.class, typeFailure.actualType());
+            assertEquals(String.class, typeFailure.targetType());
+
+            InvalidNodeException boolFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.BOOLEAN, "bool")
+            );
+            assertEquals(Route.from("bool"), boolFailure.path());
+            assertEquals(String.class, boolFailure.actualType());
+            assertEquals(Boolean.class, boolFailure.targetType());
+
+            InvalidNodeException uuidFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.UUID, "uuid")
+            );
+            assertEquals(Route.from("uuid"), uuidFailure.path());
+            assertEquals(String.class, uuidFailure.actualType());
+            assertEquals(UUID.class, uuidFailure.targetType());
+        }
+
+        @Test
+        void should_ThrowInvalidException_When_EnumSerializerCannotParseValue() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Mode> modeCodec = NodeSerializers.enumCodec(Mode.class);
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            mode: medium
+            section:
+              nested: true
+            """);
+
+            InvalidNodeException valueFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(modeCodec, "mode")
+            );
+            assertEquals(Route.from("mode"), valueFailure.path());
+            assertEquals(String.class, valueFailure.actualType());
+            assertEquals(Mode.class, valueFailure.targetType());
+            assertEquals("Invalid YAML value at path \"mode\": actual String, expected Mode", valueFailure.getMessage());
+
+            InvalidNodeException typeFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(modeCodec, "section")
+            );
+            assertEquals(Route.from("section"), typeFailure.path());
+            assertEquals(SectionNode.class, typeFailure.actualType());
+            assertEquals(Mode.class, typeFailure.targetType());
+            assertEquals("Invalid YAML value at path \"section\": actual Map, expected Mode", typeFailure.getMessage());
         }
 
         @Test

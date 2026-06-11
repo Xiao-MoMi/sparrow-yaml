@@ -1,5 +1,6 @@
 package net.momirealms.sparrow.yaml.serializer.auto.factory;
 
+import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
@@ -53,7 +54,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
         }
         // 如果正在解析的和之前解析出现相同, 代表出现递归结构, 返回Lazy实现
         if (context.isResolving(resolvedType)) {
-            return NodeSerializer.lazy(() -> context.getRegistry().get(resolvedType));
+            return NodeSerializers.lazy(() -> context.getRegistry().get(resolvedType));
         }
         // 标记为正在解析, 然后获取
         context.pushResolving(resolvedType);
@@ -61,13 +62,13 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
         Class<T> rawType = (Class<T>) TypeUtils.rawType(resolvedType); // 获取原始类型
         // 接口/抽象类/数组在未手动注册序列化器时无法自动实例化
         if (rawType.isInterface()) {
-            throw new AutoSerializerException("No serializer registered for interface " + rawType.getName() + "; register one manually before auto-serializing a class that uses it as a field type");
+            throw new AutoSerializerException("No serializer registered for interface " + rawType.getName() + "; register a composed serializer before auto-serializing a class that uses it as a field type");
         }
         if (Modifier.isAbstract(rawType.getModifiers()) && !rawType.isEnum()) {
-            throw new AutoSerializerException("No serializer registered for abstract class " + rawType.getName() + "; register one manually before auto-serializing a class that uses it as a field type");
+            throw new AutoSerializerException("No serializer registered for abstract class " + rawType.getName() + "; register a composed serializer before auto-serializing a class that uses it as a field type");
         }
         if (rawType.isArray()) {
-            throw new AutoSerializerException("No serializer registered for array type " + rawType.getName() + "; register one manually before auto-serializing a class that uses it as a field type");
+            throw new AutoSerializerException("No serializer registered for array type " + rawType.getName() + "; register a composed serializer before auto-serializing a class that uses it as a field type");
         }
         Map<TypeVariable<?>, Type> variables = TypeUtils.typeVariables(rawType, resolvedType); // 类型变量到实际类型的映射
         // 根据原始类型进行不同的构造
@@ -268,9 +269,9 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
         SerializableMember[] encodableArr = encodables.toArray(new SerializableMember[0]);
         int mapCapacity = Math.max((int) (encodableArr.length / 0.75f) + 1, 16);
 
-        return new NodeSerializer<>() {
-            @Override
-            public T deserialize(YamlNode<?> node) {
+        return NodeSerializer.createInternal(
+            rawType,
+            node -> {
                 if (!(node instanceof SectionNode sectionNode)) {
                     return null;
                 }
@@ -288,10 +289,8 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
                 }
 
                 return instance;
-            }
-
-            @Override
-            public Object serialize(T value) {
+            },
+            value -> {
                 if (value == null) {
                     return null;
                 }
@@ -301,7 +300,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
                 }
                 return map;
             }
-        };
+        );
     }
     
     /**

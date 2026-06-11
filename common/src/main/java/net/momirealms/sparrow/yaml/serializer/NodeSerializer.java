@@ -1,151 +1,287 @@
 package net.momirealms.sparrow.yaml.serializer;
 
+import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
+import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-public interface NodeSerializer<T> extends NodeDecoder<T>, NodeEncoder<T> {
+/**
+ * 不透明的 YAML 节点序列化器.
+ *
+ * <p>调用方只能通过 {@link NodeSerializers} 和本类提供的组合方法创建实例, 不能自行实现该类型.</p>
+ *
+ * @param <T> 目标 Java 类型
+ */
+public final class NodeSerializer<T> {
 
-    /**
-     * 将当前 NodeSerializer&lt;T&gt; 转换为一个新的 NodeSerializer&lt;R&gt;.
-     *
-     * @param to   从 T 转换为 R 的函数 (在 decode 解码阶段使用)
-     * @param from 从 R 转换为 T 的函数 (在 encode 编码阶段使用)
-     * @param <R>  新的目标 Java 类型
-     * @return 新的 NodeSerializer&lt;R&gt;
-     */
-    default <R> NodeSerializer<R> xmap(Function<T, R> to, Function<R, T> from) {
-        return new NodeSerializer<R>() {
-            @Override
-            public R deserialize(@Nullable YamlNode<?> node) {
-                T decoded = NodeSerializer.this.deserialize(node);
-                if (decoded == null) return null;
-                try {
-                    return to.apply(decoded);
-                } catch (Exception e) {
-                    return null; // 映射失败时不抛异常, 返回 null 代表解析失败
-                }
-            }
+    private final Decoder<T> decoder;
+    private final Encoder<T> encoder;
+    private final Class<?> targetType; // 当前 serializer 期望解码出的 Java 类型
 
-            @Override
-            public Object serialize(@Nullable R value) {
-                if (value == null) return null;
-                try {
-                    return NodeSerializer.this.serialize(from.apply(value));
-                } catch (Exception e) {
-                    return null; // 编码失败时不抛异常, 返回 null
-                }
-            }
-        };
+    private NodeSerializer(Class<?> targetType, Decoder<T> decoder, Encoder<T> encoder) {
+        this.targetType = Objects.requireNonNull(targetType, "targetType");
+        this.decoder = Objects.requireNonNull(decoder, "decoder");
+        this.encoder = Objects.requireNonNull(encoder, "encoder");
+    }
+
+    @ApiStatus.Internal
+    public static <T> NodeSerializer<T> createInternal(Class<?> targetType, Decoder<T> decoder, Encoder<T> encoder) {
+        return new NodeSerializer<>(targetType, decoder, encoder);
     }
 
     /**
-     * 将当前处理单个元素的 NodeSerializer&lt;T&gt; 转化为处理列表的 NodeSerializer&lt;List&lt;T&gt;&gt;.
+     * 将 YAML 节点解码为目标 Java 值.
      *
-     * @return 列表的编解码器
+     * <p>缺失或空值通常抛出解析异常.</p>
      */
-    @Override
-    default NodeSerializer<List<T>> listOf() {
-        return new NodeSerializer<List<T>>() {
-            @Override
-            public List<T> deserialize(@Nullable YamlNode<?> node) {
-                if (!(node instanceof SequenceNode seq)) return null;
-                List<YamlNode<?>> nodeList = seq.value();
-                if (nodeList == null) return null;
-
-                List<T> result = new ArrayList<>(nodeList.size());
-                for (YamlNode<?> elementNode : nodeList) {
-                    T decoded = NodeSerializer.this.deserialize(elementNode);
-                    if (decoded == null) return null; // 列表中有元素解析失败, 视为整个列表解析失败
-                    result.add(decoded);
-                }
-                return result;
-            }
-
-            @Override
-            public Object serialize(@Nullable List<T> value) {
-                if (value == null) return null;
-                List<Object> result = new ArrayList<>(value.size());
-                for (T element : value) {
-                    result.add(NodeSerializer.this.serialize(element));
-                }
-                return result;
-            }
-        };
+    public T deserialize(@Nullable YamlNode<?> node) {
+        return decoder.deserialize(node);
     }
 
     /**
-     * 将当前处理单个元素的 NodeSerializer&lt;T&gt; 转化为处理Map的 NodeSerializer&lt;Map&lt;String, T&gt;&gt;.
-     *
-     * @return Map的编解码器
+     * 将 Java 值编码为可写入 YAML 节点的基础对象.
      */
-    @Override
-    default NodeSerializer<Map<String, T>> mapOf() {
-        return new NodeSerializer<>() {
-            @Override
-            public Map<String, T> deserialize(@Nullable YamlNode<?> node) {
-                if (!(node instanceof SectionNode section)) return null;
-                Map<Object, YamlNode<?>> nodeMap = section.value();
-                if (nodeMap == null) return null;
-
-                Map<String, T> result = new LinkedHashMap<>(Math.max((int) (nodeMap.size() / 0.75f) + 1, 16));
-                for (Map.Entry<Object, YamlNode<?>> entry : nodeMap.entrySet()) {
-                    String key = String.valueOf(entry.getKey());
-                    T decoded = NodeSerializer.this.deserialize(entry.getValue());
-                    if (decoded == null) return null; // Map中有元素解析失败, 视为整个Map解析失败
-                    result.put(key, decoded);
-                }
-                return result;
-            }
-
-            @Override
-            public Object serialize(@Nullable Map<String, T> value) {
-                if (value == null) return null;
-                Map<String, Object> result = new LinkedHashMap<>(Math.max((int) (value.size() / 0.75f) + 1, 16));
-                for (Map.Entry<String, T> entry : value.entrySet()) {
-                    result.put(entry.getKey(), NodeSerializer.this.serialize(entry.getValue()));
-                }
-                return result;
-            }
-        };
+    public Object serialize(@Nullable T value) {
+        return encoder.serialize(value);
     }
 
     /**
-     * 延迟解析, 用于解决递归数据结构的解析.
-     * 当数据结构内部包含自身时(如 Node 包含 Node), 使用 lazy 可以在真正调用 encode/decode 时再去初始化并获取真实的序列化器.
-     *
-     * @param supplier 提供实际序列化器的工厂函数
-     * @param <T>      目标 Java 类型
-     * @return 延迟计算的编解码器代理
+     * 返回当前 serializer 期望解码出的 Java 类型.
+     */
+    public Class<?> targetType() {
+        return targetType;
+    }
+
+    /**
+     * 将当前 serializer 双向映射到另一个值类型.
+     */
+    public <R> NodeSerializer<R> xmap(Function<? super T, ? extends R> to, Function<? super R, ? extends T> from) {
+        Objects.requireNonNull(to, "to");
+        Objects.requireNonNull(from, "from");
+        return createInternal(
+                Object.class,
+                node -> {
+                    T decoded = NodeSerializer.this.deserialize(node);
+                    if (decoded == null) {
+                        return null;
+                    }
+                    try {
+                        R result = to.apply(decoded);
+                        if (result == null) {
+                            throw new InvalidNodeException(node, Object.class);
+                        }
+                        return result;
+                    } catch (MissingNodeException | InvalidNodeException e) {
+                        throw e;
+                    } catch (Exception e) {
+                        throw new InvalidNodeException(node, Object.class, e);
+                    }
+                },
+                value -> {
+                    if (value == null) {
+                        return null;
+                    }
+                    try {
+                        return NodeSerializer.this.serialize(from.apply(value));
+                    } catch (Exception e) {
+                        return null;
+                    }
+                }
+        );
+    }
+
+    /**
+     * 将当前 serializer 组合为 List serializer.
+     */
+    public NodeSerializer<List<T>> listOf() {
+        return createInternal(
+                List.class,
+                node -> {
+                    if (!(node instanceof SequenceNode seq)) {
+                        throw new InvalidNodeException(node, List.class);
+                    }
+                    List<YamlNode<?>> nodeList = seq.value();
+                    if (nodeList == null) {
+                        return null;
+                    }
+
+                    List<T> result = new ArrayList<>(nodeList.size());
+                    for (YamlNode<?> elementNode : nodeList) {
+                        T decoded = NodeSerializer.this.deserialize(elementNode);
+                        if (decoded == null) {
+                            return null;
+                        }
+                        result.add(decoded);
+                    }
+                    return result;
+                },
+                value -> {
+                    if (value == null) {
+                        return null;
+                    }
+                    List<Object> result = new ArrayList<>(value.size());
+                    for (T element : value) {
+                        result.add(NodeSerializer.this.serialize(element));
+                    }
+                    return result;
+                }
+        );
+    }
+
+    /**
+     * 将当前 serializer 组合为 Set serializer, 解码时保留 YAML 序列的遍历顺序.
+     */
+    public NodeSerializer<Set<T>> setOf() {
+        return createInternal(
+                Set.class,
+                node -> {
+                    if (!(node instanceof SequenceNode seq)) {
+                        throw new InvalidNodeException(node, Set.class);
+                    }
+                    List<YamlNode<?>> nodeList = seq.value();
+                    if (nodeList == null) {
+                        return null;
+                    }
+
+                    Set<T> result = new LinkedHashSet<>();
+                    for (YamlNode<?> elementNode : nodeList) {
+                        T decoded = NodeSerializer.this.deserialize(elementNode);
+                        if (decoded == null) {
+                            return null;
+                        }
+                        result.add(decoded);
+                    }
+                    return result;
+                },
+                value -> {
+                    if (value == null) {
+                        return null;
+                    }
+                    List<Object> result = new ArrayList<>(value.size());
+                    for (T element : value) {
+                        result.add(NodeSerializer.this.serialize(element));
+                    }
+                    return result;
+                }
+        );
+    }
+
+    /**
+     * 将当前 serializer 组合为 Map<String, T> serializer.
+     */
+    public NodeSerializer<Map<String, T>> mapOf() {
+        return createInternal(
+                Map.class,
+                node -> {
+                    if (!(node instanceof SectionNode section)) {
+                        throw new InvalidNodeException(node, Map.class);
+                    }
+                    Map<Object, YamlNode<?>> nodeMap = section.value();
+                    if (nodeMap == null) {
+                        return null;
+                    }
+
+                    Map<String, T> result = new LinkedHashMap<>(Math.max((int) (nodeMap.size() / 0.75f) + 1, 16));
+                    for (Map.Entry<Object, YamlNode<?>> entry : nodeMap.entrySet()) {
+                        T decoded = NodeSerializer.this.deserialize(entry.getValue());
+                        if (decoded == null) {
+                            return null;
+                        }
+                        result.put(String.valueOf(entry.getKey()), decoded);
+                    }
+                    return result;
+                },
+                value -> {
+                    if (value == null) {
+                        return null;
+                    }
+                    Map<String, Object> result = new LinkedHashMap<>(Math.max((int) (value.size() / 0.75f) + 1, 16));
+                    for (Map.Entry<String, T> entry : value.entrySet()) {
+                        result.put(entry.getKey(), NodeSerializer.this.serialize(entry.getValue()));
+                    }
+                    return result;
+                }
+        );
+    }
+
+    /**
+     * 将当前 serializer 声明为 mapping builder 中的字段.
+     */
+    public NodeSerializers.Field<T> fieldOf(String name) {
+        return new NodeSerializers.Field<>(name, this, false, null, false, null);
+    }
+
+    /**
+     * 将当前 serializer 声明为 sequence builder 中的元素.
+     */
+    public NodeSerializers.Element<T> element(int index) {
+        return new NodeSerializers.Element<>(index, this, false, null, false, null);
+    }
+
+    /**
+     * 延迟获取实际 serializer, 用于递归结构.
      */
     static <T> NodeSerializer<T> lazy(Supplier<NodeSerializer<T>> supplier) {
-        return new NodeSerializer<T>() {
-            private NodeSerializer<T> delegate;
+        Objects.requireNonNull(supplier, "supplier");
+        return createInternal(
+                Object.class,
+                new Decoder<>() {
+                    private NodeSerializer<T> delegate;
 
-            private NodeSerializer<T> delegate() {
-                if (delegate == null) {
-                    delegate = supplier.get();
+                    @Override
+                    public T deserialize(@Nullable YamlNode<?> node) {
+                        return delegate().deserialize(node);
+                    }
+
+                    private NodeSerializer<T> delegate() {
+                        if (delegate == null) {
+                            delegate = supplier.get();
+                        }
+                        return delegate;
+                    }
+                },
+                new Encoder<>() {
+                    private NodeSerializer<T> delegate;
+
+                    @Override
+                    public Object serialize(@Nullable T value) {
+                        return delegate().serialize(value);
+                    }
+
+                    private NodeSerializer<T> delegate() {
+                        if (delegate == null) {
+                            delegate = supplier.get();
+                        }
+                        return delegate;
+                    }
                 }
-                return delegate;
-            }
+        );
+    }
 
-            @Override
-            public T deserialize(@Nullable YamlNode<?> node) {
-                return delegate().deserialize(node);
-            }
+    @FunctionalInterface
+    @ApiStatus.Internal
+    public interface Decoder<T> {
+        @Nullable
+        T deserialize(@Nullable YamlNode<?> node);
+    }
 
-            @Override
-            public Object serialize(@Nullable T value) {
-                return delegate().serialize(value);
-            }
-        };
+    @FunctionalInterface
+    @ApiStatus.Internal
+    public interface Encoder<T> {
+        @Nullable
+        Object serialize(@Nullable T value);
     }
 }

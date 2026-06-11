@@ -1,16 +1,14 @@
 package net.momirealms.sparrow.yaml.serializer.auto.resolver;
 
 import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
-import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerContext;
 import net.momirealms.sparrow.yaml.serializer.auto.factory.AutoSerializerFactory;
 import net.momirealms.sparrow.yaml.util.TypeUtils;
 
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -31,7 +29,7 @@ public class ReflectionTypeSerializerResolver implements TypeSerializerResolver 
             return registered;
         }
         if (context.isResolving(normalized)) {
-            return NodeSerializer.lazy(() -> context.getRegistry().get(normalized));
+            return NodeSerializers.lazy(() -> context.getRegistry().get(normalized));
         }
 
         Class<?> rawType = TypeUtils.rawType(normalized);
@@ -47,26 +45,7 @@ public class ReflectionTypeSerializerResolver implements TypeSerializerResolver 
         }
         if (rawType == Set.class) {
             Type elementType = TypeUtils.parameter(normalized, 0);
-            NodeSerializer<?> elementSerializer = resolve(elementType, context);
-            return new NodeSerializer<>() {
-                @Override
-                public Object deserialize(YamlNode<?> node) {
-                    List<?> list = (List<?>) elementSerializer.listOf().deserialize(node);
-                    if (list == null) return null;
-                    return new LinkedHashSet<>(list);
-                }
-
-                @Override
-                public Object serialize(Object value) {
-                    if (value == null) return null;
-                    Set<?> set = (Set<?>) value;
-                    List<Object> result = new ArrayList<>(set.size());
-                    for (Object element : set) {
-                        result.add(((NodeSerializer) elementSerializer).serialize(element));
-                    }
-                    return result;
-                }
-            };
+            return ((NodeSerializer) resolve(elementType, context)).setOf();
         }
         if (rawType == Map.class) {
             Type keyType = TypeUtils.parameter(normalized, 0);
@@ -78,13 +57,13 @@ public class ReflectionTypeSerializerResolver implements TypeSerializerResolver 
         }
 
         if (rawType.isArray()) {
-            throw new AutoSerializerException("No serializer registered for array type " + rawType.getName() + "; register one manually via SerializerRegistry before using it as a field type");
+            throw new AutoSerializerException("No serializer registered for array type " + rawType.getName() + "; register a composed serializer via SerializerRegistry before using it as a field type");
         }
         if (rawType.isInterface()) {
-            throw new AutoSerializerException("No serializer registered for interface " + rawType.getName() + "; register one manually via SerializerRegistry before using it as a field type");
+            throw new AutoSerializerException("No serializer registered for interface " + rawType.getName() + "; register a composed serializer via SerializerRegistry before using it as a field type");
         }
-        if (java.lang.reflect.Modifier.isAbstract(rawType.getModifiers()) && !rawType.isEnum()) {
-            throw new AutoSerializerException("No serializer registered for abstract class " + rawType.getName() + "; register one manually via SerializerRegistry before using it as a field type");
+        if (Modifier.isAbstract(rawType.getModifiers())) {
+            throw new AutoSerializerException("No serializer registered for abstract class " + rawType.getName() + "; register a composed serializer via SerializerRegistry before using it as a field type");
         }
 
         return factory.createInternal(normalized, context, null);

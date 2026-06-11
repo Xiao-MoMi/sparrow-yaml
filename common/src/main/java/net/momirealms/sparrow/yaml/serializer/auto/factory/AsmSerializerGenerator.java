@@ -44,6 +44,8 @@ final class AsmSerializerGenerator {
     private static final AtomicLong ID = new AtomicLong();
     private static final String GENERATED_PREFIX = "net/momirealms/sparrow/yaml/serializer/auto/factory/BridgeSerializer_";
     private static final String SER = "net/momirealms/sparrow/yaml/serializer/NodeSerializer";
+    private static final String DEC = "net/momirealms/sparrow/yaml/serializer/NodeSerializer$Decoder";
+    private static final String ENC = "net/momirealms/sparrow/yaml/serializer/NodeSerializer$Encoder";
     private static final String FA = "net/momirealms/sparrow/yaml/serializer/auto/accessor/FieldAccessor";
     private static final String INST = "net/momirealms/sparrow/yaml/serializer/auto/factory/ObjectInstantiator";
     private static final String YN = "net/momirealms/sparrow/yaml/node/YamlNode";
@@ -64,7 +66,7 @@ final class AsmSerializerGenerator {
         String instantiatorDesc = "L" + INST + ";";
 
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-        writer.visit(V17, ACC_PUBLIC | ACC_FINAL, generatedName, null, "java/lang/Object", new String[]{SER});
+        writer.visit(V17, ACC_PUBLIC | ACC_FINAL, generatedName, null, "java/lang/Object", new String[]{DEC, ENC});
         writer.visitField(ACC_PRIVATE | ACC_FINAL, "sers", serializersDesc, null, null).visitEnd();
         writer.visitField(ACC_PRIVATE | ACC_FINAL, "accessors", accessorsDesc, null, null).visitEnd();
         writer.visitField(ACC_PRIVATE | ACC_FINAL, "instantiator", instantiatorDesc, null, null).visitEnd();
@@ -228,7 +230,7 @@ final class AsmSerializerGenerator {
         method.visitLdcInsn(serializerIndex);
         method.visitInsn(AALOAD);
         method.visitVarInsn(ALOAD, childVar);
-        method.visitMethodInsn(INVOKEINTERFACE, SER, "deserialize", "(L" + YN + ";)Ljava/lang/Object;", true);
+        method.visitMethodInsn(INVOKEVIRTUAL, SER, "deserialize", "(L" + YN + ";)Ljava/lang/Object;", false);
         method.visitVarInsn(ASTORE, decodedVar);
 
         Label nonNull = new Label();
@@ -291,7 +293,7 @@ final class AsmSerializerGenerator {
             method.visitLdcInsn(binding.index);
             method.visitInsn(AALOAD);
             method.visitVarInsn(ALOAD, rawValueVar);
-            method.visitMethodInsn(INVOKEINTERFACE, SER, "serialize", "(Ljava/lang/Object;)Ljava/lang/Object;", true);
+            method.visitMethodInsn(INVOKEVIRTUAL, SER, "serialize", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
 
             method.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "put",
                     "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);

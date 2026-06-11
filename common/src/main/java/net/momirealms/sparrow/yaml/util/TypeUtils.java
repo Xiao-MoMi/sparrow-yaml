@@ -1,6 +1,8 @@
 package net.momirealms.sparrow.yaml.util;
 
 import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
+import net.momirealms.sparrow.yaml.node.SectionNode;
+import net.momirealms.sparrow.yaml.node.SequenceNode;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -125,6 +127,26 @@ public final class TypeUtils {
         if (type == double.class) return 0.0d;
         if (type == char.class) return '\0';
         return null;
+    }
+
+    /**
+     * 获取Java对象的类型名称, 如果存在Node对象则翻译成Map和List.
+     */
+    public static String typeName(@Nullable Class<?> type) {
+        if (type == null) {
+            return "null";
+        }
+        if (type == SectionNode.class) {
+            return "Map";
+        }
+        if (type == SequenceNode.class) {
+            return "List";
+        }
+        if (type.isArray()) {
+            return typeName(type.getComponentType()) + "[]";
+        }
+        String simpleName = type.getSimpleName();
+        return simpleName.isEmpty() ? type.getName() : simpleName;
     }
 
     /**

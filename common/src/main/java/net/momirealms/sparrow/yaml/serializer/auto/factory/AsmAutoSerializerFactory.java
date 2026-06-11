@@ -2,6 +2,7 @@ package net.momirealms.sparrow.yaml.serializer.auto.factory;
 
 import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
+import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerBinding;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerContext;
@@ -69,7 +70,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
             return existing;
         }
         if (ctx.isResolving(resolved)) {
-            return NodeSerializer.lazy(() -> ctx.getRegistry().get(resolved));
+            return NodeSerializers.lazy(() -> ctx.getRegistry().get(resolved));
         }
 
         // 校验目标类型是否支持自动生成
@@ -494,7 +495,12 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
                     generatedClass,
                     MethodType.methodType(void.class, NodeSerializer[].class, FieldAccessor[].class, ObjectInstantiator.class)
             );
-            return (NodeSerializer<T>) constructor.invoke(serializers, accessors, instantiator);
+            Object delegate = constructor.invoke(serializers, accessors, instantiator);
+            return NodeSerializer.createInternal(
+                    rawType,
+                    (NodeSerializer.Decoder<T>) delegate,
+                    (NodeSerializer.Encoder<T>) delegate
+            );
         } catch (Throwable e) {
             throw new AutoSerializerException("Cannot load generated serializer for " + rawType.getName(), e);
         }

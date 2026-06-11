@@ -263,35 +263,24 @@ var registry = yaml.serializers();
 
 ### 自定义序列化器
 
-当类型不能直接由内置规则转换时，实现 `NodeSerializer<T>`：
+当类型不能直接由内置规则转换时，通过 `NodeSerializers` 组合出 `NodeSerializer<T>`。
+它的定位接近 DataFixerUpper 的 `Codec<T>`：调用方不实现底层读写接口，而是从基础 serializer 出发，用
+`xmap`、`listOf`、`mapOf`、`fieldOf`、`element`、`group(...).apply(...)` 逐层拼装出目标类型。
+公开创建入口集中在 `NodeSerializers`；`NodeSerializer` 是不可继承的组合结果，不需要也不应该直接实现或调用底层读写工厂。
 
 ```java
-import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 
-import java.util.List;
-
 record BlockPos(int x, int y, int z) {}
 
-NodeSerializer<BlockPos> blockPosSerializer = new NodeSerializer<>() {
-    @Override
-    public BlockPos deserialize(YamlNode<?> node) {
-        List<Integer> values = NodeSerializers.INT.listOf().deserialize(node);
-        if (values == null || values.size() != 3) {
-            return null;
-        }
-        return new BlockPos(values.get(0), values.get(1), values.get(2));
-    }
-
-    @Override
-    public Object serialize(BlockPos value) {
-        if (value == null) {
-            return null;
-        }
-        return List.of(value.x(), value.y(), value.z());
-    }
-};
+NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.mapping(BlockPos.class)
+        .group(
+                NodeSerializers.INT.fieldOf("x").forGetter(BlockPos::x),
+                NodeSerializers.INT.fieldOf("y").forGetter(BlockPos::y),
+                NodeSerializers.INT.fieldOf("z").forGetter(BlockPos::z)
+        )
+        .apply(BlockPos::new);
 
 yaml.serializers().register(BlockPos.class, blockPosSerializer);
 
@@ -299,7 +288,30 @@ BlockPos spawn = document.get(BlockPos.class, "spawn");
 document.setAndGet(BlockPos.class, new BlockPos(0, 64, 0), "spawn");
 ```
 
-如果一个类型可以通过已有类型转换，可以用 `xmap` 简化：
+`mapping(type)` 用于 YAML 对象：
+
+- 每个 `fieldOf(name)` 声明一个字段。
+- `forGetter(...)` 只负责编码时从对象取值。
+- `apply(...)` 是解码时的构造函数或工厂方法。
+- 必填字段缺失会抛出 `MissingNodeException`；字段存在但类型错误会抛出 `InvalidNodeException`。
+- 构造函数抛普通异常或返回 `null` 时，整体解码结果仍为 `null`。
+
+如果希望把对象写成 YAML 序列，可以使用 `sequence(type)`：
+
+```java
+NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.sequence(BlockPos.class)
+        .group(
+                NodeSerializers.INT.element(0).forGetter(BlockPos::x),
+                NodeSerializers.INT.element(1).forGetter(BlockPos::y),
+                NodeSerializers.INT.element(2).forGetter(BlockPos::z)
+        )
+        .apply(BlockPos::new);
+```
+
+`sequence(type)` 与 `mapping(type)` 的结构相同，只是用 `element(index)` 按下标读写。编码时会按最大下标创建
+list，因此 `element(2)` 会写入第三个元素。
+
+如果一个类型可以通过已有类型转换，可以用 `xmap`：
 
 ```java
 NodeSerializer<BlockPos> serializer = NodeSerializers.INT.listOf().xmap(
@@ -308,14 +320,71 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.INT.listOf().xmap(
 );
 ```
 
+标量值对象可以用 `stringBacked`：
+
+```java
+record NamespacedKey(String value) {}
+
+NodeSerializer<NamespacedKey> keySerializer = NodeSerializers.stringBacked(
+        NamespacedKey::new,
+        NamespacedKey::value
+);
+```
+
+字段和元素默认是必填。可以用 `defaulted(value)` 处理缺失值，也可以用 `optional()` 让缺失值解成 `null`：
+
+```java
+NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
+        .group(
+                NodeSerializers.INT.fieldOf("x").forGetter(BlockPos::x),
+                NodeSerializers.INT.fieldOf("y").defaulted(64).forGetter(BlockPos::y),
+                NodeSerializers.INT.fieldOf("z").forGetter(BlockPos::z)
+        )
+        .apply(BlockPos::new);
+```
+
+`defaulted(value)` 和 `optional()` 只处理缺失字段或缺失元素；如果 YAML 中存在该值但类型错误，仍然按失败处理。
+需要兜底错误值时使用 `onFail(...)`：
+
+```java
+import net.momirealms.sparrow.yaml.exception.MissingNodeException;
+
+NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
+        .group(
+                NodeSerializers.INT.fieldOf("x").onFail(failure -> 0).forGetter(BlockPos::x),
+                NodeSerializers.INT.fieldOf("y").defaulted(64).forGetter(BlockPos::y),
+                NodeSerializers.INT.fieldOf("z").onFail(failure -> {
+                    if (failure instanceof MissingNodeException) {
+                        return 0;
+                    }
+                    return 1;
+                }).forGetter(BlockPos::z)
+        )
+        .apply(BlockPos::new);
+```
+
+`onFail(...)` 接收 `MissingNodeException` 或 `InvalidNodeException`：
+
+- 字段或元素不存在时是 `MissingNodeException`，异常会携带缺失 key、完整路径和目标 Java 类型。
+- 字段或元素存在但基础 serializer 解码失败时是 `InvalidNodeException`，异常会携带当前路径、当前值类型和目标 Java 类型。
+- 基础类型 serializer 遇到非空解析错误时会直接抛出 `InvalidNodeException`，不再用 `null` 表达错误值。
+- `listOf()`、`setOf()`、`mapOf()` 遇到错误根节点形态时也会抛出 `InvalidNodeException`。
+- `xmap(...)` 的解码映射函数抛普通异常或返回 `null` 时会抛出 `InvalidNodeException`。
+- 如果某个组合 serializer 自己抛出 `MissingNodeException` 或 `InvalidNodeException`，builder 会把这个异常直接交给 `onFail(...)`，不会再包一层。
+- `onFail(...)` 自己抛异常时，整体解码结果仍然是 `null`。
+
 常用组合方法：
 
-- `NodeDecoder#map(to)`：只处理解码方向。
-- `NodeEncoder#contraMap(from)`：只处理编码方向。
 - `NodeSerializer#xmap(to, from)`：双向映射成新类型。
+- `NodeSerializers.OBJECT`：递归读取任意 YAML 值，返回 Java 标量、`List<Object>` 或 `Map<Object, Object>`。
+- `NodeSerializers.SCALAR`：只读取 YAML scalar 节点。
 - `listOf()`：处理 `List<T>`。
+- `setOf()`：处理 `Set<T>`，解码时保持 YAML 序列顺序。
 - `mapOf()`：处理 `Map<String, T>`。
-- `NodeSerializer.lazy(...)`：处理递归类型。
+- `fieldOf(name)` / `element(index)`：声明 mapping/sequence 的字段或元素，可接 `defaulted(value)`、`optional()` 或 `onFail(...)`。
+- `NodeSerializers.mapping(type)` / `NodeSerializers.sequence(type)`：通过 `group(...).apply(...)` 组合对象。
+- `NodeSerializers.stringBacked(read, write)`：处理字符串承载的值对象。
+- `NodeSerializers.lazy(...)`：处理递归类型。
 
 ### 自动创建序列化器
 项目支持自动注册序列化器，原理大致为解析类文件，并尝试使用最小的序列化器进行超级拼装。例如一个 BlockPos 类包含3个int字段，那么SparrowYaml将会自动识别到并自动生成序列化器。
@@ -501,7 +570,8 @@ YamlMapper<ImmutableConfig> mapper = factory.create(
 - YAML 根节点必须是 mapping。
 - 暂不支持多文档 YAML。
 - `Route.from(...)` 不能创建空路由；需要空路由时使用 `Route.empty()`。
-- `getOrDefault(...)` 只在目标节点缺失时返回默认值；节点存在但序列化器解析失败时会返回解析结果，也就是通常为 `null`。
+- `get(...)` 在目标路径缺失时会抛出 `MissingNodeException`；节点存在但序列化器解析失败时会抛出对应的 `InvalidNodeException` 或组合 serializer 自己抛出的异常。
+- `getOrDefault(...)` 只在目标路径缺失时返回默认值；节点存在但解析失败时不会吞掉异常。
 - 内置的字符串承载类型，例如 `UUID`、`Locale`、时间类型，会把 `null` 序列化为空字符串，并在读取空字符串时返回 `null`。
 - `ElementComment` / `InlineElementComment` / `AfterElementComment` 当前只是注解定义，运行期 mapper 尚未把它们应用到集合元素。
 

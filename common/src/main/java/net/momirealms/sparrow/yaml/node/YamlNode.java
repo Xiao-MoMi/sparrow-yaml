@@ -2,18 +2,20 @@ package net.momirealms.sparrow.yaml.node;
 
 import net.momirealms.sparrow.yaml.YamlDocument;
 import net.momirealms.sparrow.yaml.route.Route;
-import net.momirealms.sparrow.yaml.serializer.NodeDecoder;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.TypeRef;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.comments.CommentLine;
 import org.snakeyaml.engine.v2.nodes.CollectionNode;
 import org.snakeyaml.engine.v2.nodes.Node;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public interface YamlNode<T> {
 
@@ -64,13 +66,13 @@ public interface YamlNode<T> {
     Route route();
     
     /**
-     * 使用指定的 NodeDecoder 将当前 YamlNode 转换成目标对象。
-     * @param decoder 指定的解码器
+     * 使用指定的 NodeSerializer 将当前 YamlNode 转换成目标对象。
+     * @param serializer 指定的序列化器
      * @return 目标对象
      */
     @Nullable
-    default <R> R get(NodeDecoder<R> decoder) {
-        return decoder.deserialize(this);
+    default <R> R get(NodeSerializer<R> serializer) {
+        return serializer.deserialize(this);
     }
 
     /**
@@ -84,7 +86,7 @@ public interface YamlNode<T> {
         if (serializer != null) {
             return serializer.deserialize(this);
         }
-        return null;
+        throw new UnsupportedOperationException("not found registered serializer for " + clazz);
     }
 
     @Nullable
@@ -93,7 +95,7 @@ public interface YamlNode<T> {
         if (serializer != null) {
             return serializer.deserialize(this);
         }
-        return null;
+        throw new UnsupportedOperationException("not found registered serializer for " + typeRef);
     }
 
     /**
