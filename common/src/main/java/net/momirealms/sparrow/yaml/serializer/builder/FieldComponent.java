@@ -2,40 +2,39 @@ package net.momirealms.sparrow.yaml.serializer.builder;
 
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
+import net.momirealms.sparrow.yaml.node.ScalarNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * mapping builder 的字段组件, 负责单个字段的读写.
+ * 读写 mapping serializer 中的一个命名子节点.
  */
 public final class FieldComponent<T, A> implements NodeSerializerComponent<T, A> {
-    private final String name; // YAML 字段名
-    private final NodeSerializer<A> serializer; // 字段值 serializer
-    private final boolean hasDefault; // 缺失时是否使用固定默认值
-    private final A defaultValue; // 缺失字段的固定默认值
-    private final boolean optional; // 缺失时是否允许 null
-    private final Function<? super RuntimeException, ? extends A> failureHandler; // 兜底函数
-    private final Function<? super T, ? extends A> getter; // 编码时读取目标对象字段值
+    private final String name;
+    private final NodeSerializer<?> serializer;
+    private final NodePresence presence;
+    private final Object defaultValue;
+    private final Function<? super RuntimeException, ? extends A> failureHandler;
+    private final Function<? super T, ? extends A> getter;
 
     FieldComponent(
             String name,
-            NodeSerializer<A> serializer,
-            boolean hasDefault,
-            A defaultValue,
-            boolean optional,
+            NodeSerializer<?> serializer,
+            NodePresence presence,
+            Object defaultValue,
             Function<? super RuntimeException, ? extends A> failureHandler,
             Function<? super T, ? extends A> getter
     ) {
         this.name = name;
         this.serializer = serializer;
-        this.hasDefault = hasDefault;
+        this.presence = presence;
         this.defaultValue = defaultValue;
-        this.optional = optional;
         this.failureHandler = failureHandler;
         this.getter = Objects.requireNonNull(getter, "getter");
     }
@@ -47,17 +46,11 @@ public final class FieldComponent<T, A> implements NodeSerializerComponent<T, A>
         }
 
         YamlNode<?> child = section.getNodeOrNull(name);
-        if (child == null) {
-            if (hasDefault) {
-                return NodeSerializerDecodeResult.success(defaultValue);
-            }
-            if (optional) {
-                return NodeSerializerDecodeResult.success(null);
-            }
-            return fallback(new MissingNodeException(name, node, serializer.targetType()));
+        if (isMissing(child)) {
+            return missing(node);
         }
 
-        A decoded;
+        Object decoded;
         try {
             decoded = serializer.deserialize(child);
         } catch (MissingNodeException | InvalidNodeException e) {
@@ -66,6 +59,9 @@ public final class FieldComponent<T, A> implements NodeSerializerComponent<T, A>
         if (decoded == null) {
             return fallback(new InvalidNodeException(child, serializer.targetType()));
         }
+        if (presence == NodePresence.OPTIONAL_EMPTY) {
+            return NodeSerializerDecodeResult.success(Optional.of(decoded));
+        }
         return NodeSerializerDecodeResult.success(decoded);
     }
 
@@ -73,7 +69,31 @@ public final class FieldComponent<T, A> implements NodeSerializerComponent<T, A>
     public void encode(T source, Object target) {
         @SuppressWarnings("unchecked")
         Map<String, Object> map = (Map<String, Object>) target;
-        map.put(name, serializer.serialize(getter.apply(source)));
+        map.put(name, serializeAccessValue(getter.apply(source)));
+    }
+
+    private NodeSerializerDecodeResult missing(YamlNode<?> node) {
+        return switch (presence) {
+            case OPTIONAL_DEFAULT -> NodeSerializerDecodeResult.success(defaultValue);
+            case OPTIONAL_EMPTY -> NodeSerializerDecodeResult.success(Optional.empty());
+            case REQUIRED -> fallback(new MissingNodeException(name, node, serializer.targetType()));
+        };
+    }
+
+    private boolean isMissing(YamlNode<?> node) {
+        return node == null || node instanceof ScalarNode scalar && scalar.value() == null;
+    }
+
+    private Object serializeAccessValue(Object value) {
+        if (presence == NodePresence.OPTIONAL_EMPTY) {
+            if (!(value instanceof Optional<?> optional) || optional.isEmpty()) {
+                return null;
+            }
+            value = optional.get();
+        }
+        @SuppressWarnings("unchecked")
+        NodeSerializer<Object> valueSerializer = (NodeSerializer<Object>) serializer;
+        return valueSerializer.serialize(value);
     }
 
     private NodeSerializerDecodeResult fallback(RuntimeException failure) {

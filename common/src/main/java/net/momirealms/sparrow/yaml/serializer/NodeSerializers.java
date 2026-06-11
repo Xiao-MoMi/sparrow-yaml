@@ -6,8 +6,8 @@ import net.momirealms.sparrow.yaml.node.ScalarNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import net.momirealms.sparrow.yaml.serializer.builder.AlternativesBuilder;
 import net.momirealms.sparrow.yaml.serializer.builder.MappingBuilder;
-import net.momirealms.sparrow.yaml.serializer.builder.NodeSerializerForms;
 import net.momirealms.sparrow.yaml.serializer.builder.SequenceBuilder;
 
 import java.time.Duration;
@@ -305,10 +305,10 @@ public final class NodeSerializers {
     }
 
     /**
-     * 创建支持多种 YAML 根形态的 forms builder.
+     * 为同一个 Java 类型创建有序多写法 builder.
      */
-    public static <T> NodeSerializerForms.Builder<T> forms(Class<T> type) {
-        return NodeSerializerForms.builder(type);
+    public static <T> AlternativesBuilder<T> alternatives(Class<T> type) {
+        return new AlternativesBuilder<>(type);
     }
 
     private static Object scalarValue(YamlNode<?> node, Class<?> targetType) {

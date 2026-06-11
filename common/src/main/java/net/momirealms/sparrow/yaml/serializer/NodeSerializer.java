@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -85,8 +86,6 @@ public final class NodeSerializer<T> {
      * 将当前 serializer 双向映射到另一个值类型.
      */
     public <R> NodeSerializer<R> xmap(Function<? super T, ? extends R> to, Function<? super R, ? extends T> from) {
-        Objects.requireNonNull(to, "to");
-        Objects.requireNonNull(from, "from");
         return createInternal(
                 Object.class,
                 node -> {
@@ -212,24 +211,51 @@ public final class NodeSerializer<T> {
     }
 
     /**
-     * 将当前 serializer 声明为 mapping builder 中的字段.
+     * 声明必填 mapping 字段.
      */
-    public Field<T> fieldOf(String name) {
-        return new Field<>(name, this, false, null, false, null);
+    public Field<T> required(String name) {
+        return Field.required(name, this);
     }
 
     /**
-     * 将当前 serializer 声明为 sequence builder 中的元素.
+     * 声明缺失或 YAML null 时返回 Optional.empty() 的 mapping 字段.
      */
-    public Element<T> element(int index) {
-        return new Element<>(index, this, false, null, false, null);
+    public Field<Optional<T>> optional(String name) {
+        return Field.optional(name, this);
+    }
+
+    /**
+     * 声明缺失或 YAML null 时使用默认值的 mapping 字段.
+     */
+    public Field<T> optional(String name, T defaultValue) {
+        return Field.optional(name, this, defaultValue);
+    }
+
+    /**
+     * 声明必填 sequence 元素.
+     */
+    public Element<T> required(int index) {
+        return Element.required(index, this);
+    }
+
+    /**
+     * 声明缺失或 YAML null 时返回 Optional.empty() 的 sequence 元素.
+     */
+    public Element<Optional<T>> optional(int index) {
+        return Element.optional(index, this);
+    }
+
+    /**
+     * 声明缺失或 YAML null 时使用默认值的 sequence 元素.
+     */
+    public Element<T> optional(int index, T defaultValue) {
+        return Element.optional(index, this, defaultValue);
     }
 
     /**
      * 延迟获取实际 serializer, 用于递归结构.
      */
     static <T> NodeSerializer<T> lazy(Supplier<NodeSerializer<T>> supplier) {
-        Objects.requireNonNull(supplier, "supplier");
         return createInternal(
                 Object.class,
                 new Decoder<>() {

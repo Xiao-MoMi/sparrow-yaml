@@ -265,9 +265,10 @@ var registry = yaml.serializers();
 
 当类型不能直接由内置规则转换时，通过 `NodeSerializers` 组合出 `NodeSerializer<T>`。
 它的定位接近 DataFixerUpper 的 `Codec<T>`：调用方不实现底层读写接口，而是从基础 serializer 出发，用
-`xmap`、`listOf`、`mapOf`、`fieldOf`、`element`、`group(...).apply(...)`、`forms(...)` 逐层拼装出目标类型。
-公开创建入口集中在 `NodeSerializers`；mapping、sequence、forms 等 builder 类型位于 `serializer.builder` 包，
-但推荐仍从 `NodeSerializers.mapping(...)`、`NodeSerializers.sequence(...)`、`NodeSerializers.forms(...)` 获取。
+`xmap`、`listOf`、`mapOf`、`required`、`optional`、`group(...).apply(...)`、`alternatives(...)`
+逐层拼装出目标类型。
+公开创建入口集中在 `NodeSerializers`；mapping、sequence、alternatives 等 builder 类型位于 `serializer.builder` 包，
+但推荐仍从 `NodeSerializers.mapping(...)`、`NodeSerializers.sequence(...)`、`NodeSerializers.alternatives(...)` 获取。
 `NodeSerializer` 是不可继承的组合结果，不需要也不应该直接实现或调用底层读写工厂。
 
 ```java
@@ -278,9 +279,9 @@ record BlockPos(int x, int y, int z) {}
 
 NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.mapping(BlockPos.class)
         .group(
-                NodeSerializers.INT.fieldOf("x").forGetter(BlockPos::x),
-                NodeSerializers.INT.fieldOf("y").forGetter(BlockPos::y),
-                NodeSerializers.INT.fieldOf("z").forGetter(BlockPos::z)
+                NodeSerializers.INT.required("x").forGetter(BlockPos::x),
+                NodeSerializers.INT.optional("y", 64).forGetter(BlockPos::y),
+                NodeSerializers.INT.required("z").forGetter(BlockPos::z)
         )
         .apply(BlockPos::new);
 
@@ -292,26 +293,29 @@ document.setAndGet(BlockPos.class, new BlockPos(0, 64, 0), "spawn");
 
 `mapping(type)` 用于 YAML 对象：
 
-- 每个 `fieldOf(name)` 声明一个字段。
+- `required(name)` 声明必填字段；字段缺失或 YAML null 会抛出 `MissingNodeException`。
+- `optional(name, value)` 声明带默认值字段；字段缺失或 YAML null 会使用默认值。
+- `optional(name)` 声明可选字段；字段缺失或 YAML null 会解成 `Optional.empty()`。
 - `forGetter(...)` 只负责编码时从对象取值。
 - `apply(...)` 是解码时的构造函数或工厂方法。
-- 必填字段缺失会抛出 `MissingNodeException`；字段存在但类型错误会抛出 `InvalidNodeException`。
-- 构造函数抛普通异常或返回 `null` 时会抛出 `InvalidNodeException`。
+- 字段存在但类型错误会抛出 `InvalidNodeException`；构造函数抛普通异常或返回 `null` 时也会抛出 `InvalidNodeException`。
 
 如果希望把对象写成 YAML 序列，可以使用 `sequence(type)`：
 
 ```java
 NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.sequence(BlockPos.class)
         .group(
-                NodeSerializers.INT.element(0).forGetter(BlockPos::x),
-                NodeSerializers.INT.element(1).forGetter(BlockPos::y),
-                NodeSerializers.INT.element(2).forGetter(BlockPos::z)
+                NodeSerializers.INT.required(0).forGetter(BlockPos::x),
+                NodeSerializers.INT.optional(1, 64).forGetter(BlockPos::y),
+                NodeSerializers.INT.required(2).forGetter(BlockPos::z)
         )
         .apply(BlockPos::new);
 ```
 
-`sequence(type)` 与 `mapping(type)` 的结构相同，只是用 `element(index)` 按下标读写。编码时会按最大下标创建
-list，因此 `element(2)` 会写入第三个元素。
+`sequence(type)` 与 `mapping(type)` 的结构相同，只是用 `required(index)`、`optional(index, value)`、
+`optional(index)` 按下标读写。sequence 编码按紧凑 tuple 处理，index 必须从 0 连续声明；
+`required(index)` 或 `optional(index, value)` 编码出 `null` 会失败；
+`optional(index)` 的 `Optional.empty()` 只能在尾部省略，如果位于中间会抛出 `InvalidNodeException`。
 
 如果一个类型可以通过已有类型转换，可以用 `xmap`：
 
@@ -333,7 +337,7 @@ NodeSerializer<NamespacedKey> keySerializer = NodeSerializers.scalar(
 );
 ```
 
-如果同一个 Java 类型需要兼容多种 YAML 根形态，可以用 `forms(type)`：
+如果同一个 Java 类型需要兼容多种 YAML 根形态，可以用 `alternatives(type)`：
 
 ```java
 record BlockPos(int x, int y, int z) {
@@ -347,25 +351,39 @@ record BlockPos(int x, int y, int z) {
     long asPackedLong() {
         return x * 1_000_000L + y * 1_000L + z;
     }
+
+    static BlockPos fromCsv(String value) {
+        String[] parts = value.split(",", 3);
+        return new BlockPos(
+                Integer.parseInt(parts[0].trim()),
+                Integer.parseInt(parts[1].trim()),
+                Integer.parseInt(parts[2].trim())
+        );
+    }
+
+    String asCsv() {
+        return x + "," + y + "," + z;
+    }
 }
 
-NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.forms(BlockPos.class)
+NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.alternatives(BlockPos.class)
         .mapping("map", mapping -> mapping.group(
-                NodeSerializers.INT.fieldOf("x").forGetter(BlockPos::x),
-                NodeSerializers.INT.fieldOf("y").forGetter(BlockPos::y),
-                NodeSerializers.INT.fieldOf("z").forGetter(BlockPos::z)
+                NodeSerializers.INT.required("x").forGetter(BlockPos::x),
+                NodeSerializers.INT.optional("y", 64).forGetter(BlockPos::y),
+                NodeSerializers.INT.required("z").forGetter(BlockPos::z)
         ).apply(BlockPos::new))
         .sequence("list", sequence -> sequence.group(
-                NodeSerializers.INT.element(0).forGetter(BlockPos::x),
-                NodeSerializers.INT.element(1).forGetter(BlockPos::y),
-                NodeSerializers.INT.element(2).forGetter(BlockPos::z)
+                NodeSerializers.INT.required(0).forGetter(BlockPos::x),
+                NodeSerializers.INT.optional(1, 64).forGetter(BlockPos::y),
+                NodeSerializers.INT.required(2).forGetter(BlockPos::z)
         ).apply(BlockPos::new))
         .scalar("packed", NodeSerializers.LONG.xmap(BlockPos::fromPackedLong, BlockPos::asPackedLong))
-        .serializeAs("map")
+        .scalar("csv", NodeSerializers.STRING.xmap(BlockPos::fromCsv, BlockPos::asCsv))
+        .writeAs("map")
         .build();
 ```
 
-上面的 serializer 可以读取这三种写法：
+上面的 serializer 可以读取这四种写法：
 
 ```yaml
 map:
@@ -374,31 +392,36 @@ map:
   z: 3
 list: [1, 2, 3]
 packed: 1002003
+csv: "1,2,3"
 ```
 
-`forms` 是 `mapping`、`sequence`、`scalar`/`xmap` 之上的兼容层：
+`alternatives` 是 `mapping`、`sequence`、`scalar`/`xmap` 之上的兼容层：
 
 - `mapping(id, ...)` 注册 YAML object 根形态。
 - `sequence(id, ...)` 注册 YAML list 根形态。
 - `scalar(id, serializer)` 注册 YAML scalar 根形态，常用于 `scalar(...)` 或 `xmap(...)` 组合出的标量表示。
-- 每种根形态最多注册一个分支；分支 id 必须唯一。
-- `serializeAs(id)` 是必填项，且必须指向已注册分支；编码时始终使用该规范形态，不保留输入文件原本形态。
-- 解码时只按 YAML 根节点形态选择唯一分支；选中分支内部抛出的 `MissingNodeException` 或 `InvalidNodeException` 会原样抛出，不尝试其他形态。
-- 如果当前 YAML 根形态没有注册分支，会抛出 `InvalidNodeException`。
+- 同一种根形态可以注册多个候选；候选按注册顺序尝试，首个成功分支胜出。
+- 分支 id 必须唯一。
+- `writeAs(id)` 是必填项，且必须指向已注册分支；编码时始终使用该规范形态，不保留输入文件原本形态。
+- 形态不匹配的候选会被跳过；单个同形态候选失败时会抛出原始异常，多个同形态候选全部失败时会抛出 `AlternativesNodeException`，并保留所有候选的原始异常和分支信息。
 
-字段和元素默认是必填。可以用 `defaulted(value)` 处理缺失值，也可以用 `optional()` 让缺失值解成 `null`：
+字段和元素的 presence 在入口处声明。YAML null 在字段/元素访问层等价于缺失：
 
 ```java
-NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
+import java.util.Optional;
+
+record OptionalSpawn(int x, int y, Optional<String> world) {}
+
+NodeSerializer<OptionalSpawn> serializer = NodeSerializers.mapping(OptionalSpawn.class)
         .group(
-                NodeSerializers.INT.fieldOf("x").forGetter(BlockPos::x),
-                NodeSerializers.INT.fieldOf("y").defaulted(64).forGetter(BlockPos::y),
-                NodeSerializers.INT.fieldOf("z").forGetter(BlockPos::z)
+                NodeSerializers.INT.required("x").forGetter(OptionalSpawn::x),
+                NodeSerializers.INT.optional("y", 64).forGetter(OptionalSpawn::y),
+                NodeSerializers.STRING.optional("world").forGetter(OptionalSpawn::world)
         )
-        .apply(BlockPos::new);
+        .apply(OptionalSpawn::new);
 ```
 
-`defaulted(value)` 和 `optional()` 只处理缺失字段；如果 YAML 中存在该值但类型错误，仍然按失败处理。
+`optional(...)` 和 `optional(..., defaultValue)` 只处理缺失/null；如果 YAML 中存在该值但类型错误，仍然按失败处理。
 需要兜底错误值时使用 `onFail(...)`：
 
 ```java
@@ -406,9 +429,9 @@ import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 
 NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
         .group(
-                NodeSerializers.INT.fieldOf("x").onFail(failure -> 0).forGetter(BlockPos::x),
-                NodeSerializers.INT.fieldOf("y").defaulted(64).forGetter(BlockPos::y),
-                NodeSerializers.INT.fieldOf("z").onFail(failure -> {
+                NodeSerializers.INT.required("x").onFail(failure -> 0).forGetter(BlockPos::x),
+                NodeSerializers.INT.optional("y", 64).forGetter(BlockPos::y),
+                NodeSerializers.INT.required("z").onFail(failure -> {
                     if (failure instanceof MissingNodeException) {
                         return 0;
                     }
@@ -423,7 +446,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 - 字段或元素不存在时是 `MissingNodeException`，异常会携带缺失 key、完整路径和目标 Java 类型。
 - 字段或元素存在但基础 serializer 解码失败时是 `InvalidNodeException`，异常会携带当前路径、当前值类型和目标 Java 类型。
 - 基础类型 serializer 遇到解析错误时会直接抛出 `InvalidNodeException`，不再用 `null` 表达错误值。
-- 节点存在但 scalar value 为 `null` 时也会抛出 `InvalidNodeException`。
+- 字段/元素节点存在但 scalar value 为 `null` 时，会先被访问层当作缺失处理；直接读取该 scalar 节点仍是 `InvalidNodeException`。
 - `listOf()`、`setOf()`、`mapOf()` 遇到错误根节点形态时也会抛出 `InvalidNodeException`。
 - `xmap(...)` 的解码映射函数抛普通异常或返回 `null` 时会抛出 `InvalidNodeException`。
 - `serialize(value)` 只有在显式传入 `null` 时允许返回 `null`；非 `null` 输入如果编码结果为 `null`，会抛出 `InvalidNodeException`。
@@ -438,10 +461,10 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 - `listOf()`：处理 `List<T>`。
 - `setOf()`：处理 `Set<T>`，解码时保持 YAML 序列顺序。
 - `mapOf()`：处理 `Map<String, T>`。
-- `fieldOf(name)` / `element(index)`：声明 mapping/sequence 的字段或元素，可接 `defaulted(value)`、`optional()` 或 `onFail(...)`。
+- `required(name/index)` / `optional(name/index)` / `optional(name/index, value)`：声明 mapping/sequence 的字段或元素 presence。
 - `NodeSerializers.mapping(type)` / `NodeSerializers.sequence(type)`：通过 `group(...).apply(...)` 组合对象。
 - `NodeSerializers.scalar(read, write)`：处理字符串承载的值对象。
-- `NodeSerializers.forms(type)`：为同一个 Java 类型注册 mapping、sequence、scalar 多种 YAML 根形态，并指定规范编码形态。
+- `NodeSerializers.alternatives(type)`：为同一个 Java 类型注册 mapping、sequence、scalar 多种 YAML 根形态，并指定规范编码形态。
 - `NodeSerializers.lazy(...)`：处理递归类型。
 
 ### 自动创建序列化器

@@ -3,60 +3,52 @@ package net.momirealms.sparrow.yaml.serializer.builder;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * mapping builder 中的单个字段声明.
+ * 声明 mapping serializer 中的一个命名子节点.
+ *
+ * @param <A> 暴露给所属 group 的组件值类型
  */
 public final class Field<A> {
-    private final String name; // YAML 字段名
-    private final NodeSerializer<A> serializer; // 字段值 serializer
-    private final boolean hasDefault; // 缺失时是否有固定默认值
-    private final A defaultValue; // 缺失字段的固定默认值
-    private final boolean optional; // 缺失时是否允许 null
-    private final Function<? super RuntimeException, ? extends A> failureHandler; // 缺失或错误值的兜底函数
+    private final String name;
+    private final NodeSerializer<?> serializer;
+    private final NodePresence presence;
+    private final Object defaultValue;
+    private final Function<? super RuntimeException, ? extends A> failureHandler;
 
-    public Field(
+    private Field(
             String name,
-            NodeSerializer<A> serializer,
-            boolean hasDefault,
-            A defaultValue,
-            boolean optional,
+            NodeSerializer<?> serializer,
+            NodePresence presence,
+            Object defaultValue,
             Function<? super RuntimeException, ? extends A> failureHandler
     ) {
         this.name = Objects.requireNonNull(name, "name");
         this.serializer = Objects.requireNonNull(serializer, "serializer");
-        this.hasDefault = hasDefault;
+        this.presence = Objects.requireNonNull(presence, "presence");
         this.defaultValue = defaultValue;
-        this.optional = optional;
         this.failureHandler = failureHandler;
     }
 
-    /**
-     * 字段缺失时使用固定默认值.
-     */
-    public Field<A> defaulted(A value) {
-        return new Field<>(name, serializer, true, value, false, failureHandler);
+    public static <A> Field<A> required(String name, NodeSerializer<A> serializer) {
+        return new Field<>(name, serializer, NodePresence.REQUIRED, null, null);
     }
 
-    /**
-     * 字段缺失时返回 null.
-     */
-    public Field<A> optional() {
-        return new Field<>(name, serializer, false, null, true, failureHandler);
+    public static <A> Field<Optional<A>> optional(String name, NodeSerializer<A> serializer) {
+        return new Field<>(name, serializer, NodePresence.OPTIONAL_EMPTY, null, null);
     }
 
-    /**
-     * 字段缺失或字段值错误时, 调用 handler 生成兜底值.
-     */
+    public static <A> Field<A> optional(String name, NodeSerializer<A> serializer, A defaultValue) {
+        return new Field<>(name, serializer, NodePresence.OPTIONAL_DEFAULT, Objects.requireNonNull(defaultValue, "defaultValue"), null);
+    }
+
     public Field<A> onFail(Function<? super RuntimeException, ? extends A> handler) {
-        return new Field<>(name, serializer, hasDefault, defaultValue, optional, Objects.requireNonNull(handler, "handler"));
+        return new Field<>(name, serializer, presence, defaultValue, Objects.requireNonNull(handler, "handler"));
     }
 
-    /**
-     * 绑定编码时从目标对象读取字段值的 getter.
-     */
     public <T> FieldComponent<T, A> forGetter(Function<? super T, ? extends A> getter) {
-        return new FieldComponent<>(name, serializer, hasDefault, defaultValue, optional, failureHandler, getter);
+        return new FieldComponent<>(name, serializer, presence, defaultValue, failureHandler, getter);
     }
 }

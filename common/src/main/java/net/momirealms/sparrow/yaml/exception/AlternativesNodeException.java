@@ -1,0 +1,136 @@
+package net.momirealms.sparrow.yaml.exception;
+
+import net.momirealms.sparrow.yaml.node.YamlNode;
+import net.momirealms.sparrow.yaml.route.Route;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * 表示 alternatives 的同形态候选都无法解码当前 YAML 节点.
+ */
+public final class AlternativesNodeException extends InvalidNodeException {
+    private final Shape actualShape; // 当前 YAML 根节点形态
+    private final List<Branch> branches; // 已注册候选分支
+    private final List<Failure> failures; // 同形态候选的原始失败
+    private final String detail; // 面向日志的简短摘要
+
+    public AlternativesNodeException(
+            YamlNode<?> node,
+            Class<?> targetType,
+            Shape actualShape,
+            List<Branch> branches,
+            List<Failure> failures,
+            String detail
+    ) {
+        super(node, targetType);
+        this.actualShape = Objects.requireNonNull(actualShape, "actualShape");
+        this.branches = List.copyOf(branches);
+        this.failures = List.copyOf(failures);
+        this.detail = Objects.requireNonNull(detail, "detail");
+        for (Failure failure : this.failures) {
+            addSuppressed(failure.exception());
+        }
+    }
+
+    /**
+     * 返回当前 YAML 根节点形态.
+     */
+    public Shape actualShape() {
+        return actualShape;
+    }
+
+    /**
+     * 返回 alternatives 中注册过的所有候选分支.
+     */
+    public List<Branch> branches() {
+        return branches;
+    }
+
+    /**
+     * 返回同形态候选的原始失败.
+     */
+    public List<Failure> failures() {
+        return failures;
+    }
+
+    @Override
+    public String getMessage() {
+        return super.getMessage() + ". " + detail;
+    }
+
+    public enum Shape {
+        MAPPING,
+        SEQUENCE,
+        SCALAR
+    }
+
+    public record Branch(String id, int index, Shape shape) {
+        public Branch {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(shape, "shape");
+        }
+    }
+
+    public record Failure(Branch branch, RuntimeException exception) {
+        public Failure {
+            Objects.requireNonNull(branch, "branch");
+            Objects.requireNonNull(exception, "exception");
+        }
+
+        /**
+         * 返回原始异常指向的 YAML 路径.
+         */
+        @Nullable
+        public Route path() {
+            if (exception instanceof MissingNodeException missing) {
+                return missing.path();
+            }
+            if (exception instanceof InvalidNodeException invalid) {
+                return invalid.path();
+            }
+            return null;
+        }
+
+        /**
+         * 返回原始异常记录的实际 Java 类型.
+         */
+        @Nullable
+        public Class<?> actualType() {
+            if (exception instanceof InvalidNodeException invalid) {
+                return invalid.actualType();
+            }
+            return null;
+        }
+
+        /**
+         * 返回原始异常记录的目标 Java 类型.
+         */
+        @Nullable
+        public Class<?> targetType() {
+            if (exception instanceof MissingNodeException missing) {
+                return missing.targetType();
+            }
+            if (exception instanceof InvalidNodeException invalid) {
+                return invalid.targetType();
+            }
+            return null;
+        }
+
+        /**
+         * 返回缺失字段名或序列下标.
+         */
+        @Nullable
+        public Object missingKey() {
+            if (exception instanceof MissingNodeException missing) {
+                return missing.key();
+            }
+            return null;
+        }
+
+        public String message() {
+            return exception.getMessage();
+        }
+    }
+}

@@ -249,18 +249,23 @@ public final class NodeSerializerGroups {
                     }
                 },
                 value -> {
-                    Object target = mapping
-                            ? new LinkedHashMap<String, Object>(Math.max((int) (components.size() / 0.75f) + 1, 16))
-                            : sequenceTarget(components);
-                    for (NodeSerializerComponent component : components) {
-                        component.encode(value, target);
+                    if (!mapping) {
+                        return encodeSequence(value, targetType, components);
+                    }
+                    Object target = new LinkedHashMap<String, Object>(Math.max((int) (components.size() / 0.75f) + 1, 16));
+                    for (NodeSerializerComponent<?, ?> component : components) {
+                        encodeComponent(component, value, target);
                     }
                     return target;
                 }
         );
     }
 
-    private static List<Object> sequenceTarget(List<? extends NodeSerializerComponent<?, ?>> components) {
+    private static List<Object> encodeSequence(
+            Object source,
+            Class<?> targetType,
+            List<? extends NodeSerializerComponent<?, ?>> components
+    ) {
         int max = -1;
         for (NodeSerializerComponent<?, ?> component : components) {
             if (component instanceof ElementComponent<?, ?> element) {
@@ -272,6 +277,60 @@ public final class NodeSerializerGroups {
         for (int i = 0; i <= max; i++) {
             list.add(null);
         }
-        return list;
+
+        boolean[] declared = new boolean[max + 1];
+        boolean[] canOmit = new boolean[max + 1];
+        List<ElementComponent<?, ?>> elementsByIndex = new ArrayList<>(max + 1);
+        for (int i = 0; i <= max; i++) {
+            elementsByIndex.add(null);
+        }
+        for (NodeSerializerComponent<?, ?> component : components) {
+            if (!(component instanceof ElementComponent<?, ?> element)) {
+                throw new InvalidNodeException(null, source.getClass(), targetType);
+            }
+            int index = element.index();
+            if (declared[index]) {
+                throw new InvalidNodeException(null, source.getClass(), targetType);
+            }
+            declared[index] = true;
+            canOmit[index] = element.allowsTrailingOmission();
+            elementsByIndex.set(index, element);
+            Object encoded = encodeElement(element, source);
+            if (encoded == null && !canOmit[index]) {
+                throw element.invalidEncodingValue();
+            }
+            list.set(index, encoded);
+        }
+
+        for (int i = 0; i <= max; i++) {
+            if (!declared[i]) {
+                throw new InvalidNodeException(null, source.getClass(), targetType);
+            }
+        }
+
+        int last = list.size() - 1;
+        while (last >= 0 && list.get(last) == null && canOmit[last]) {
+            last--;
+        }
+        for (int i = 0; i <= last; i++) {
+            if (list.get(i) == null) {
+                ElementComponent<?, ?> element = elementsByIndex.get(i);
+                if (element != null) {
+                    throw element.invalidEncodingValue();
+                }
+                throw new InvalidNodeException(null, null, targetType);
+            }
+        }
+        return new ArrayList<>(list.subList(0, last + 1));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Object encodeElement(ElementComponent component, Object source) {
+        return component.encodeValue(source);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void encodeComponent(NodeSerializerComponent component, Object source, Object target) {
+        component.encode(source, target);
     }
 }

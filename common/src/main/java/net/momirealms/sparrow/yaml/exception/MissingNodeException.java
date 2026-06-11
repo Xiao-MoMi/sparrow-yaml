@@ -49,6 +49,9 @@ public class MissingNodeException extends RuntimeException {
     }
 
     private static String message(Object key, @Nullable Route path, Class<?> targetType) {
+        if (key instanceof Integer index) {
+            return "Missing YAML list index " + index + " at path " + Route.pathName(path) + ", expected " + TypeUtils.typeName(targetType);
+        }
         return "Missing YAML value '" + key + "' at path " + Route.pathName(path) + ", expected " + TypeUtils.typeName(targetType);
     }
 }
