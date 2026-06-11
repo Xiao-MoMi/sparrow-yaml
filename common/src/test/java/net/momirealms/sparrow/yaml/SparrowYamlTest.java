@@ -1033,7 +1033,7 @@ class SparrowYamlTest {
 
         @Test
         void should_ThrowInvalidException_When_NonNullSerializationReturnsNull() {
-            NodeSerializer<NamedValue> nullingStringBacked = NodeSerializers.stringBacked(
+            NodeSerializer<NamedValue> nullingStringBacked = NodeSerializers.scalar(
                     NamedValue::new,
                     value -> null
             );
@@ -1192,7 +1192,7 @@ class SparrowYamlTest {
         @Test
         void should_DecodeScalarValueObject_When_UsingStringBacked() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
-            NodeSerializer<NamedValue> namedValueCodec = NodeSerializers.stringBacked(
+            NodeSerializer<NamedValue> namedValueCodec = NodeSerializers.scalar(
                     value -> value.startsWith("name:") ? new NamedValue(value.substring(5)) : null,
                     value -> "name:" + value.value()
             );

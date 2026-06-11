@@ -156,7 +156,7 @@ public final class NodeSerializers {
             value -> value
     );
 
-    public static final NodeSerializer<UUID> UUID = stringBacked(
+    public static final NodeSerializer<UUID> UUID = scalar(
             UUID.class,
             str -> {
                 try {
@@ -168,7 +168,7 @@ public final class NodeSerializers {
             java.util.UUID::toString
     );
 
-    public static final NodeSerializer<Locale> LOCALE = stringBacked(
+    public static final NodeSerializer<Locale> LOCALE = scalar(
             Locale.class,
             input -> {
                 String[] segments = input.split("_", 3);
@@ -182,7 +182,7 @@ public final class NodeSerializers {
             Locale::toString
     );
 
-    public static final NodeSerializer<Date> DATE = stringBacked(
+    public static final NodeSerializer<Date> DATE = scalar(
             Date.class,
             str -> {
                 try {
@@ -194,7 +194,7 @@ public final class NodeSerializers {
             date -> date == null ? null : DateTimeFormatter.ISO_INSTANT.format(date.toInstant())
     );
 
-    public static final NodeSerializer<Calendar> CALENDAR = stringBacked(
+    public static final NodeSerializer<Calendar> CALENDAR = scalar(
             Calendar.class,
             str -> {
                 try {
@@ -209,13 +209,13 @@ public final class NodeSerializers {
             calendar -> calendar == null ? null : DateTimeFormatter.ISO_INSTANT.format(calendar.toInstant())
     );
 
-    public static final NodeSerializer<LocalDate> LOCAL_DATE = stringBacked(LocalDate.class, parse(LocalDate::parse), LocalDate::toString);
-    public static final NodeSerializer<LocalTime> LOCAL_TIME = stringBacked(LocalTime.class, parse(LocalTime::parse), LocalTime::toString);
-    public static final NodeSerializer<LocalDateTime> LOCAL_DATE_TIME = stringBacked(LocalDateTime.class, parse(LocalDateTime::parse), LocalDateTime::toString);
-    public static final NodeSerializer<ZonedDateTime> ZONED_DATE_TIME = stringBacked(ZonedDateTime.class, parse(ZonedDateTime::parse), ZonedDateTime::toString);
-    public static final NodeSerializer<Instant> INSTANT = stringBacked(Instant.class, parse(Instant::parse), Instant::toString);
-    public static final NodeSerializer<Duration> DURATION = stringBacked(Duration.class, parse(Duration::parse), Duration::toString);
-    public static final NodeSerializer<Period> PERIOD = stringBacked(Period.class, parse(Period::parse), Period::toString);
+    public static final NodeSerializer<LocalDate> LOCAL_DATE = scalar(LocalDate.class, parse(LocalDate::parse), LocalDate::toString);
+    public static final NodeSerializer<LocalTime> LOCAL_TIME = scalar(LocalTime.class, parse(LocalTime::parse), LocalTime::toString);
+    public static final NodeSerializer<LocalDateTime> LOCAL_DATE_TIME = scalar(LocalDateTime.class, parse(LocalDateTime::parse), LocalDateTime::toString);
+    public static final NodeSerializer<ZonedDateTime> ZONED_DATE_TIME = scalar(ZonedDateTime.class, parse(ZonedDateTime::parse), ZonedDateTime::toString);
+    public static final NodeSerializer<Instant> INSTANT = scalar(Instant.class, parse(Instant::parse), Instant::toString);
+    public static final NodeSerializer<Duration> DURATION = scalar(Duration.class, parse(Duration::parse), Duration::toString);
+    public static final NodeSerializer<Period> PERIOD = scalar(Period.class, parse(Period::parse), Period::toString);
 
     private NodeSerializers() {
     }
@@ -229,7 +229,7 @@ public final class NodeSerializers {
         for (E constant : constants) {
             map.put(constant.name().toLowerCase(Locale.ROOT), constant);
         }
-        return stringBacked(
+        return scalar(
                 enumClass,
                 str -> map.get(str.toLowerCase(Locale.ROOT)),
                 Enum::name
@@ -239,14 +239,14 @@ public final class NodeSerializers {
     /**
      * 创建以字符串作为 YAML 表示的值对象 serializer.
      */
-    public static <T> NodeSerializer<T> stringBacked(Function<String, T> reader, Function<T, String> writer) {
-        return stringBacked(Object.class, reader, writer);
+    public static <T> NodeSerializer<T> scalar(Function<String, T> reader, Function<T, String> writer) {
+        return scalar(Object.class, reader, writer);
     }
 
     /**
      * 创建以字符串作为 YAML 表示的值对象 serializer, 并声明目标 Java 类型.
      */
-    public static <T> NodeSerializer<T> stringBacked(Class<?> targetType, Function<String, T> reader, Function<T, String> writer) {
+    public static <T> NodeSerializer<T> scalar(Class<?> targetType, Function<String, T> reader, Function<T, String> writer) {
         return NodeSerializer.createInternal(
                 targetType,
                 node -> {

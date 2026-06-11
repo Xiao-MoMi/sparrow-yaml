@@ -322,12 +322,12 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.INT.listOf().xmap(
 );
 ```
 
-标量值对象可以用 `stringBacked`：
+标量值对象可以用 `scalar`：
 
 ```java
 record NamespacedKey(String value) {}
 
-NodeSerializer<NamespacedKey> keySerializer = NodeSerializers.stringBacked(
+NodeSerializer<NamespacedKey> keySerializer = NodeSerializers.scalar(
         NamespacedKey::new,
         NamespacedKey::value
 );
@@ -376,11 +376,11 @@ list: [1, 2, 3]
 packed: 1002003
 ```
 
-`forms` 是 `mapping`、`sequence`、`stringBacked`/`xmap` 之上的兼容层：
+`forms` 是 `mapping`、`sequence`、`scalar`/`xmap` 之上的兼容层：
 
 - `mapping(id, ...)` 注册 YAML object 根形态。
 - `sequence(id, ...)` 注册 YAML list 根形态。
-- `scalar(id, serializer)` 注册 YAML scalar 根形态，常用于 `stringBacked(...)` 或 `xmap(...)` 组合出的标量表示。
+- `scalar(id, serializer)` 注册 YAML scalar 根形态，常用于 `scalar(...)` 或 `xmap(...)` 组合出的标量表示。
 - 每种根形态最多注册一个分支；分支 id 必须唯一。
 - `serializeAs(id)` 是必填项，且必须指向已注册分支；编码时始终使用该规范形态，不保留输入文件原本形态。
 - 解码时只按 YAML 根节点形态选择唯一分支；选中分支内部抛出的 `MissingNodeException` 或 `InvalidNodeException` 会原样抛出，不尝试其他形态。
@@ -440,7 +440,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 - `mapOf()`：处理 `Map<String, T>`。
 - `fieldOf(name)` / `element(index)`：声明 mapping/sequence 的字段或元素，可接 `defaulted(value)`、`optional()` 或 `onFail(...)`。
 - `NodeSerializers.mapping(type)` / `NodeSerializers.sequence(type)`：通过 `group(...).apply(...)` 组合对象。
-- `NodeSerializers.stringBacked(read, write)`：处理字符串承载的值对象。
+- `NodeSerializers.scalar(read, write)`：处理字符串承载的值对象。
 - `NodeSerializers.forms(type)`：为同一个 Java 类型注册 mapping、sequence、scalar 多种 YAML 根形态，并指定规范编码形态。
 - `NodeSerializers.lazy(...)`：处理递归类型。
 
