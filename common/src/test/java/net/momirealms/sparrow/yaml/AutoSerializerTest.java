@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
+import java.io.StringWriter;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
@@ -1097,7 +1098,14 @@ class AutoSerializerTest {
             YamlDocument doc = yaml.load("");
             doc.setAndGet(Models.CustomUser.class, userWithNullName, "user");
 
-            Models.CustomUser decoded = doc.get(Models.CustomUser.class, "user");
+            StringWriter writer = new StringWriter();
+            doc.save(writer);
+            String dumped = writer.toString();
+
+            assertFalse(dumped.contains("name:"));
+
+            YamlDocument reloaded = yaml.load(dumped);
+            Models.CustomUser decoded = reloaded.get(Models.CustomUser.class, "user");
             assertNotNull(decoded);
             assertNull(decoded.name, "null 字段应正确往返");
             assertEquals(42, decoded.age);

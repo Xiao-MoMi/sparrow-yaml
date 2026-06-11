@@ -52,14 +52,14 @@ public final class NodeSerializers {
     public static final NodeSerializer<String> STRING = NodeSerializer.createInternal(
             String.class,
             node -> {
-                if (node == null) {
-                    return null;
-                }
                 if (!(node instanceof ScalarNode scalarNode)) {
                     throw new InvalidNodeException(node, String.class);
                 }
                 Object val = scalarNode.value();
-                return val != null ? val.toString() : null;
+                if (val == null) {
+                    throw new InvalidNodeException(node, String.class);
+                }
+                return val.toString();
             },
             value -> value
     );
@@ -68,9 +68,6 @@ public final class NodeSerializers {
             Integer.class,
             node -> {
                 Object val = scalarValue(node, Integer.class);
-                if (val == null) {
-                    return null;
-                }
                 if (val instanceof Number number) {
                     return number.intValue();
                 }
@@ -87,9 +84,6 @@ public final class NodeSerializers {
             Double.class,
             node -> {
                 Object val = scalarValue(node, Double.class);
-                if (val == null) {
-                    return null;
-                }
                 if (val instanceof Number number) {
                     return number.doubleValue();
                 }
@@ -106,9 +100,6 @@ public final class NodeSerializers {
             Float.class,
             node -> {
                 Object val = scalarValue(node, Float.class);
-                if (val == null) {
-                    return null;
-                }
                 if (val instanceof Number number) {
                     return number.floatValue();
                 }
@@ -125,9 +116,6 @@ public final class NodeSerializers {
             Long.class,
             node -> {
                 Object val = scalarValue(node, Long.class);
-                if (val == null) {
-                    return null;
-                }
                 if (val instanceof Number number) {
                     return number.longValue();
                 }
@@ -144,9 +132,6 @@ public final class NodeSerializers {
             Boolean.class,
             node -> {
                 Object val = scalarValue(node, Boolean.class);
-                if (val == null) {
-                    return null;
-                }
                 if (val instanceof Boolean bool) {
                     return bool;
                 }
@@ -265,9 +250,9 @@ public final class NodeSerializers {
                 targetType,
                 node -> {
                     Object raw = scalarValue(node, targetType);
-                    String decoded = raw == null ? null : raw.toString();
-                    if (decoded == null || decoded.isEmpty()) {
-                        return null;
+                    String decoded = raw.toString();
+                    if (decoded.isEmpty()) {
+                        throw new InvalidNodeException(node, targetType);
                     }
                     try {
                         T result = reader.apply(decoded);
@@ -282,14 +267,16 @@ public final class NodeSerializers {
                     }
                 },
                 value -> {
-                    if (value == null) {
-                        return "";
-                    }
                     try {
                         String encoded = writer.apply(value);
-                        return encoded == null ? "" : encoded;
+                        if (encoded == null) {
+                            throw new InvalidNodeException(null, value.getClass(), targetType);
+                        }
+                        return encoded;
+                    } catch (MissingNodeException | InvalidNodeException e) {
+                        throw e;
                     } catch (Exception e) {
-                        return "";
+                        throw new InvalidNodeException(null, value.getClass(), targetType, e);
                     }
                 }
         );
@@ -320,20 +307,28 @@ public final class NodeSerializers {
 
     private static Object scalarValue(YamlNode<?> node, Class<?> targetType) {
         if (node == null) {
-            return null;
+            throw new InvalidNodeException(null, targetType);
         }
         if (!(node instanceof ScalarNode scalarNode)) {
             throw new InvalidNodeException(node, targetType);
         }
-        return scalarNode.value();
+        Object value = scalarNode.value();
+        if (value == null) {
+            throw new InvalidNodeException(node, targetType);
+        }
+        return value;
     }
 
     private static Object objectValue(YamlNode<?> node) {
         if (node == null) {
-            return null;
+            throw new InvalidNodeException(null, Object.class);
         }
         if (node instanceof ScalarNode scalarNode) {
-            return scalarNode.value();
+            Object value = scalarNode.value();
+            if (value == null) {
+                throw new InvalidNodeException(node, Object.class);
+            }
+            return value;
         }
         if (node instanceof SequenceNode sequenceNode) {
             List<Object> result = new ArrayList<>(sequenceNode.value().size());
@@ -630,7 +625,8 @@ public final class NodeSerializers {
             throw failure;
         }
         try {
-            return NodeSerializerDecodeResult.success(failureHandler.apply(failure));
+            A value = failureHandler.apply(failure);
+            return value == null ? NodeSerializerDecodeResult.failed() : NodeSerializerDecodeResult.success(value);
         } catch (Exception e) {
             return NodeSerializerDecodeResult.failed();
         }

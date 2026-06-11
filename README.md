@@ -294,7 +294,7 @@ document.setAndGet(BlockPos.class, new BlockPos(0, 64, 0), "spawn");
 - `forGetter(...)` 只负责编码时从对象取值。
 - `apply(...)` 是解码时的构造函数或工厂方法。
 - 必填字段缺失会抛出 `MissingNodeException`；字段存在但类型错误会抛出 `InvalidNodeException`。
-- 构造函数抛普通异常或返回 `null` 时，整体解码结果仍为 `null`。
+- 构造函数抛普通异常或返回 `null` 时会抛出 `InvalidNodeException`。
 
 如果希望把对象写成 YAML 序列，可以使用 `sequence(type)`：
 
@@ -367,11 +367,13 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 
 - 字段或元素不存在时是 `MissingNodeException`，异常会携带缺失 key、完整路径和目标 Java 类型。
 - 字段或元素存在但基础 serializer 解码失败时是 `InvalidNodeException`，异常会携带当前路径、当前值类型和目标 Java 类型。
-- 基础类型 serializer 遇到非空解析错误时会直接抛出 `InvalidNodeException`，不再用 `null` 表达错误值。
+- 基础类型 serializer 遇到解析错误时会直接抛出 `InvalidNodeException`，不再用 `null` 表达错误值。
+- 节点存在但 scalar value 为 `null` 时也会抛出 `InvalidNodeException`。
 - `listOf()`、`setOf()`、`mapOf()` 遇到错误根节点形态时也会抛出 `InvalidNodeException`。
 - `xmap(...)` 的解码映射函数抛普通异常或返回 `null` 时会抛出 `InvalidNodeException`。
+- `serialize(value)` 只有在显式传入 `null` 时允许返回 `null`；非 `null` 输入如果编码结果为 `null`，会抛出 `InvalidNodeException`。
 - 如果某个组合 serializer 自己抛出 `MissingNodeException` 或 `InvalidNodeException`，builder 会把这个异常直接交给 `onFail(...)`，不会再包一层。
-- `onFail(...)` 自己抛异常时，整体解码结果仍然是 `null`。
+- `onFail(...)` 自己抛异常或返回 `null` 时，整体解码会抛出 `InvalidNodeException`。
 
 常用组合方法：
 
@@ -572,7 +574,8 @@ YamlMapper<ImmutableConfig> mapper = factory.create(
 - `Route.from(...)` 不能创建空路由；需要空路由时使用 `Route.empty()`。
 - `get(...)` 在目标路径缺失时会抛出 `MissingNodeException`；节点存在但序列化器解析失败时会抛出对应的 `InvalidNodeException` 或组合 serializer 自己抛出的异常。
 - `getOrDefault(...)` 只在目标路径缺失时返回默认值；节点存在但解析失败时不会吞掉异常。
-- 内置的字符串承载类型，例如 `UUID`、`Locale`、时间类型，会把 `null` 序列化为空字符串，并在读取空字符串时返回 `null`。
+- 内置的字符串承载类型，例如 `UUID`、`Locale`、时间类型，不再把空字符串读取为 `null`；空字符串会按无效值抛出 `InvalidNodeException`。
+- `serialize(null)` 会生成 null 值节点；保存文档时 null 值节点会被跳过，不写入最终 YAML。
 - `ElementComment` / `InlineElementComment` / `AfterElementComment` 当前只是注解定义，运行期 mapper 尚未把它们应用到集合元素。
 
 ## License

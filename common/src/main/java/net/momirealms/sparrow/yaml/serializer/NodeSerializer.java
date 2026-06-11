@@ -6,6 +6,7 @@ import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -47,15 +48,28 @@ public final class NodeSerializer<T> {
      *
      * <p>缺失或空值通常抛出解析异常.</p>
      */
+    @NotNull
     public T deserialize(@Nullable YamlNode<?> node) {
-        return decoder.deserialize(node);
+        T decoded = decoder.deserialize(node);
+        if (decoded == null) {
+            throw new InvalidNodeException(node, targetType);
+        }
+        return decoded;
     }
 
     /**
      * 将 Java 值编码为可写入 YAML 节点的基础对象.
      */
+    @Nullable
     public Object serialize(@Nullable T value) {
-        return encoder.serialize(value);
+        if (value == null) {
+            return null;
+        }
+        Object encoded = encoder.serialize(value);
+        if (encoded == null) {
+            throw new InvalidNodeException(null, value.getClass(), targetType);
+        }
+        return encoded;
     }
 
     /**
@@ -75,9 +89,6 @@ public final class NodeSerializer<T> {
                 Object.class,
                 node -> {
                     T decoded = NodeSerializer.this.deserialize(node);
-                    if (decoded == null) {
-                        return null;
-                    }
                     try {
                         R result = to.apply(decoded);
                         if (result == null) {
@@ -91,13 +102,12 @@ public final class NodeSerializer<T> {
                     }
                 },
                 value -> {
-                    if (value == null) {
-                        return null;
-                    }
                     try {
                         return NodeSerializer.this.serialize(from.apply(value));
+                    } catch (MissingNodeException | InvalidNodeException e) {
+                        throw e;
                     } catch (Exception e) {
-                        return null;
+                        throw new InvalidNodeException(null, value.getClass(), Object.class, e);
                     }
                 }
         );
@@ -115,23 +125,17 @@ public final class NodeSerializer<T> {
                     }
                     List<YamlNode<?>> nodeList = seq.value();
                     if (nodeList == null) {
-                        return null;
+                        throw new InvalidNodeException(node, List.class);
                     }
 
                     List<T> result = new ArrayList<>(nodeList.size());
                     for (YamlNode<?> elementNode : nodeList) {
                         T decoded = NodeSerializer.this.deserialize(elementNode);
-                        if (decoded == null) {
-                            return null;
-                        }
                         result.add(decoded);
                     }
                     return result;
                 },
                 value -> {
-                    if (value == null) {
-                        return null;
-                    }
                     List<Object> result = new ArrayList<>(value.size());
                     for (T element : value) {
                         result.add(NodeSerializer.this.serialize(element));
@@ -153,23 +157,17 @@ public final class NodeSerializer<T> {
                     }
                     List<YamlNode<?>> nodeList = seq.value();
                     if (nodeList == null) {
-                        return null;
+                        throw new InvalidNodeException(node, Set.class);
                     }
 
                     Set<T> result = new LinkedHashSet<>();
                     for (YamlNode<?> elementNode : nodeList) {
                         T decoded = NodeSerializer.this.deserialize(elementNode);
-                        if (decoded == null) {
-                            return null;
-                        }
                         result.add(decoded);
                     }
                     return result;
                 },
                 value -> {
-                    if (value == null) {
-                        return null;
-                    }
                     List<Object> result = new ArrayList<>(value.size());
                     for (T element : value) {
                         result.add(NodeSerializer.this.serialize(element));
@@ -191,23 +189,17 @@ public final class NodeSerializer<T> {
                     }
                     Map<Object, YamlNode<?>> nodeMap = section.value();
                     if (nodeMap == null) {
-                        return null;
+                        throw new InvalidNodeException(node, Map.class);
                     }
 
                     Map<String, T> result = new LinkedHashMap<>(Math.max((int) (nodeMap.size() / 0.75f) + 1, 16));
                     for (Map.Entry<Object, YamlNode<?>> entry : nodeMap.entrySet()) {
                         T decoded = NodeSerializer.this.deserialize(entry.getValue());
-                        if (decoded == null) {
-                            return null;
-                        }
                         result.put(String.valueOf(entry.getKey()), decoded);
                     }
                     return result;
                 },
                 value -> {
-                    if (value == null) {
-                        return null;
-                    }
                     Map<String, Object> result = new LinkedHashMap<>(Math.max((int) (value.size() / 0.75f) + 1, 16));
                     for (Map.Entry<String, T> entry : value.entrySet()) {
                         result.put(entry.getKey(), NodeSerializer.this.serialize(entry.getValue()));

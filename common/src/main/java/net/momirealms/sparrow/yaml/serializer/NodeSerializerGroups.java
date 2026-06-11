@@ -1,6 +1,7 @@
 package net.momirealms.sparrow.yaml.serializer;
 
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
+import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 
@@ -216,7 +217,7 @@ public final class NodeSerializerGroups {
                 targetType,
                 node -> {
                     if (node == null) {
-                        return null;
+                        throw new InvalidNodeException(null, targetType);
                     }
                     if (mapping && !(node instanceof SectionNode)) {
                         throw new InvalidNodeException(node, targetType);
@@ -229,22 +230,24 @@ public final class NodeSerializerGroups {
                     for (int i = 0; i < components.size(); i++) {
                         NodeSerializerDecodeResult result = components.get(i).decode(node);
                         if (!result.success()) {
-                            return null;
+                            throw new InvalidNodeException(node, targetType);
                         }
                         values[i] = result.value();
                     }
 
                     try {
-                        return factory.apply(values);
+                        Object created = factory.apply(values);
+                        if (created == null) {
+                            throw new InvalidNodeException(node, targetType);
+                        }
+                        return created;
+                    } catch (MissingNodeException | InvalidNodeException e) {
+                        throw e;
                     } catch (Exception e) {
-                        return null;
+                        throw new InvalidNodeException(node, targetType, e);
                     }
                 },
                 value -> {
-                    if (value == null) {
-                        return null;
-                    }
-
                     Object target = mapping
                             ? new LinkedHashMap<String, Object>(Math.max((int) (components.size() / 0.75f) + 1, 16))
                             : sequenceTarget(components);

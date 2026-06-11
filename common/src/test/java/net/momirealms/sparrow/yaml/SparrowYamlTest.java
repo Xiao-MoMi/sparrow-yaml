@@ -63,16 +63,16 @@ class SparrowYamlTest {
         doc.setAndGet(Locale.class, localeLanguage, "locale_language");
         doc.setAndGet(Locale.class, localeCountry, "locale_country");
         doc.setAndGet(Locale.class, localeVariant, "locale_variant");
-        doc.setAndGet(UUID.class, null, "empty_uuid");
-        doc.setAndGet(Locale.class, null, "empty_locale");
-        doc.setAndGet(LocalDate.class, null, "empty_local_date");
+        doc.setAndGet(UUID.class, null, "skipped_uuid");
+        doc.setAndGet(Locale.class, null, "skipped_locale");
+        doc.setAndGet(LocalDate.class, null, "skipped_local_date");
         
         java.io.StringWriter writer = new java.io.StringWriter();
         doc.save(writer);
         String dumped = writer.toString();
-        assertTrue(dumped.contains("empty_uuid: ''"));
-        assertTrue(dumped.contains("empty_locale: ''"));
-        assertTrue(dumped.contains("empty_local_date: ''"));
+        assertFalse(dumped.contains("skipped_uuid:"));
+        assertFalse(dumped.contains("skipped_locale:"));
+        assertFalse(dumped.contains("skipped_local_date:"));
         
         YamlDocument loadedDoc = yaml.load(dumped);
         
@@ -88,9 +88,9 @@ class SparrowYamlTest {
         assertEquals(localeLanguage, loadedDoc.get(java.util.Locale.class, "locale_language"));
         assertEquals(localeCountry, loadedDoc.get(java.util.Locale.class, "locale_country"));
         assertEquals(localeVariant, loadedDoc.get(java.util.Locale.class, "locale_variant"));
-        assertNull(loadedDoc.get(java.util.UUID.class, "empty_uuid"));
-        assertNull(loadedDoc.get(java.util.Locale.class, "empty_locale"));
-        assertNull(loadedDoc.get(java.time.LocalDate.class, "empty_local_date"));
+        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.util.UUID.class, "skipped_uuid"));
+        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.util.Locale.class, "skipped_locale"));
+        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.time.LocalDate.class, "skipped_local_date"));
     }
 
     @Nested
@@ -121,6 +121,35 @@ class SparrowYamlTest {
             
             // 3. 断言阶段 (Assert)
             assertTrue(yamlDocument.isEmptyDocument(), "加载空字符串应返回空文档状态");
+        }
+
+        @Test
+        void should_SkipNullValueNodes_When_DumpingDocument() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            keep: value
+            drop: null
+            blank:
+            nested:
+              keep: value
+              drop: null
+            sequence:
+              - first
+              - null
+              -
+              - last
+            """);
+
+            StringWriter writer = new StringWriter();
+            yamlDocument.save(writer);
+            String dumped = writer.toString();
+
+            assertTrue(dumped.contains("keep: value"));
+            assertTrue(dumped.contains("- first"));
+            assertTrue(dumped.contains("- last"));
+            assertFalse(dumped.contains("drop:"));
+            assertFalse(dumped.contains("blank:"));
+            assertFalse(dumped.contains("null"));
         }
 
         @Test
@@ -899,6 +928,47 @@ class SparrowYamlTest {
         }
 
         @Test
+        void should_ThrowInvalidException_When_NodeValueIsNull() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            blank:
+            explicit: null
+            """);
+
+            InvalidNodeException blankFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.STRING, "blank")
+            );
+            assertEquals(Route.from("blank"), blankFailure.path());
+            assertNull(blankFailure.actualType());
+            assertEquals(String.class, blankFailure.targetType());
+
+            InvalidNodeException explicitFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.OBJECT, "explicit")
+            );
+            assertEquals(Route.from("explicit"), explicitFailure.path());
+            assertNull(explicitFailure.actualType());
+            assertEquals(Object.class, explicitFailure.targetType());
+        }
+
+        @Test
+        void should_ThrowInvalidException_When_StringBackedReadsEmptyString() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            uuid: ''
+            """);
+
+            InvalidNodeException failure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(NodeSerializers.UUID, "uuid")
+            );
+            assertEquals(Route.from("uuid"), failure.path());
+            assertEquals(String.class, failure.actualType());
+            assertEquals(UUID.class, failure.targetType());
+        }
+
+        @Test
         void should_ThrowInvalidException_When_XmapMapperFailsOrReturnsNull() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             YamlDocument yamlDocument = sparrowYaml.load("""
@@ -931,6 +1001,35 @@ class SparrowYamlTest {
             assertEquals(String.class, throwingFailure.actualType());
             assertEquals(Object.class, throwingFailure.targetType());
             assertInstanceOf(IllegalArgumentException.class, throwingFailure.getCause());
+        }
+
+        @Test
+        void should_ThrowInvalidException_When_NonNullSerializationReturnsNull() {
+            NodeSerializer<NamedValue> nullingStringBacked = NodeSerializers.stringBacked(
+                    NamedValue::new,
+                    value -> null
+            );
+            InvalidNodeException stringBackedFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> nullingStringBacked.serialize(new NamedValue("cat"))
+            );
+            assertNull(stringBackedFailure.path());
+            assertEquals(NamedValue.class, stringBackedFailure.actualType());
+            assertEquals(Object.class, stringBackedFailure.targetType());
+
+            NodeSerializer<NamedValue> nullingXmap = NodeSerializers.STRING.xmap(
+                    NamedValue::new,
+                    value -> null
+            );
+            InvalidNodeException xmapFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> nullingXmap.serialize(new NamedValue("dog"))
+            );
+            assertNull(xmapFailure.path());
+            assertEquals(NamedValue.class, xmapFailure.actualType());
+            assertEquals(Object.class, xmapFailure.targetType());
+
+            assertNull(NodeSerializers.UUID.serialize(null));
         }
 
         @Test

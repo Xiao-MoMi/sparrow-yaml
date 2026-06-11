@@ -176,10 +176,18 @@ final class AsmSerializerGenerator {
             if (key == null) {
                 pushBoxedDefault(method, descriptor);
             } else {
+                Label missing = new Label();
+                Label done = new Label();
                 emitGetChildNode(method, sectionVar, key);
                 method.visitVarInsn(ASTORE, childVar);
+                method.visitVarInsn(ALOAD, childVar);
+                method.visitJumpInsn(IFNULL, missing);
                 emitDeserializeValue(method, generatedName, serializerIndex, descriptor, childVar, decodedVar);
                 method.visitVarInsn(ALOAD, decodedVar);
+                method.visitJumpInsn(GOTO, done);
+                method.visitLabel(missing);
+                pushBoxedDefault(method, descriptor);
+                method.visitLabel(done);
             }
             method.visitInsn(AASTORE);
         }

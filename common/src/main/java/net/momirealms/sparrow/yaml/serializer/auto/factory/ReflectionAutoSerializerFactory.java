@@ -5,6 +5,7 @@ import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
 import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
+import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
@@ -273,7 +274,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
             rawType,
             node -> {
                 if (!(node instanceof SectionNode sectionNode)) {
-                    return null;
+                    throw new InvalidNodeException(node, rawType);
                 }
 
                 T instance = plan.instantiate(sectionNode);
@@ -291,9 +292,6 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
                 return instance;
             },
             value -> {
-                if (value == null) {
-                    return null;
-                }
                 Map<String, Object> map = new LinkedHashMap<>(mapCapacity);
                 for (SerializableMember member : encodableArr) {
                     map.put(member.name(), member.encode(value));

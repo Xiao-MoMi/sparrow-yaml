@@ -344,8 +344,8 @@ class SparrowYamlAnnotationTest {
 
         String yamlString = Files.readString(tempFile).replace("\r\n", "\n");
 
-        assertTrue(yamlString.contains("locale: ''"));
-        assertTrue(yamlString.contains("locale: ''\n\n# Debug\ndebug:"));
+        assertFalse(yamlString.contains("locale:"));
+        assertTrue(yamlString.contains("# Debug\ndebug:"));
 
         YamlMapper.Result<FormattingConfig> loaded = mapper.load(tempFile);
         assertNotNull(loaded);
