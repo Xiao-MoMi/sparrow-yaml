@@ -73,7 +73,7 @@ public final class AlternativesNodeException extends InvalidNodeException {
         }
     }
 
-    public record Failure(Branch branch, RuntimeException exception) {
+    public record Failure(Branch branch, NodeParsingException exception) {
         public Failure {
             Objects.requireNonNull(branch, "branch");
             Objects.requireNonNull(exception, "exception");

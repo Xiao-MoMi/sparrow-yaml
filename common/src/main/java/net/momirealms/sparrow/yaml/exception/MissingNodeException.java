@@ -5,7 +5,7 @@ import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.util.TypeUtils;
 import org.jetbrains.annotations.Nullable;
 
-public class MissingNodeException extends RuntimeException {
+public class MissingNodeException extends NodeParsingException {
     private final Object key; // 缺失的字段名或序列下标
     private final Route path; // 缺失值在 YAML 文档中的完整路径
     private final Class<?> targetType; // 缺失值原本需要解码成的 Java 类型

@@ -9,7 +9,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 表示 serializer 解码时 YAML 值存在, 但无法转换成目标 Java 类型.
  */
-public class InvalidNodeException extends RuntimeException {
+public class InvalidNodeException extends NodeParsingException {
 
     private final Route path; // 错误值在 YAML 文档中的路径
     private final Class<?> actualType; // 当前 YAML 节点或标量值对应的 Java 类型
