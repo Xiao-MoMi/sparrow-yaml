@@ -115,8 +115,8 @@ String firstUser = document.get(String.class, "users", 0);
 
 ```java
 document.set(Route.from("database", "host"), "localhost");
-document.set(Route.from("database", "ports"), java.util.List.of(3306, 3307));
-document.set(Route.from("database", "pool"), java.util.Map.of("size", 10));
+document.set(Route.from("database", "ports"), List.of(3306, 3307));
+document.set(Route.from("database", "pool"), Map.of("size", 10));
 ```
 
 写入 `Map` 会创建 `SectionNode`，写入 `List` 会创建 `SequenceNode`。写入列表越界索引时，中间空位会用空标量补齐。
@@ -265,8 +265,10 @@ var registry = yaml.serializers();
 
 当类型不能直接由内置规则转换时，通过 `NodeSerializers` 组合出 `NodeSerializer<T>`。
 它的定位接近 DataFixerUpper 的 `Codec<T>`：调用方不实现底层读写接口，而是从基础 serializer 出发，用
-`xmap`、`listOf`、`mapOf`、`fieldOf`、`element`、`group(...).apply(...)` 逐层拼装出目标类型。
-公开创建入口集中在 `NodeSerializers`；`NodeSerializer` 是不可继承的组合结果，不需要也不应该直接实现或调用底层读写工厂。
+`xmap`、`listOf`、`mapOf`、`fieldOf`、`element`、`group(...).apply(...)`、`forms(...)` 逐层拼装出目标类型。
+公开创建入口集中在 `NodeSerializers`；mapping、sequence、forms 等 builder 类型位于 `serializer.builder` 包，
+但推荐仍从 `NodeSerializers.mapping(...)`、`NodeSerializers.sequence(...)`、`NodeSerializers.forms(...)` 获取。
+`NodeSerializer` 是不可继承的组合结果，不需要也不应该直接实现或调用底层读写工厂。
 
 ```java
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
@@ -331,6 +333,59 @@ NodeSerializer<NamespacedKey> keySerializer = NodeSerializers.stringBacked(
 );
 ```
 
+如果同一个 Java 类型需要兼容多种 YAML 根形态，可以用 `forms(type)`：
+
+```java
+record BlockPos(int x, int y, int z) {
+    static BlockPos fromPackedLong(long value) {
+        int x = (int) (value / 1_000_000L);
+        int y = (int) ((value / 1_000L) % 1_000L);
+        int z = (int) (value % 1_000L);
+        return new BlockPos(x, y, z);
+    }
+
+    long asPackedLong() {
+        return x * 1_000_000L + y * 1_000L + z;
+    }
+}
+
+NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.forms(BlockPos.class)
+        .mapping("map", mapping -> mapping.group(
+                NodeSerializers.INT.fieldOf("x").forGetter(BlockPos::x),
+                NodeSerializers.INT.fieldOf("y").forGetter(BlockPos::y),
+                NodeSerializers.INT.fieldOf("z").forGetter(BlockPos::z)
+        ).apply(BlockPos::new))
+        .sequence("list", sequence -> sequence.group(
+                NodeSerializers.INT.element(0).forGetter(BlockPos::x),
+                NodeSerializers.INT.element(1).forGetter(BlockPos::y),
+                NodeSerializers.INT.element(2).forGetter(BlockPos::z)
+        ).apply(BlockPos::new))
+        .scalar("packed", NodeSerializers.LONG.xmap(BlockPos::fromPackedLong, BlockPos::asPackedLong))
+        .serializeAs("map")
+        .build();
+```
+
+上面的 serializer 可以读取这三种写法：
+
+```yaml
+map:
+  x: 1
+  y: 2
+  z: 3
+list: [1, 2, 3]
+packed: 1002003
+```
+
+`forms` 是 `mapping`、`sequence`、`stringBacked`/`xmap` 之上的兼容层：
+
+- `mapping(id, ...)` 注册 YAML object 根形态。
+- `sequence(id, ...)` 注册 YAML list 根形态。
+- `scalar(id, serializer)` 注册 YAML scalar 根形态，常用于 `stringBacked(...)` 或 `xmap(...)` 组合出的标量表示。
+- 每种根形态最多注册一个分支；分支 id 必须唯一。
+- `serializeAs(id)` 是必填项，且必须指向已注册分支；编码时始终使用该规范形态，不保留输入文件原本形态。
+- 解码时只按 YAML 根节点形态选择唯一分支；选中分支内部抛出的 `MissingNodeException` 或 `InvalidNodeException` 会原样抛出，不尝试其他形态。
+- 如果当前 YAML 根形态没有注册分支，会抛出 `InvalidNodeException`。
+
 字段和元素默认是必填。可以用 `defaulted(value)` 处理缺失值，也可以用 `optional()` 让缺失值解成 `null`：
 
 ```java
@@ -343,7 +398,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
         .apply(BlockPos::new);
 ```
 
-`defaulted(value)` 和 `optional()` 只处理缺失字段或缺失元素；如果 YAML 中存在该值但类型错误，仍然按失败处理。
+`defaulted(value)` 和 `optional()` 只处理缺失字段；如果 YAML 中存在该值但类型错误，仍然按失败处理。
 需要兜底错误值时使用 `onFail(...)`：
 
 ```java
@@ -386,6 +441,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 - `fieldOf(name)` / `element(index)`：声明 mapping/sequence 的字段或元素，可接 `defaulted(value)`、`optional()` 或 `onFail(...)`。
 - `NodeSerializers.mapping(type)` / `NodeSerializers.sequence(type)`：通过 `group(...).apply(...)` 组合对象。
 - `NodeSerializers.stringBacked(read, write)`：处理字符串承载的值对象。
+- `NodeSerializers.forms(type)`：为同一个 Java 类型注册 mapping、sequence、scalar 多种 YAML 根形态，并指定规范编码形态。
 - `NodeSerializers.lazy(...)`：处理递归类型。
 
 ### 自动创建序列化器

@@ -1,4 +1,4 @@
-package net.momirealms.sparrow.yaml.serializer;
+package net.momirealms.sparrow.yaml.serializer.builder;
 
 public final class NodeSerializerFunctions {
 

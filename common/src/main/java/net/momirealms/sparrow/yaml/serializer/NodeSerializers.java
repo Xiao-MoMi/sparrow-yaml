@@ -6,6 +6,9 @@ import net.momirealms.sparrow.yaml.node.ScalarNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import net.momirealms.sparrow.yaml.serializer.builder.MappingBuilder;
+import net.momirealms.sparrow.yaml.serializer.builder.NodeSerializerForms;
+import net.momirealms.sparrow.yaml.serializer.builder.SequenceBuilder;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -23,7 +26,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -222,7 +224,6 @@ public final class NodeSerializers {
      * 创建枚举 serializer, 解码时忽略大小写, 编码时写出 enum.name().
      */
     public static <E extends Enum<E>> NodeSerializer<E> enumCodec(Class<E> enumClass) {
-        Objects.requireNonNull(enumClass, "enumClass");
         E[] constants = enumClass.getEnumConstants();
         Map<String, E> map = new LinkedHashMap<>(Math.max((int) (constants.length / 0.75f) + 1, 16));
         for (E constant : constants) {
@@ -293,7 +294,6 @@ public final class NodeSerializers {
      * 创建基于 YAML Section 的对象 builder.
      */
     public static <T> MappingBuilder<T> mapping(Class<T> type) {
-        Objects.requireNonNull(type, "type");
         return new MappingBuilder<>(type);
     }
 
@@ -301,8 +301,14 @@ public final class NodeSerializers {
      * 创建基于 YAML Sequence 的对象 builder.
      */
     public static <T> SequenceBuilder<T> sequence(Class<T> type) {
-        Objects.requireNonNull(type, "type");
         return new SequenceBuilder<>(type);
+    }
+
+    /**
+     * 创建支持多种 YAML 根形态的 forms builder.
+     */
+    public static <T> NodeSerializerForms.Builder<T> forms(Class<T> type) {
+        return NodeSerializerForms.builder(type);
     }
 
     private static Object scalarValue(YamlNode<?> node, Class<?> targetType) {
@@ -355,336 +361,5 @@ public final class NodeSerializers {
                 return null;
             }
         };
-    }
-
-    /**
-     * mapping builder 中的单个字段声明.
-     */
-    public static final class Field<A> {
-        private final String name; // YAML 字段名
-        private final NodeSerializer<A> serializer; // 字段值 serializer
-        private final boolean hasDefault; // 缺失时是否有固定默认值
-        private final A defaultValue; // 缺失字段的固定默认值
-        private final boolean optional; // 缺失时是否允许 null
-        private final Function<? super RuntimeException, ? extends A> failureHandler; // 缺失或错误值的兜底函数
-
-        Field(
-                String name,
-                NodeSerializer<A> serializer,
-                boolean hasDefault,
-                A defaultValue,
-                boolean optional,
-                Function<? super RuntimeException, ? extends A> failureHandler
-        ) {
-            this.name = Objects.requireNonNull(name, "name");
-            this.serializer = Objects.requireNonNull(serializer, "serializer");
-            this.hasDefault = hasDefault;
-            this.defaultValue = defaultValue;
-            this.optional = optional;
-            this.failureHandler = failureHandler;
-        }
-
-        /**
-         * 字段缺失时使用固定默认值.
-         */
-        public Field<A> defaulted(A value) {
-            return new Field<>(name, serializer, true, value, false, failureHandler);
-        }
-
-        /**
-         * 字段缺失时返回 null.
-         */
-        public Field<A> optional() {
-            return new Field<>(name, serializer, false, null, true, failureHandler);
-        }
-
-        /**
-         * 字段缺失或字段值错误时, 调用 handler 生成兜底值.
-         */
-        public Field<A> onFail(Function<? super RuntimeException, ? extends A> handler) {
-            return new Field<>(name, serializer, hasDefault, defaultValue, optional, Objects.requireNonNull(handler, "handler"));
-        }
-
-        /**
-         * 绑定编码时从目标对象读取字段值的 getter.
-         */
-        public <T> FieldComponent<T, A> forGetter(Function<? super T, ? extends A> getter) {
-            return new FieldComponent<>(name, serializer, hasDefault, defaultValue, optional, failureHandler, getter);
-        }
-    }
-
-    /**
-     * sequence builder 中的单个元素声明.
-     */
-    public static final class Element<A> {
-        private final int index; // YAML 序列下标
-        private final NodeSerializer<A> serializer; // 元素值 serializer
-        private final boolean hasDefault; // 缺失时是否有固定默认值
-        private final A defaultValue; // 缺失元素的固定默认值
-        private final boolean optional; // 缺失时是否允许 null
-        private final Function<? super RuntimeException, ? extends A> failureHandler; // 缺失或错误值的兜底函数
-
-        Element(
-                int index,
-                NodeSerializer<A> serializer,
-                boolean hasDefault,
-                A defaultValue,
-                boolean optional,
-                Function<? super RuntimeException, ? extends A> failureHandler
-        ) {
-            if (index < 0) {
-                throw new IllegalArgumentException("index must be >= 0");
-            }
-            this.index = index;
-            this.serializer = Objects.requireNonNull(serializer, "serializer");
-            this.hasDefault = hasDefault;
-            this.defaultValue = defaultValue;
-            this.optional = optional;
-            this.failureHandler = failureHandler;
-        }
-
-        /**
-         * 元素缺失时使用固定默认值, 元素存在但值错误时仍按失败处理.
-         */
-        public Element<A> defaulted(A value) {
-            return new Element<>(index, serializer, true, value, false, failureHandler);
-        }
-
-        /**
-         * 元素缺失时返回 null, 元素存在但值错误时仍按失败处理.
-         */
-        public Element<A> optional() {
-            return new Element<>(index, serializer, false, null, true, failureHandler);
-        }
-
-        /**
-         * 元素缺失或元素值错误时, 调用 handler 生成兜底值.
-         */
-        public Element<A> onFail(Function<? super RuntimeException, ? extends A> handler) {
-            return new Element<>(index, serializer, hasDefault, defaultValue, optional, Objects.requireNonNull(handler, "handler"));
-        }
-
-        /**
-         * 绑定编码时从目标对象读取元素值的 getter.
-         */
-        public <T> ElementComponent<T, A> forGetter(Function<? super T, ? extends A> getter) {
-            return new ElementComponent<>(index, serializer, hasDefault, defaultValue, optional, failureHandler, getter);
-        }
-    }
-
-    /**
-     * mapping builder 的字段组件, 负责单个字段的读写.
-     */
-    public static final class FieldComponent<T, A> implements NodeSerializerComponent<T, A> {
-        private final String name; // YAML 字段名
-        private final NodeSerializer<A> serializer; // 字段值 serializer
-        private final boolean hasDefault; // 缺失时是否使用固定默认值
-        private final A defaultValue; // 缺失字段的固定默认值
-        private final boolean optional; // 缺失时是否允许 null
-        private final Function<? super RuntimeException, ? extends A> failureHandler; // 兜底函数
-        private final Function<? super T, ? extends A> getter; // 编码时读取目标对象字段值
-
-        private FieldComponent(
-                String name,
-                NodeSerializer<A> serializer,
-                boolean hasDefault,
-                A defaultValue,
-                boolean optional,
-                Function<? super RuntimeException, ? extends A> failureHandler,
-                Function<? super T, ? extends A> getter
-        ) {
-            this.name = name;
-            this.serializer = serializer;
-            this.hasDefault = hasDefault;
-            this.defaultValue = defaultValue;
-            this.optional = optional;
-            this.failureHandler = failureHandler;
-            this.getter = Objects.requireNonNull(getter, "getter");
-        }
-
-        @Override
-        public NodeSerializerDecodeResult decode(YamlNode<?> node) {
-            if (!(node instanceof SectionNode section)) {
-                return NodeSerializerDecodeResult.failed();
-            }
-
-            YamlNode<?> child = section.getNodeOrNull(name);
-            if (child == null) {
-                if (hasDefault) {
-                    return NodeSerializerDecodeResult.success(defaultValue);
-                }
-                if (optional) {
-                    return NodeSerializerDecodeResult.success(null);
-                }
-                return fallback(new MissingNodeException(name, node, serializer.targetType()));
-            }
-
-            A decoded;
-            try {
-                decoded = serializer.deserialize(child);
-            } catch (MissingNodeException | InvalidNodeException e) {
-                return fallback(e);
-            }
-            if (decoded == null) {
-                return fallback(new InvalidNodeException(child, serializer.targetType()));
-            }
-            return NodeSerializerDecodeResult.success(decoded);
-        }
-
-        @Override
-        public void encode(T source, Object target) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) target;
-            map.put(name, serializer.serialize(getter.apply(source)));
-        }
-
-        private NodeSerializerDecodeResult fallback(RuntimeException failure) {
-            return NodeSerializers.fallback(failureHandler, failure);
-        }
-    }
-
-    /**
-     * sequence builder 的元素组件, 负责单个下标的读写.
-     */
-    public static final class ElementComponent<T, A> implements NodeSerializerComponent<T, A> {
-        private final int index; // YAML 序列下标
-        private final NodeSerializer<A> serializer; // 元素值 serializer
-        private final boolean hasDefault; // 缺失时是否使用固定默认值
-        private final A defaultValue; // 缺失元素的固定默认值
-        private final boolean optional; // 缺失时是否允许 null
-        private final Function<? super RuntimeException, ? extends A> failureHandler; // 兜底函数
-        private final Function<? super T, ? extends A> getter; // 编码时读取目标对象元素值
-
-        private ElementComponent(
-                int index,
-                NodeSerializer<A> serializer,
-                boolean hasDefault,
-                A defaultValue,
-                boolean optional,
-                Function<? super RuntimeException, ? extends A> failureHandler,
-                Function<? super T, ? extends A> getter
-        ) {
-            this.index = index;
-            this.serializer = serializer;
-            this.hasDefault = hasDefault;
-            this.defaultValue = defaultValue;
-            this.optional = optional;
-            this.failureHandler = failureHandler;
-            this.getter = Objects.requireNonNull(getter, "getter");
-        }
-
-        @Override
-        public NodeSerializerDecodeResult decode(YamlNode<?> node) {
-            if (!(node instanceof SequenceNode sequence)) {
-                return NodeSerializerDecodeResult.failed();
-            }
-            if (index >= sequence.size()) {
-                if (hasDefault) {
-                    return NodeSerializerDecodeResult.success(defaultValue);
-                }
-                if (optional) {
-                    return NodeSerializerDecodeResult.success(null);
-                }
-                return fallback(new MissingNodeException(index, node, serializer.targetType()));
-            }
-
-            YamlNode<?> child = sequence.value().get(index);
-            A decoded;
-            try {
-                decoded = serializer.deserialize(child);
-            } catch (MissingNodeException | InvalidNodeException e) {
-                return fallback(e);
-            }
-            if (decoded == null) {
-                return fallback(new InvalidNodeException(child, serializer.targetType()));
-            }
-            return NodeSerializerDecodeResult.success(decoded);
-        }
-
-        @Override
-        public void encode(T source, Object target) {
-            @SuppressWarnings("unchecked")
-            List<Object> list = (List<Object>) target;
-            list.set(index, serializer.serialize(getter.apply(source)));
-        }
-
-        int index() {
-            return index;
-        }
-
-        private NodeSerializerDecodeResult fallback(RuntimeException failure) {
-            return NodeSerializers.fallback(failureHandler, failure);
-        }
-    }
-
-    private static <A> NodeSerializerDecodeResult fallback(
-            Function<? super RuntimeException, ? extends A> failureHandler,
-            RuntimeException failure
-    ) {
-        if (failureHandler == null) {
-            throw failure;
-        }
-        try {
-            A value = failureHandler.apply(failure);
-            return value == null ? NodeSerializerDecodeResult.failed() : NodeSerializerDecodeResult.success(value);
-        } catch (Exception e) {
-            return NodeSerializerDecodeResult.failed();
-        }
-    }
-
-    /**
-     * mapping builder, 通过字段 group 拼装对象 serializer.
-     */
-    public static final class MappingBuilder<T> {
-        private final Class<T> type; // group 最终构造出的 Java 类型
-
-        private MappingBuilder(Class<T> type) {
-            this.type = type;
-        }
-
-        public <A> NodeSerializerGroups.Group1<T, A> group(FieldComponent<T, A> a) { return new NodeSerializerGroups.Group1<>(type, true, List.of(a)); }
-        public <A, B> NodeSerializerGroups.Group2<T, A, B> group(FieldComponent<T, A> a, FieldComponent<T, B> b) { return new NodeSerializerGroups.Group2<>(type, true, List.of(a, b)); }
-        public <A, B, C> NodeSerializerGroups.Group3<T, A, B, C> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c) { return new NodeSerializerGroups.Group3<>(type, true, List.of(a, b, c)); }
-        public <A, B, C, D> NodeSerializerGroups.Group4<T, A, B, C, D> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d) { return new NodeSerializerGroups.Group4<>(type, true, List.of(a, b, c, d)); }
-        public <A, B, C, D, E> NodeSerializerGroups.Group5<T, A, B, C, D, E> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e) { return new NodeSerializerGroups.Group5<>(type, true, List.of(a, b, c, d, e)); }
-        public <A, B, C, D, E, F> NodeSerializerGroups.Group6<T, A, B, C, D, E, F> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f) { return new NodeSerializerGroups.Group6<>(type, true, List.of(a, b, c, d, e, f)); }
-        public <A, B, C, D, E, F, G> NodeSerializerGroups.Group7<T, A, B, C, D, E, F, G> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g) { return new NodeSerializerGroups.Group7<>(type, true, List.of(a, b, c, d, e, f, g)); }
-        public <A, B, C, D, E, F, G, H> NodeSerializerGroups.Group8<T, A, B, C, D, E, F, G, H> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h) { return new NodeSerializerGroups.Group8<>(type, true, List.of(a, b, c, d, e, f, g, h)); }
-        public <A, B, C, D, E, F, G, H, I> NodeSerializerGroups.Group9<T, A, B, C, D, E, F, G, H, I> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h, FieldComponent<T, I> i) { return new NodeSerializerGroups.Group9<>(type, true, List.of(a, b, c, d, e, f, g, h, i)); }
-        public <A, B, C, D, E, F, G, H, I, J> NodeSerializerGroups.Group10<T, A, B, C, D, E, F, G, H, I, J> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h, FieldComponent<T, I> i, FieldComponent<T, J> j) { return new NodeSerializerGroups.Group10<>(type, true, List.of(a, b, c, d, e, f, g, h, i, j)); }
-        public <A, B, C, D, E, F, G, H, I, J, K> NodeSerializerGroups.Group11<T, A, B, C, D, E, F, G, H, I, J, K> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h, FieldComponent<T, I> i, FieldComponent<T, J> j, FieldComponent<T, K> k) { return new NodeSerializerGroups.Group11<>(type, true, List.of(a, b, c, d, e, f, g, h, i, j, k)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L> NodeSerializerGroups.Group12<T, A, B, C, D, E, F, G, H, I, J, K, L> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h, FieldComponent<T, I> i, FieldComponent<T, J> j, FieldComponent<T, K> k, FieldComponent<T, L> l) { return new NodeSerializerGroups.Group12<>(type, true, List.of(a, b, c, d, e, f, g, h, i, j, k, l)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L, M> NodeSerializerGroups.Group13<T, A, B, C, D, E, F, G, H, I, J, K, L, M> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h, FieldComponent<T, I> i, FieldComponent<T, J> j, FieldComponent<T, K> k, FieldComponent<T, L> l, FieldComponent<T, M> m) { return new NodeSerializerGroups.Group13<>(type, true, List.of(a, b, c, d, e, f, g, h, i, j, k, l, m)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L, M, N> NodeSerializerGroups.Group14<T, A, B, C, D, E, F, G, H, I, J, K, L, M, N> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h, FieldComponent<T, I> i, FieldComponent<T, J> j, FieldComponent<T, K> k, FieldComponent<T, L> l, FieldComponent<T, M> m, FieldComponent<T, N> n) { return new NodeSerializerGroups.Group14<>(type, true, List.of(a, b, c, d, e, f, g, h, i, j, k, l, m, n)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L, M, N, O> NodeSerializerGroups.Group15<T, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h, FieldComponent<T, I> i, FieldComponent<T, J> j, FieldComponent<T, K> k, FieldComponent<T, L> l, FieldComponent<T, M> m, FieldComponent<T, N> n, FieldComponent<T, O> o) { return new NodeSerializerGroups.Group15<>(type, true, List.of(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P> NodeSerializerGroups.Group16<T, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P> group(FieldComponent<T, A> a, FieldComponent<T, B> b, FieldComponent<T, C> c, FieldComponent<T, D> d, FieldComponent<T, E> e, FieldComponent<T, F> f, FieldComponent<T, G> g, FieldComponent<T, H> h, FieldComponent<T, I> i, FieldComponent<T, J> j, FieldComponent<T, K> k, FieldComponent<T, L> l, FieldComponent<T, M> m, FieldComponent<T, N> n, FieldComponent<T, O> o, FieldComponent<T, P> p) { return new NodeSerializerGroups.Group16<>(type, true, List.of(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)); }
-    }
-
-    /**
-     * sequence builder, 通过元素 group 拼装对象 serializer.
-     */
-    public static final class SequenceBuilder<T> {
-        private final Class<T> type; // group 最终构造出的 Java 类型
-
-        private SequenceBuilder(Class<T> type) {
-            this.type = type;
-        }
-
-        public <A> NodeSerializerGroups.Group1<T, A> group(ElementComponent<T, A> a) { return new NodeSerializerGroups.Group1<>(type, false, List.of(a)); }
-        public <A, B> NodeSerializerGroups.Group2<T, A, B> group(ElementComponent<T, A> a, ElementComponent<T, B> b) { return new NodeSerializerGroups.Group2<>(type, false, List.of(a, b)); }
-        public <A, B, C> NodeSerializerGroups.Group3<T, A, B, C> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c) { return new NodeSerializerGroups.Group3<>(type, false, List.of(a, b, c)); }
-        public <A, B, C, D> NodeSerializerGroups.Group4<T, A, B, C, D> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d) { return new NodeSerializerGroups.Group4<>(type, false, List.of(a, b, c, d)); }
-        public <A, B, C, D, E> NodeSerializerGroups.Group5<T, A, B, C, D, E> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e) { return new NodeSerializerGroups.Group5<>(type, false, List.of(a, b, c, d, e)); }
-        public <A, B, C, D, E, F> NodeSerializerGroups.Group6<T, A, B, C, D, E, F> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f) { return new NodeSerializerGroups.Group6<>(type, false, List.of(a, b, c, d, e, f)); }
-        public <A, B, C, D, E, F, G> NodeSerializerGroups.Group7<T, A, B, C, D, E, F, G> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g) { return new NodeSerializerGroups.Group7<>(type, false, List.of(a, b, c, d, e, f, g)); }
-        public <A, B, C, D, E, F, G, H> NodeSerializerGroups.Group8<T, A, B, C, D, E, F, G, H> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h) { return new NodeSerializerGroups.Group8<>(type, false, List.of(a, b, c, d, e, f, g, h)); }
-        public <A, B, C, D, E, F, G, H, I> NodeSerializerGroups.Group9<T, A, B, C, D, E, F, G, H, I> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h, ElementComponent<T, I> i) { return new NodeSerializerGroups.Group9<>(type, false, List.of(a, b, c, d, e, f, g, h, i)); }
-        public <A, B, C, D, E, F, G, H, I, J> NodeSerializerGroups.Group10<T, A, B, C, D, E, F, G, H, I, J> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h, ElementComponent<T, I> i, ElementComponent<T, J> j) { return new NodeSerializerGroups.Group10<>(type, false, List.of(a, b, c, d, e, f, g, h, i, j)); }
-        public <A, B, C, D, E, F, G, H, I, J, K> NodeSerializerGroups.Group11<T, A, B, C, D, E, F, G, H, I, J, K> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h, ElementComponent<T, I> i, ElementComponent<T, J> j, ElementComponent<T, K> k) { return new NodeSerializerGroups.Group11<>(type, false, List.of(a, b, c, d, e, f, g, h, i, j, k)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L> NodeSerializerGroups.Group12<T, A, B, C, D, E, F, G, H, I, J, K, L> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h, ElementComponent<T, I> i, ElementComponent<T, J> j, ElementComponent<T, K> k, ElementComponent<T, L> l) { return new NodeSerializerGroups.Group12<>(type, false, List.of(a, b, c, d, e, f, g, h, i, j, k, l)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L, M> NodeSerializerGroups.Group13<T, A, B, C, D, E, F, G, H, I, J, K, L, M> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h, ElementComponent<T, I> i, ElementComponent<T, J> j, ElementComponent<T, K> k, ElementComponent<T, L> l, ElementComponent<T, M> m) { return new NodeSerializerGroups.Group13<>(type, false, List.of(a, b, c, d, e, f, g, h, i, j, k, l, m)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L, M, N> NodeSerializerGroups.Group14<T, A, B, C, D, E, F, G, H, I, J, K, L, M, N> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h, ElementComponent<T, I> i, ElementComponent<T, J> j, ElementComponent<T, K> k, ElementComponent<T, L> l, ElementComponent<T, M> m, ElementComponent<T, N> n) { return new NodeSerializerGroups.Group14<>(type, false, List.of(a, b, c, d, e, f, g, h, i, j, k, l, m, n)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L, M, N, O> NodeSerializerGroups.Group15<T, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h, ElementComponent<T, I> i, ElementComponent<T, J> j, ElementComponent<T, K> k, ElementComponent<T, L> l, ElementComponent<T, M> m, ElementComponent<T, N> n, ElementComponent<T, O> o) { return new NodeSerializerGroups.Group15<>(type, false, List.of(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)); }
-        public <A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P> NodeSerializerGroups.Group16<T, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P> group(ElementComponent<T, A> a, ElementComponent<T, B> b, ElementComponent<T, C> c, ElementComponent<T, D> d, ElementComponent<T, E> e, ElementComponent<T, F> f, ElementComponent<T, G> g, ElementComponent<T, H> h, ElementComponent<T, I> i, ElementComponent<T, J> j, ElementComponent<T, K> k, ElementComponent<T, L> l, ElementComponent<T, M> m, ElementComponent<T, N> n, ElementComponent<T, O> o, ElementComponent<T, P> p) { return new NodeSerializerGroups.Group16<>(type, false, List.of(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)); }
     }
 }

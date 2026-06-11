@@ -534,6 +534,17 @@ class SparrowYamlTest {
             public List<Integer> toList() {
                 return List.of(x, y, z);
             }
+
+            static Block fromPackedLong(long value) {
+                int x = (int) (value / 1_000_000L);
+                int y = (int) ((value / 1_000L) % 1_000L);
+                int z = (int) (value % 1_000L);
+                return new Block(x, y, z);
+            }
+
+            long asPackedLong() {
+                return x * 1_000_000L + y * 1_000L + z;
+            }
         }
 
         record NamedValue(String value) {}
@@ -541,6 +552,23 @@ class SparrowYamlTest {
         enum Mode {
             EASY,
             HARD
+        }
+
+        private NodeSerializer<Block> blockFormsCodec(String serializeAs) {
+            return NodeSerializers.forms(Block.class)
+                    .mapping("map", mapping -> mapping.group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x),
+                            NodeSerializers.INT.fieldOf("y").forGetter(Block::y),
+                            NodeSerializers.INT.fieldOf("z").forGetter(Block::z)
+                    ).apply(Block::new))
+                    .sequence("list", sequence -> sequence.group(
+                            NodeSerializers.INT.element(0).forGetter(Block::x),
+                            NodeSerializers.INT.element(1).forGetter(Block::y),
+                            NodeSerializers.INT.element(2).forGetter(Block::z)
+                    ).apply(Block::new))
+                    .scalar("packed", NodeSerializers.LONG.xmap(Block::fromPackedLong, Block::asPackedLong))
+                    .serializeAs(serializeAs)
+                    .build();
         }
 
         @Test
@@ -1181,6 +1209,138 @@ class SparrowYamlTest {
 
             yamlDocument.setAndGet(namedValueCodec, new NamedValue("dog"), "encoded");
             assertEquals("name:dog", yamlDocument.get(NodeSerializers.STRING, "encoded"));
+        }
+
+        @Test
+        void should_DecodeMappingSequenceAndScalar_When_UsingFormsBuilder() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> blockCodec = blockFormsCodec("map");
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            map:
+              x: 1
+              y: 2
+              z: 3
+            list: [4, 5, 6]
+            packed: 7008009
+            """);
+
+            assertEquals(new Block(1, 2, 3), yamlDocument.get(blockCodec, "map"));
+            assertEquals(new Block(4, 5, 6), yamlDocument.get(blockCodec, "list"));
+            assertEquals(new Block(7, 8, 9), yamlDocument.get(blockCodec, "packed"));
+        }
+
+        @Test
+        void should_SerializeCanonicalMapping_When_FormsSerializeAsMap() {
+            NodeSerializer<Block> blockCodec = blockFormsCodec("map");
+
+            Map<?, ?> encoded = assertInstanceOf(Map.class, blockCodec.serialize(new Block(1, 2, 3)));
+
+            assertEquals(1, encoded.get("x"));
+            assertEquals(2, encoded.get("y"));
+            assertEquals(3, encoded.get("z"));
+        }
+
+        @Test
+        void should_SerializeCanonicalSequence_When_FormsSerializeAsList() {
+            NodeSerializer<Block> blockCodec = blockFormsCodec("list");
+
+            assertEquals(List.of(1, 2, 3), blockCodec.serialize(new Block(1, 2, 3)));
+        }
+
+        @Test
+        void should_SerializeCanonicalScalar_When_FormsSerializeAsScalar() {
+            NodeSerializer<Block> blockCodec = blockFormsCodec("packed");
+
+            assertEquals(1_002_003L, blockCodec.serialize(new Block(1, 2, 3)));
+        }
+
+        @Test
+        void should_KeepBranchException_When_FormsSelectedBranchFails() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> blockCodec = blockFormsCodec("map");
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            missing:
+              x: 1
+              z: 3
+            invalid-list: [1, nope, 3]
+            invalid-scalar: nope
+            """);
+
+            MissingNodeException missing = assertThrows(
+                    MissingNodeException.class,
+                    () -> yamlDocument.get(blockCodec, "missing")
+            );
+            assertEquals("y", missing.key());
+            assertEquals(Route.from("missing", "y"), missing.path());
+            assertEquals(Integer.class, missing.targetType());
+
+            InvalidNodeException listFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(blockCodec, "invalid-list")
+            );
+            assertEquals(Route.from("invalid-list", 1), listFailure.path());
+            assertEquals(String.class, listFailure.actualType());
+            assertEquals(Integer.class, listFailure.targetType());
+
+            InvalidNodeException scalarFailure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(blockCodec, "invalid-scalar")
+            );
+            assertEquals(Route.from("invalid-scalar"), scalarFailure.path());
+            assertEquals(String.class, scalarFailure.actualType());
+            assertEquals(Long.class, scalarFailure.targetType());
+        }
+
+        @Test
+        void should_ThrowInvalidException_When_FormsHasNoBranchForRootShape() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Block> mappingOnly = NodeSerializers.forms(Block.class)
+                    .mapping("map", mapping -> mapping.group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x),
+                            NodeSerializers.INT.fieldOf("y").forGetter(Block::y),
+                            NodeSerializers.INT.fieldOf("z").forGetter(Block::z)
+                    ).apply(Block::new))
+                    .serializeAs("map")
+                    .build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            block: [1, 2, 3]
+            """);
+
+            InvalidNodeException failure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> yamlDocument.get(mappingOnly, "block")
+            );
+            assertEquals(Route.from("block"), failure.path());
+            assertEquals(SequenceNode.class, failure.actualType());
+            assertEquals(Block.class, failure.targetType());
+        }
+
+        @Test
+        void should_FailFast_When_FormsBuilderConfigurationIsInvalid() {
+            assertThrows(IllegalArgumentException.class, () -> NodeSerializers.forms(Block.class)
+                    .mapping("map", mapping -> mapping.group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x)
+                    ).apply(x -> new Block(x, 0, 0)))
+                    .sequence("map", sequence -> sequence.group(
+                            NodeSerializers.INT.element(0).forGetter(Block::x)
+                    ).apply(x -> new Block(x, 0, 0))));
+
+            assertThrows(IllegalArgumentException.class, () -> NodeSerializers.forms(Block.class)
+                    .mapping("first", mapping -> mapping.group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x)
+                    ).apply(x -> new Block(x, 0, 0)))
+                    .mapping("second", mapping -> mapping.group(
+                            NodeSerializers.INT.fieldOf("x").forGetter(Block::x)
+                    ).apply(x -> new Block(x, 0, 0))));
+
+            assertThrows(IllegalStateException.class, () -> NodeSerializers.forms(Block.class)
+                    .scalar("packed", NodeSerializers.LONG.xmap(Block::fromPackedLong, Block::asPackedLong))
+                    .build());
+
+            assertThrows(IllegalArgumentException.class, () -> NodeSerializers.forms(Block.class)
+                    .scalar("packed", NodeSerializers.LONG.xmap(Block::fromPackedLong, Block::asPackedLong))
+                    .serializeAs("missing")
+                    .build());
         }
 
         @Test

@@ -5,6 +5,8 @@ import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import net.momirealms.sparrow.yaml.serializer.builder.Element;
+import net.momirealms.sparrow.yaml.serializer.builder.Field;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -212,15 +214,15 @@ public final class NodeSerializer<T> {
     /**
      * 将当前 serializer 声明为 mapping builder 中的字段.
      */
-    public NodeSerializers.Field<T> fieldOf(String name) {
-        return new NodeSerializers.Field<>(name, this, false, null, false, null);
+    public Field<T> fieldOf(String name) {
+        return new Field<>(name, this, false, null, false, null);
     }
 
     /**
      * 将当前 serializer 声明为 sequence builder 中的元素.
      */
-    public NodeSerializers.Element<T> element(int index) {
-        return new NodeSerializers.Element<>(index, this, false, null, false, null);
+    public Element<T> element(int index) {
+        return new Element<>(index, this, false, null, false, null);
     }
 
     /**

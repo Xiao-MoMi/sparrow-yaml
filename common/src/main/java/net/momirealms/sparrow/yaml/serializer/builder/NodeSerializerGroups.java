@@ -1,9 +1,10 @@
-package net.momirealms.sparrow.yaml.serializer;
+package net.momirealms.sparrow.yaml.serializer.builder;
 
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
+import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -262,7 +263,7 @@ public final class NodeSerializerGroups {
     private static List<Object> sequenceTarget(List<? extends NodeSerializerComponent<?, ?>> components) {
         int max = -1;
         for (NodeSerializerComponent<?, ?> component : components) {
-            if (component instanceof NodeSerializers.ElementComponent<?, ?> element) {
+            if (component instanceof ElementComponent<?, ?> element) {
                 max = Math.max(max, element.index());
             }
         }
