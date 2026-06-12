@@ -1,5 +1,7 @@
 package net.momirealms.sparrow.yaml.serializer;
 
+import net.momirealms.sparrow.yaml.exception.AlternativesNodeException;
+import net.momirealms.sparrow.yaml.exception.AlternativesNodeException.Failure;
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
@@ -16,46 +18,39 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-/**
- * 不透明的 YAML 节点序列化器.
- *
- * <p>调用方只能通过 {@link NodeSerializers} 和本类提供的组合方法创建实例, 不能自行实现该类型.</p>
- *
- * @param <T> 目标 Java 类型
- */
 public final class NodeSerializer<T> {
-
+    private final Class<?> clazz;
     private final Decoder<T> decoder;
     private final Encoder<T> encoder;
-    private final Class<?> targetType; // 当前 serializer 期望解码出的 Java 类型
+    private final List<Decoder<T>> alternatives; // 只读候选, 不包含 primary
 
-    private NodeSerializer(Class<?> targetType, Decoder<T> decoder, Encoder<T> encoder) {
-        this.targetType = Objects.requireNonNull(targetType, "targetType");
-        this.decoder = Objects.requireNonNull(decoder, "decoder");
-        this.encoder = Objects.requireNonNull(encoder, "encoder");
+    private NodeSerializer(Class<?> clazz, Decoder<T> decoder, Encoder<T> encoder, List<Decoder<T>> alternatives) {
+        this.clazz = clazz;
+        this.decoder = decoder;
+        this.encoder = encoder;
+        this.alternatives = List.copyOf(alternatives);
     }
 
     @ApiStatus.Internal
-    public static <T> NodeSerializer<T> createInternal(Class<?> targetType, Decoder<T> decoder, Encoder<T> encoder) {
-        return new NodeSerializer<>(targetType, decoder, encoder);
+    public static <T> NodeSerializer<T> createInternal(Class<?> clazz, Decoder<T> decoder, Encoder<T> encoder) {
+        return new NodeSerializer<>(clazz, decoder, encoder, List.of());
     }
 
     /**
      * 将 YAML 节点解码为目标 Java 值.
-     *
-     * <p>缺失或空值通常抛出解析异常.</p>
      */
     @NotNull
     public T deserialize(@Nullable YamlNode<?> node) {
-        T decoded = decoder.deserialize(node);
+        T decoded = alternatives.isEmpty()
+                ? decoder.deserialize(node)
+                : decodeWithAlternatives(node, clazz, decoder, alternatives);
         if (decoded == null) {
-            throw new InvalidNodeException(node, targetType);
+            throw new InvalidNodeException(node, clazz);
         }
         return decoded;
     }
@@ -70,7 +65,7 @@ public final class NodeSerializer<T> {
         }
         Object encoded = encoder.serialize(value);
         if (encoded == null) {
-            throw new InvalidNodeException(null, value.getClass(), targetType);
+            throw new InvalidNodeException(null, value.getClass(), clazz);
         }
         return encoded;
     }
@@ -79,39 +74,61 @@ public final class NodeSerializer<T> {
      * 返回当前 serializer 期望解码出的 Java 类型.
      */
     public Class<?> targetType() {
-        return targetType;
+        return clazz;
     }
 
     /**
      * 将当前 serializer 双向映射到另一个值类型.
      */
+    @SuppressWarnings("unchecked")
     public <R> NodeSerializer<R> xmap(Function<? super T, ? extends R> to, Function<? super R, ? extends T> from) {
-        return createInternal(
-                Object.class,
-                node -> {
-                    T decoded = NodeSerializer.this.deserialize(node);
-                    try {
-                        R result = to.apply(decoded);
-                        if (result == null) {
-                            throw new InvalidNodeException(node, Object.class);
-                        }
-                        return result;
-                    } catch (MissingNodeException | InvalidNodeException e) {
-                        throw e;
-                    } catch (Exception e) {
-                        throw new InvalidNodeException(node, Object.class, e);
-                    }
-                },
+        return xmap((Class<R>) Object.class, to, from);
+    }
+
+    /**
+     * 将当前 serializer 双向映射到指定目标类型.
+     */
+    public <R> NodeSerializer<R> xmap(Class<R> type, Function<? super T, ? extends R> to, Function<? super R, ? extends T> from) {
+        List<Decoder<R>> mappedAlternatives = new ArrayList<>(alternatives.size());
+        for (Decoder<T> alternative : alternatives) {
+            mappedAlternatives.add(node -> mapDecoded(node, type, alternative, to));
+        }
+        return new NodeSerializer<>(
+                type,
+                node -> mapDecoded(node, type, decoder, to),
                 value -> {
                     try {
                         return NodeSerializer.this.serialize(from.apply(value));
                     } catch (MissingNodeException | InvalidNodeException e) {
                         throw e;
                     } catch (Exception e) {
-                        throw new InvalidNodeException(null, value.getClass(), Object.class, e);
+                        throw new InvalidNodeException(null, value.getClass(), type, e);
                     }
-                }
+                },
+                mappedAlternatives
         );
+    }
+
+    /**
+     * 追加一个只读候选, 并将其结果转换为当前目标类型.
+     */
+    public <A> NodeSerializer<T> withAlternative(NodeSerializer<A> alternative, Function<? super A, ? extends T> converter) {
+        List<Decoder<T>> mergedAlternatives = new ArrayList<>(alternatives.size() + 1 + alternative.alternatives.size());
+        mergedAlternatives.addAll(alternatives);
+        mergedAlternatives.add(node -> mapDecoded(node, clazz, alternative.decoder, converter));
+        for (Decoder<A> candidate : alternative.alternatives) {
+            mergedAlternatives.add(node -> mapDecoded(node, clazz, candidate, converter));
+        }
+        return new NodeSerializer<>(
+                clazz,
+                decoder,
+                encoder,
+                mergedAlternatives
+        );
+    }
+
+    public <A extends T> NodeSerializer<T> withAlternative(NodeSerializer<A> alternative) {
+        return withAlternative(alternative, Function.identity());
     }
 
     /**
@@ -289,6 +306,65 @@ public final class NodeSerializer<T> {
                     }
                 }
         );
+    }
+
+    // 解码后执行值映射, 并把映射阶段的异常统一转为节点解析异常.
+    private static <A, R> R mapDecoded(YamlNode<?> node, Class<?> targetType, Decoder<A> decoder, Function<? super A, ? extends R> mapper) {
+        A decoded = decoder.deserialize(node);
+        if (decoded == null) {
+            throw new InvalidNodeException(node, targetType);
+        }
+        try {
+            R result = mapper.apply(decoded);
+            if (result == null) {
+                throw new InvalidNodeException(node, targetType);
+            }
+            return result;
+        } catch (MissingNodeException | InvalidNodeException e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new InvalidNodeException(node, targetType, e);
+        }
+    }
+
+    // 按 primary -> alternatives 的顺序尝试解码, 全部失败时保留原始失败列表.
+    private static <T> T decodeWithAlternatives(YamlNode<?> node, Class<?> targetType, Decoder<T> primary, List<Decoder<T>> alternatives) {
+        List<Failure> failures = new ArrayList<>(alternatives.size() + 1);
+        try {
+            return decodeCandidate(node, targetType, primary);
+        } catch (MissingNodeException | InvalidNodeException e) {
+            failures.add(new Failure(e));
+        }
+        for (Decoder<T> alternative : alternatives) {
+            try {
+                return decodeCandidate(node, targetType, alternative);
+            } catch (MissingNodeException | InvalidNodeException e) {
+                failures.add(new Failure(e));
+            }
+        }
+        // 全部失败
+        if (failures.size() == 1) {
+            throw failures.get(0).exception();
+        }
+        throw new AlternativesNodeException(node, targetType, failures, "Alternatives candidates failed: " + failureSummary(failures));
+    }
+
+    // 解码候选不能用 null 表示失败, null 会按无效节点处理.
+    private static <T> T decodeCandidate(YamlNode<?> node, Class<?> targetType, Decoder<T> decoder) {
+        T decoded = decoder.deserialize(node);
+        if (decoded == null) {
+            throw new InvalidNodeException(node, targetType);
+        }
+        return decoded;
+    }
+
+    // 生成面向日志的候选失败摘要.
+    private static String failureSummary(List<Failure> failures) {
+        List<String> messages = new ArrayList<>(failures.size());
+        for (int i = 0; i < failures.size(); i++) {
+            messages.add("#" + i + ": " + failures.get(i).message());
+        }
+        return String.join("; ", messages);
     }
 
     @FunctionalInterface

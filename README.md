@@ -265,10 +265,10 @@ var registry = yaml.serializers();
 
 当类型不能直接由内置规则转换时，通过 `NodeSerializers` 组合出 `NodeSerializer<T>`。
 它的定位接近 DataFixerUpper 的 `Codec<T>`：调用方不实现底层读写接口，而是从基础 serializer 出发，用
-`xmap`、`listOf`、`mapOf`、`required`、`optional`、`group(...).apply(...)`、`alternatives(...)`
+`xmap`、`listOf`、`mapOf`、`required`、`optional`、`group(...).apply(...)`、`withAlternative(...)`
 逐层拼装出目标类型。
-公开创建入口集中在 `NodeSerializers`；mapping、sequence、alternatives 等 builder 类型位于 `serializer.builder` 包，
-但推荐仍从 `NodeSerializers.mapping(...)`、`NodeSerializers.sequence(...)`、`NodeSerializers.alternatives(...)` 获取。
+公开创建入口集中在 `NodeSerializers`；mapping、sequence 等 builder 类型位于 `serializer.builder` 包，
+但推荐仍从 `NodeSerializers.mapping(...)`、`NodeSerializers.sequence(...)` 获取。
 `NodeSerializer` 是不可继承的组合结果，不需要也不应该直接实现或调用底层读写工厂。
 
 ```java
@@ -337,7 +337,7 @@ NodeSerializer<NamespacedKey> keySerializer = NodeSerializers.scalar(
 );
 ```
 
-如果同一个 Java 类型需要兼容多种 YAML 根形态，可以用 `alternatives(type)`：
+如果同一个 Java 类型需要兼容多种 YAML 写法，可以从规范写法的 `NodeSerializer` 出发追加只读 alternative：
 
 ```java
 record BlockPos(int x, int y, int z) {
@@ -346,10 +346,6 @@ record BlockPos(int x, int y, int z) {
         int y = (int) ((value / 1_000L) % 1_000L);
         int z = (int) (value % 1_000L);
         return new BlockPos(x, y, z);
-    }
-
-    long asPackedLong() {
-        return x * 1_000_000L + y * 1_000L + z;
     }
 
     static BlockPos fromCsv(String value) {
@@ -361,26 +357,24 @@ record BlockPos(int x, int y, int z) {
         );
     }
 
-    String asCsv() {
-        return x + "," + y + "," + z;
-    }
 }
 
-NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.alternatives(BlockPos.class)
-        .mapping("map", mapping -> mapping.group(
+NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.mapping(BlockPos.class)
+        .group(
                 NodeSerializers.INT.required("x").forGetter(BlockPos::x),
                 NodeSerializers.INT.optional("y", 64).forGetter(BlockPos::y),
                 NodeSerializers.INT.required("z").forGetter(BlockPos::z)
-        ).apply(BlockPos::new))
-        .sequence("list", sequence -> sequence.group(
-                NodeSerializers.INT.required(0).forGetter(BlockPos::x),
-                NodeSerializers.INT.optional(1, 64).forGetter(BlockPos::y),
-                NodeSerializers.INT.required(2).forGetter(BlockPos::z)
-        ).apply(BlockPos::new))
-        .scalar("packed", NodeSerializers.LONG.xmap(BlockPos::fromPackedLong, BlockPos::asPackedLong))
-        .scalar("csv", NodeSerializers.STRING.xmap(BlockPos::fromCsv, BlockPos::asCsv))
-        .writeAs("map")
-        .build();
+        )
+        .apply(BlockPos::new)
+        .withAlternative(NodeSerializers.sequence(BlockPos.class)
+                .group(
+                        NodeSerializers.INT.required(0).forGetter(BlockPos::x),
+                        NodeSerializers.INT.optional(1, 64).forGetter(BlockPos::y),
+                        NodeSerializers.INT.required(2).forGetter(BlockPos::z)
+                )
+                .apply(BlockPos::new))
+        .withAlternative(NodeSerializers.LONG, BlockPos::fromPackedLong)
+        .withAlternative(NodeSerializers.STRING, BlockPos::fromCsv);
 ```
 
 上面的 serializer 可以读取这四种写法：
@@ -395,15 +389,13 @@ packed: 1002003
 csv: "1,2,3"
 ```
 
-`alternatives` 是 `mapping`、`sequence`、`scalar`/`xmap` 之上的兼容层：
+primary alternative 是 `mapping`、`sequence`、`scalar`/`xmap` 之上的兼容层：
 
-- `mapping(id, ...)` 注册 YAML object 根形态。
-- `sequence(id, ...)` 注册 YAML list 根形态。
-- `scalar(id, serializer)` 注册 YAML scalar 根形态，常用于 `scalar(...)` 或 `xmap(...)` 组合出的标量表示。
-- 同一种根形态可以注册多个候选；候选按注册顺序尝试，首个成功分支胜出。
-- 分支 id 必须唯一。
-- `writeAs(id)` 是必填项，且必须指向已注册分支；编码时始终使用该规范形态，不保留输入文件原本形态。
-- 形态不匹配的候选会被跳过；单个同形态候选失败时会抛出原始异常，多个同形态候选全部失败时会抛出 `AlternativesNodeException`，并保留所有候选的原始异常和分支信息。
+- primary serializer 是规范写法；编码时始终使用 primary，不保留输入文件原本形态。
+- `withAlternative(...)` 追加只读候选；候选不做节点种类预过滤，而是按注册顺序逐个尝试。
+- alternative 可以传入完整 `NodeSerializer<A>` 和 `A -> T` 转换函数，因此 legacy 写法不需要提供反向 writer。
+- 同一种 YAML 写法可以追加多个候选；候选按追加顺序尝试，首个成功分支胜出。
+- 单个候选失败时会抛出原始异常，多个候选全部失败时会抛出 `AlternativesNodeException`，并按尝试顺序保留所有候选的原始异常。
 
 字段和元素的 presence 在入口处声明。YAML null 在字段/元素访问层等价于缺失：
 
@@ -464,7 +456,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 - `required(name/index)` / `optional(name/index)` / `optional(name/index, value)`：声明 mapping/sequence 的字段或元素 presence。
 - `NodeSerializers.mapping(type)` / `NodeSerializers.sequence(type)`：通过 `group(...).apply(...)` 组合对象。
 - `NodeSerializers.scalar(read, write)`：处理字符串承载的值对象。
-- `NodeSerializers.alternatives(type)`：为同一个 Java 类型注册 mapping、sequence、scalar 多种 YAML 根形态，并指定规范编码形态。
+- `withAlternative(...)`：为同一个 Java 类型追加只读 legacy 写法，编码始终使用 primary serializer。
 - `NodeSerializers.lazy(...)`：处理递归类型。
 
 ### 自动创建序列化器

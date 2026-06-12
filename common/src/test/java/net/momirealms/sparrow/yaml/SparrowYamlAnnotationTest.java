@@ -219,7 +219,10 @@ class SparrowYamlAnnotationTest {
                 users:
                   - "admin"
                 """, configPath -> {
-            InvalidNodeException failure = assertThrows(InvalidNodeException.class, () -> mapper.load(configPath));
+            InvalidNodeException failure = assertThrows(
+                    InvalidNodeException.class,
+                    () -> mapper.load(configPath)
+            );
 
             assertEquals(Route.from("server-port"), failure.path());
             assertEquals(SectionNode.class, failure.actualType());
@@ -240,7 +243,10 @@ class SparrowYamlAnnotationTest {
         withResourceFile("missing-required-constructor-config.yml", """
                 unused: true
                 """, configPath -> {
-            MissingNodeException failure = assertThrows(MissingNodeException.class, () -> mapper.load(configPath));
+            MissingNodeException failure = assertThrows(
+                    MissingNodeException.class,
+                    () -> mapper.load(configPath)
+            );
 
             assertEquals("server-port", failure.key());
             assertEquals(Route.from("server-port"), failure.path());

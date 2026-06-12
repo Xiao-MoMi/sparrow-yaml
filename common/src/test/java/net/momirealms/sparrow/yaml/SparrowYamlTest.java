@@ -573,22 +573,54 @@ class SparrowYamlTest {
             HARD
         }
 
-        private NodeSerializer<Block> blockAlternativesCodec(String writeAs) {
-            return NodeSerializers.alternatives(Block.class)
-                    .mapping("map", mapping -> mapping.group(
+        private NodeSerializer<Block> blockPrimaryMappingCodec() {
+            return NodeSerializers.mapping(Block.class)
+                    .group(
                             NodeSerializers.INT.required("x").forGetter(Block::x),
                             NodeSerializers.INT.required("y").forGetter(Block::y),
                             NodeSerializers.INT.required("z").forGetter(Block::z)
-                    ).apply(Block::new))
-                    .sequence("list", sequence -> sequence.group(
+                    )
+                    .apply(Block::new)
+                    .withAlternative(blockSequenceCodec())
+                    .withAlternative(NodeSerializers.LONG, Block::fromPackedLong)
+                    .withAlternative(NodeSerializers.STRING, Block::fromCsv);
+        }
+
+        private NodeSerializer<Block> blockSequenceCodec() {
+            return NodeSerializers.sequence(Block.class)
+                    .group(
                             NodeSerializers.INT.required(0).forGetter(Block::x),
                             NodeSerializers.INT.required(1).forGetter(Block::y),
                             NodeSerializers.INT.required(2).forGetter(Block::z)
-                    ).apply(Block::new))
-                    .scalar("packed", NodeSerializers.LONG.xmap(Block::fromPackedLong, Block::asPackedLong))
-                    .scalar("csv", NodeSerializers.STRING.xmap(Block::fromCsv, Block::asCsv))
-                    .writeAs(writeAs)
-                    .build();
+                    )
+                    .apply(Block::new);
+        }
+
+        private NodeSerializer<Block> blockPrimarySequenceCodec() {
+            return blockSequenceCodec()
+                    .withAlternative(NodeSerializers.mapping(Block.class)
+                            .group(
+                                    NodeSerializers.INT.required("x").forGetter(Block::x),
+                                    NodeSerializers.INT.required("y").forGetter(Block::y),
+                                    NodeSerializers.INT.required("z").forGetter(Block::z)
+                            )
+                            .apply(Block::new))
+                    .withAlternative(NodeSerializers.LONG, Block::fromPackedLong)
+                    .withAlternative(NodeSerializers.STRING, Block::fromCsv);
+        }
+
+        private NodeSerializer<Block> blockPrimaryScalarCodec() {
+            return NodeSerializers.LONG
+                    .xmap(Block.class, Block::fromPackedLong, Block::asPackedLong)
+                    .withAlternative(NodeSerializers.mapping(Block.class)
+                            .group(
+                                    NodeSerializers.INT.required("x").forGetter(Block::x),
+                                    NodeSerializers.INT.required("y").forGetter(Block::y),
+                                    NodeSerializers.INT.required("z").forGetter(Block::z)
+                            )
+                            .apply(Block::new))
+                    .withAlternative(blockSequenceCodec())
+                    .withAlternative(NodeSerializers.STRING, Block::fromCsv);
         }
 
         @Test
@@ -957,7 +989,7 @@ class SparrowYamlTest {
         }
 
         @Test
-        void should_ThrowInvalidException_When_BuilderRootNodeHasWrongShape() throws IOException {
+        void should_ThrowInvalidException_When_BuilderRootNodeKindIsWrong() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             NodeSerializer<Block> mappingCodec = NodeSerializers.mapping(Block.class)
                     .group(
@@ -1124,7 +1156,7 @@ class SparrowYamlTest {
         }
 
         @Test
-        void should_ThrowInvalidException_When_CollectionCombinatorRootShapeIsWrong() throws IOException {
+        void should_ThrowInvalidException_When_CollectionCombinatorRootNodeKindIsWrong() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             YamlDocument yamlDocument = sparrowYaml.load("""
             scalar: value
@@ -1416,9 +1448,9 @@ class SparrowYamlTest {
         }
 
         @Test
-        void should_DecodeMappingSequenceAndMultipleScalars_When_UsingAlternativesBuilder() throws IOException {
+        void should_DecodeMappingSequenceAndMultipleScalars_When_UsingPrimaryAlternatives() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
-            NodeSerializer<Block> blockCodec = blockAlternativesCodec("map");
+            NodeSerializer<Block> blockCodec = blockPrimaryMappingCodec();
             YamlDocument yamlDocument = sparrowYaml.load("""
             map:
               x: 1
@@ -1436,8 +1468,8 @@ class SparrowYamlTest {
         }
 
         @Test
-        void should_SerializeCanonicalMapping_When_AlternativesWriteAsMap() {
-            NodeSerializer<Block> blockCodec = blockAlternativesCodec("map");
+        void should_SerializePrimaryMapping_When_UsingMappingPrimaryAlternatives() {
+            NodeSerializer<Block> blockCodec = blockPrimaryMappingCodec();
 
             Map<?, ?> encoded = assertInstanceOf(Map.class, blockCodec.serialize(new Block(1, 2, 3)));
 
@@ -1447,23 +1479,63 @@ class SparrowYamlTest {
         }
 
         @Test
-        void should_SerializeCanonicalSequence_When_AlternativesWriteAsList() {
-            NodeSerializer<Block> blockCodec = blockAlternativesCodec("list");
+        void should_SerializePrimarySequence_When_UsingSequencePrimaryAlternatives() {
+            NodeSerializer<Block> blockCodec = blockPrimarySequenceCodec();
 
             assertEquals(List.of(1, 2, 3), blockCodec.serialize(new Block(1, 2, 3)));
         }
 
         @Test
-        void should_SerializeCanonicalScalar_When_AlternativesWriteAsScalar() {
-            NodeSerializer<Block> blockCodec = blockAlternativesCodec("packed");
+        void should_SerializePrimaryScalar_When_UsingScalarPrimaryAlternatives() {
+            NodeSerializer<Block> blockCodec = blockPrimaryScalarCodec();
 
             assertEquals(1_002_003L, blockCodec.serialize(new Block(1, 2, 3)));
         }
 
         @Test
+        void should_ReadLegacySequenceWithoutLegacyWriter_When_UsingConvertedAlternative() throws IOException {
+            record Message(String value) {}
+
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<Message> messageCodec = NodeSerializers.STRING
+                    .xmap(Message.class, Message::new, Message::value)
+                    .withAlternative(NodeSerializers.STRING.listOf(), lines -> new Message(String.join("\n", lines)));
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            scalar: "hello"
+            lines:
+              - "hello"
+              - "world"
+            """);
+
+            assertEquals(new Message("hello"), yamlDocument.get(messageCodec, "scalar"));
+            assertEquals(new Message("hello\nworld"), yamlDocument.get(messageCodec, "lines"));
+            assertEquals("hello\nworld", messageCodec.serialize(new Message("hello\nworld")));
+        }
+
+        @Test
+        void should_ImportReadCandidates_When_AlternativeAlreadyHasAlternatives() throws IOException {
+            record Message(String value) {}
+
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<String> legacyText = NodeSerializers.STRING
+                    .withAlternative(NodeSerializers.STRING.listOf(), lines -> String.join("\n", lines));
+            NodeSerializer<Message> messageCodec = NodeSerializers.STRING
+                    .xmap(Message.class, Message::new, Message::value)
+                    .withAlternative(legacyText, Message::new);
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            lines:
+              - hello
+              - world
+            """);
+
+            assertEquals(new Message("hello\nworld"), yamlDocument.get(messageCodec, "lines"));
+            assertEquals("hello\nworld", messageCodec.serialize(new Message("hello\nworld")));
+        }
+
+        @Test
         void should_AggregateCandidateFailures_When_AlternativesCandidatesFail() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
-            NodeSerializer<Block> blockCodec = blockAlternativesCodec("map");
+            NodeSerializer<Block> blockCodec = blockPrimaryMappingCodec();
             YamlDocument yamlDocument = sparrowYaml.load("""
             invalid-scalar: nope
             """);
@@ -1475,63 +1547,68 @@ class SparrowYamlTest {
             assertEquals(Route.from("invalid-scalar"), scalarFailure.path());
             assertEquals(String.class, scalarFailure.actualType());
             assertEquals(Block.class, scalarFailure.targetType());
-            assertEquals(AlternativesNodeException.Shape.SCALAR, scalarFailure.actualShape());
-            assertEquals(4, scalarFailure.branches().size());
-            assertEquals(2, scalarFailure.failures().size());
-            assertEquals(2, scalarFailure.getSuppressed().length);
-            assertEquals("packed", scalarFailure.failures().get(0).branch().id());
-            assertEquals(AlternativesNodeException.Shape.SCALAR, scalarFailure.failures().get(0).branch().shape());
-            assertEquals(2, scalarFailure.failures().get(0).branch().index());
+            assertEquals(4, scalarFailure.failures().size());
+            assertEquals(4, scalarFailure.getSuppressed().length);
             assertInstanceOf(InvalidNodeException.class, scalarFailure.failures().get(0).exception());
             assertSame(scalarFailure.failures().get(0).exception(), scalarFailure.getSuppressed()[0]);
             assertEquals(Route.from("invalid-scalar"), scalarFailure.failures().get(0).path());
-            assertEquals(Long.class, scalarFailure.failures().get(0).targetType());
-            assertEquals("csv", scalarFailure.failures().get(1).branch().id());
-            assertEquals(AlternativesNodeException.Shape.SCALAR, scalarFailure.failures().get(1).branch().shape());
-            assertEquals(3, scalarFailure.failures().get(1).branch().index());
+            assertEquals(Block.class, scalarFailure.failures().get(0).targetType());
             assertInstanceOf(InvalidNodeException.class, scalarFailure.failures().get(1).exception());
             assertSame(scalarFailure.failures().get(1).exception(), scalarFailure.getSuppressed()[1]);
             assertEquals(Route.from("invalid-scalar"), scalarFailure.failures().get(1).path());
-            assertEquals(Object.class, scalarFailure.failures().get(1).targetType());
+            assertEquals(Block.class, scalarFailure.failures().get(1).targetType());
+            assertInstanceOf(InvalidNodeException.class, scalarFailure.failures().get(2).exception());
+            assertSame(scalarFailure.failures().get(2).exception(), scalarFailure.getSuppressed()[2]);
+            assertEquals(Route.from("invalid-scalar"), scalarFailure.failures().get(2).path());
+            assertEquals(Long.class, scalarFailure.failures().get(2).targetType());
+            assertInstanceOf(InvalidNodeException.class, scalarFailure.failures().get(3).exception());
+            assertSame(scalarFailure.failures().get(3).exception(), scalarFailure.getSuppressed()[3]);
+            assertEquals(Route.from("invalid-scalar"), scalarFailure.failures().get(3).path());
+            assertEquals(Block.class, scalarFailure.failures().get(3).targetType());
         }
 
         @Test
-        void should_ThrowOriginalFailure_When_OnlyOneAlternativesCandidateMatchesShape() throws IOException {
+        void should_AggregateCandidateFailures_When_PrimaryAndAlternativeFail() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
-            NodeSerializer<Block> mappingOnly = NodeSerializers.alternatives(Block.class)
-                    .mapping("map", mapping -> mapping.group(
+            NodeSerializer<Block> mappingWithScalarAlternative = NodeSerializers.mapping(Block.class)
+                    .group(
                             NodeSerializers.INT.required("x").forGetter(Block::x),
                             NodeSerializers.INT.required("y").forGetter(Block::y),
                             NodeSerializers.INT.required("z").forGetter(Block::z)
-                    ).apply(Block::new))
-                    .writeAs("map")
-                    .build();
+                    )
+                    .apply(Block::new)
+                    .withAlternative(NodeSerializers.LONG, Block::fromPackedLong);
             YamlDocument yamlDocument = sparrowYaml.load("""
             block:
               x: 1
               z: 3
             """);
 
-            MissingNodeException failure = assertThrows(
-                    MissingNodeException.class,
-                    () -> yamlDocument.get(mappingOnly, "block")
+            AlternativesNodeException failure = assertThrows(
+                    AlternativesNodeException.class,
+                    () -> yamlDocument.get(mappingWithScalarAlternative, "block")
             );
-            assertEquals("y", failure.key());
-            assertEquals(Route.from("block", "y"), failure.path());
-            assertEquals(Integer.class, failure.targetType());
+            assertEquals(2, failure.failures().size());
+            assertInstanceOf(MissingNodeException.class, failure.failures().get(0).exception());
+            assertEquals("y", failure.failures().get(0).missingKey());
+            assertEquals(Route.from("block", "y"), failure.failures().get(0).path());
+            assertEquals(Integer.class, failure.failures().get(0).targetType());
+            assertInstanceOf(InvalidNodeException.class, failure.failures().get(1).exception());
+            assertEquals(Route.from("block"), failure.failures().get(1).path());
+            assertEquals(Long.class, failure.failures().get(1).targetType());
         }
 
         @Test
-        void should_ThrowAlternativesException_When_AlternativesHasNoCandidateForRootShape() throws IOException {
+        void should_TryAllCandidates_When_NodeKindDiffers() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
-            NodeSerializer<Block> mappingOnly = NodeSerializers.alternatives(Block.class)
-                    .mapping("map", mapping -> mapping.group(
+            NodeSerializer<Block> mappingOnly = NodeSerializers.mapping(Block.class)
+                    .group(
                             NodeSerializers.INT.required("x").forGetter(Block::x),
                             NodeSerializers.INT.required("y").forGetter(Block::y),
                             NodeSerializers.INT.required("z").forGetter(Block::z)
-                    ).apply(Block::new))
-                    .writeAs("map")
-                    .build();
+                    )
+                    .apply(Block::new)
+                    .withAlternative(NodeSerializers.LONG, Block::fromPackedLong);
             YamlDocument yamlDocument = sparrowYaml.load("""
             block: [1, 2, 3]
             """);
@@ -1543,32 +1620,44 @@ class SparrowYamlTest {
             assertEquals(Route.from("block"), failure.path());
             assertEquals(SequenceNode.class, failure.actualType());
             assertEquals(Block.class, failure.targetType());
-            assertEquals(AlternativesNodeException.Shape.SEQUENCE, failure.actualShape());
-            assertEquals(1, failure.branches().size());
-            assertEquals("map", failure.branches().get(0).id());
-            assertEquals(AlternativesNodeException.Shape.MAPPING, failure.branches().get(0).shape());
-            assertTrue(failure.failures().isEmpty());
+            assertEquals(2, failure.failures().size());
+            assertEquals(2, failure.getSuppressed().length);
+            assertInstanceOf(InvalidNodeException.class, failure.failures().get(0).exception());
+            assertInstanceOf(InvalidNodeException.class, failure.failures().get(1).exception());
         }
 
         @Test
-        void should_FailFast_When_AlternativesBuilderConfigurationIsInvalid() {
-            assertThrows(IllegalArgumentException.class, () -> NodeSerializers.alternatives(Block.class)
-                    .mapping("map", mapping -> mapping.group(
-                            NodeSerializers.INT.required("x").forGetter(Block::x)
-                    ).apply(x -> new Block(x, 0, 0)))
-                    .sequence("map", sequence -> sequence.group(
-                            NodeSerializers.INT.required(0).forGetter(Block::x)
-                    ).apply(x -> new Block(x, 0, 0))));
+        void should_TryAlternativesInOrder_When_UsingUnifiedAlternativeApi() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<String> serializer = NodeSerializers.STRING
+                    .withAlternative(NodeSerializers.STRING.listOf(), values -> String.join(",", values));
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            scalar: hello
+            list:
+              - hello
+              - world
+            """);
 
-            assertThrows(IllegalStateException.class, () -> NodeSerializers.alternatives(Block.class)
-                    .scalar("packed", NodeSerializers.LONG.xmap(Block::fromPackedLong, Block::asPackedLong))
-                    .build());
+            assertEquals("hello", yamlDocument.get(serializer, "scalar"));
+            assertEquals("hello,world", yamlDocument.get(serializer, "list"));
+            assertEquals("hello,world", serializer.serialize("hello,world"));
+        }
 
-            assertThrows(IllegalArgumentException.class, () -> NodeSerializers.alternatives(Block.class)
-                    .scalar("packed", NodeSerializers.LONG.xmap(Block::fromPackedLong, Block::asPackedLong))
-                    .writeAs("missing")
-                    .build());
+        @Test
+        void should_PreferPrimary_When_PrimaryAndAlternativeCanBothDecode() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<String> serializer = NodeSerializers.STRING
+                    .xmap(String.class, value -> "primary:" + value, value -> value)
+                    .withAlternative(NodeSerializers.STRING, value -> "alternative:" + value);
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: hello
+            """);
 
+            assertEquals("primary:hello", yamlDocument.get(serializer, "value"));
+        }
+
+        @Test
+        void should_FailFast_When_OptionalDefaultIsNull() {
             assertThrows(NullPointerException.class, () -> NodeSerializers.INT.optional("y", null));
             assertThrows(NullPointerException.class, () -> NodeSerializers.INT.optional(1, null));
         }

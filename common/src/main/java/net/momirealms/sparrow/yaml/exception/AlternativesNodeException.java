@@ -11,22 +11,16 @@ import java.util.Objects;
  * 表示 alternatives 的同形态候选都无法解码当前 YAML 节点.
  */
 public final class AlternativesNodeException extends InvalidNodeException {
-    private final Shape actualShape; // 当前 YAML 根节点形态
-    private final List<Branch> branches; // 已注册候选分支
-    private final List<Failure> failures; // 同形态候选的原始失败
+    private final List<Failure> failures; // 候选的原始失败
     private final String detail; // 面向日志的简短摘要
 
     public AlternativesNodeException(
             YamlNode<?> node,
             Class<?> targetType,
-            Shape actualShape,
-            List<Branch> branches,
             List<Failure> failures,
             String detail
     ) {
         super(node, targetType);
-        this.actualShape = Objects.requireNonNull(actualShape, "actualShape");
-        this.branches = List.copyOf(branches);
         this.failures = List.copyOf(failures);
         this.detail = Objects.requireNonNull(detail, "detail");
         for (Failure failure : this.failures) {
@@ -35,21 +29,7 @@ public final class AlternativesNodeException extends InvalidNodeException {
     }
 
     /**
-     * 返回当前 YAML 根节点形态.
-     */
-    public Shape actualShape() {
-        return actualShape;
-    }
-
-    /**
-     * 返回 alternatives 中注册过的所有候选分支.
-     */
-    public List<Branch> branches() {
-        return branches;
-    }
-
-    /**
-     * 返回同形态候选的原始失败.
+     * 返回候选的原始失败.
      */
     public List<Failure> failures() {
         return failures;
@@ -60,22 +40,8 @@ public final class AlternativesNodeException extends InvalidNodeException {
         return super.getMessage() + ". " + detail;
     }
 
-    public enum Shape {
-        MAPPING,
-        SEQUENCE,
-        SCALAR
-    }
-
-    public record Branch(String id, int index, Shape shape) {
-        public Branch {
-            Objects.requireNonNull(id, "id");
-            Objects.requireNonNull(shape, "shape");
-        }
-    }
-
-    public record Failure(Branch branch, NodeParsingException exception) {
+    public record Failure(NodeParsingException exception) {
         public Failure {
-            Objects.requireNonNull(branch, "branch");
             Objects.requireNonNull(exception, "exception");
         }
 
