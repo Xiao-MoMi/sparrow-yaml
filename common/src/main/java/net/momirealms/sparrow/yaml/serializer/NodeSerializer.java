@@ -4,6 +4,8 @@ import net.momirealms.sparrow.yaml.exception.AlternativesNodeException;
 import net.momirealms.sparrow.yaml.exception.AlternativesNodeException.Failure;
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
+import net.momirealms.sparrow.yaml.exception.NodeParsingException;
+import net.momirealms.sparrow.yaml.exception.UnexpectedNodeParsingException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
@@ -47,7 +49,7 @@ public final class NodeSerializer<T> {
     @NotNull
     public T deserialize(@Nullable YamlNode<?> node) {
         T decoded = alternatives.isEmpty()
-                ? decoder.deserialize(node)
+                ? decodeCandidate(node, clazz, decoder)
                 : decodeWithAlternatives(node, clazz, decoder, alternatives);
         if (decoded == null) {
             throw new InvalidNodeException(node, clazz);
@@ -310,20 +312,19 @@ public final class NodeSerializer<T> {
 
     // 解码后执行值映射, 并把映射阶段的异常统一转为节点解析异常.
     private static <A, R> R mapDecoded(YamlNode<?> node, Class<?> targetType, Decoder<A> decoder, Function<? super A, ? extends R> mapper) {
-        A decoded = decoder.deserialize(node);
-        if (decoded == null) {
-            throw new InvalidNodeException(node, targetType);
-        }
+        A decoded = decodeCandidate(node, targetType, decoder);
         try {
             R result = mapper.apply(decoded);
             if (result == null) {
                 throw new InvalidNodeException(node, targetType);
             }
             return result;
-        } catch (MissingNodeException | InvalidNodeException e) {
+        } catch (NodeParsingException e) {
             throw e;
-        } catch (Throwable e) {
-            throw new InvalidNodeException(node, targetType, e);
+        } catch (RuntimeException e) {
+            throw unexpectedDecodeFailure(node, targetType, e);
+        } catch (LinkageError e) {
+            throw unexpectedDecodeFailure(node, targetType, e);
         }
     }
 
@@ -332,13 +333,13 @@ public final class NodeSerializer<T> {
         List<Failure> failures = new ArrayList<>(alternatives.size() + 1);
         try {
             return decodeCandidate(node, targetType, primary);
-        } catch (MissingNodeException | InvalidNodeException e) {
+        } catch (NodeParsingException e) {
             failures.add(new Failure(e));
         }
         for (Decoder<T> alternative : alternatives) {
             try {
                 return decodeCandidate(node, targetType, alternative);
-            } catch (MissingNodeException | InvalidNodeException e) {
+            } catch (NodeParsingException e) {
                 failures.add(new Failure(e));
             }
         }
@@ -351,11 +352,42 @@ public final class NodeSerializer<T> {
 
     // 解码候选不能用 null 表示失败, null 会按无效节点处理.
     private static <T> T decodeCandidate(YamlNode<?> node, Class<?> targetType, Decoder<T> decoder) {
-        T decoded = decoder.deserialize(node);
+        T decoded;
+        try {
+            decoded = decoder.deserialize(node);
+        } catch (NodeParsingException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw unexpectedDecodeFailure(node, targetType, e);
+        } catch (LinkageError e) {
+            throw unexpectedDecodeFailure(node, targetType, e);
+        }
         if (decoded == null) {
             throw new InvalidNodeException(node, targetType);
         }
         return decoded;
+    }
+
+    @ApiStatus.Internal
+    public static NodeParsingException unexpectedDecodeFailure(@Nullable YamlNode<?> node, Class<?> targetType, RuntimeException failure) {
+        return new UnexpectedNodeParsingException(node, targetType, failure);
+    }
+
+    @ApiStatus.Internal
+    public static NodeParsingException unexpectedDecodeFailure(@Nullable YamlNode<?> node, Class<?> targetType, LinkageError failure) {
+        if (hasFatalCause(failure)) {
+            throw failure;
+        }
+        return new UnexpectedNodeParsingException(node, targetType, failure);
+    }
+
+    private static boolean hasFatalCause(Throwable failure) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof VirtualMachineError || current.getClass().getName().equals("java.lang.ThreadDeath")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // 生成面向日志的候选失败摘要.

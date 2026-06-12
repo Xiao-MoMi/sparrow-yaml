@@ -395,7 +395,7 @@ primary alternative 是 `mapping`、`sequence`、`scalar`/`xmap` 之上的兼容
 - `withAlternative(...)` 追加只读候选；候选不做节点种类预过滤，而是按注册顺序逐个尝试。
 - alternative 可以传入完整 `NodeSerializer<A>` 和 `A -> T` 转换函数，因此 legacy 写法不需要提供反向 writer。
 - 同一种 YAML 写法可以追加多个候选；候选按追加顺序尝试，首个成功分支胜出。
-- 单个候选失败时会抛出原始异常，多个候选全部失败时会抛出 `AlternativesNodeException`，并按尝试顺序保留所有候选的原始异常。
+- 单个候选失败时会抛出对应的 `NodeParsingException`；候选抛出的普通 `RuntimeException` 或非致命 `LinkageError` 会先包装为 `UnexpectedNodeParsingException`。多个候选全部失败时会抛出 `AlternativesNodeException`，并按尝试顺序保留所有候选的原始异常。
 
 字段和元素的 presence 在入口处声明。YAML null 在字段/元素访问层等价于缺失：
 
@@ -433,16 +433,17 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
         .apply(BlockPos::new);
 ```
 
-`onFail(...)` 接收 `MissingNodeException` 或 `InvalidNodeException`：
+`onFail(...)` 接收 `NodeParsingException`，常见子类如下：
 
 - 字段或元素不存在时是 `MissingNodeException`，异常会携带缺失 key、完整路径和目标 Java 类型。
 - 字段或元素存在但基础 serializer 解码失败时是 `InvalidNodeException`，异常会携带当前路径、当前值类型和目标 Java 类型。
+- 自定义 reader、`xmap(...)` 解码映射函数、builder 构造函数或底层依赖抛出普通 `RuntimeException` / 非致命 `LinkageError` 时是 `UnexpectedNodeParsingException`，异常会携带当前路径、当前值类型、目标 Java 类型和原始 cause。
 - 基础类型 serializer 遇到解析错误时会直接抛出 `InvalidNodeException`，不再用 `null` 表达错误值。
 - 字段/元素节点存在但 scalar value 为 `null` 时，会先被访问层当作缺失处理；直接读取该 scalar 节点仍是 `InvalidNodeException`。
 - `listOf()`、`setOf()`、`mapOf()` 遇到错误根节点形态时也会抛出 `InvalidNodeException`。
-- `xmap(...)` 的解码映射函数抛普通异常或返回 `null` 时会抛出 `InvalidNodeException`。
+- `xmap(...)` 的解码映射函数返回 `null` 时会抛出 `InvalidNodeException`，抛普通异常时会抛出 `UnexpectedNodeParsingException`。
 - `serialize(value)` 只有在显式传入 `null` 时允许返回 `null`；非 `null` 输入如果编码结果为 `null`，会抛出 `InvalidNodeException`。
-- 如果某个组合 serializer 自己抛出 `MissingNodeException` 或 `InvalidNodeException`，builder 会把这个异常直接交给 `onFail(...)`，不会再包一层。
+- 如果某个组合 serializer 自己抛出 `NodeParsingException`，builder 会把这个异常直接交给 `onFail(...)`，不会再包一层。
 - `onFail(...)` 自己抛异常或返回 `null` 时，整体解码会抛出 `InvalidNodeException`。
 
 常用组合方法：
@@ -643,7 +644,7 @@ YamlMapper<ImmutableConfig> mapper = factory.create(
 - YAML 根节点必须是 mapping。
 - 暂不支持多文档 YAML。
 - `Route.from(...)` 不能创建空路由；需要空路由时使用 `Route.empty()`。
-- `get(...)` 在目标路径缺失时会抛出 `MissingNodeException`；节点存在但序列化器解析失败时会抛出对应的 `InvalidNodeException` 或组合 serializer 自己抛出的异常。
+- `get(...)` 在目标路径缺失时会抛出 `MissingNodeException`；节点存在但序列化器解析失败时会抛出对应的 `NodeParsingException` 子类，例如 `InvalidNodeException` 或 `UnexpectedNodeParsingException`。
 - `getOrDefault(...)` 只在目标路径缺失时返回默认值；节点存在但解析失败时不会吞掉异常。
 - 内置的字符串承载类型，例如 `UUID`、`Locale`、时间类型，不再把空字符串读取为 `null`；空字符串会按无效值抛出 `InvalidNodeException`。
 - `serialize(null)` 会生成 null 值节点；保存文档时 null 值节点会被跳过，不写入最终 YAML。

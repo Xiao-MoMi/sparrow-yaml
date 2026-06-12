@@ -2,6 +2,7 @@ package net.momirealms.sparrow.yaml.serializer;
 
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
+import net.momirealms.sparrow.yaml.exception.NodeParsingException;
 import net.momirealms.sparrow.yaml.node.ScalarNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
@@ -255,10 +256,10 @@ public final class NodeSerializers {
                             throw new InvalidNodeException(node, targetType);
                         }
                         return result;
-                    } catch (MissingNodeException | InvalidNodeException e) {
+                    } catch (NodeParsingException e) {
                         throw e;
-                    } catch (Exception e) {
-                        throw new InvalidNodeException(node, targetType, e);
+                    } catch (RuntimeException e) {
+                        throw NodeSerializer.unexpectedDecodeFailure(node, targetType, e);
                     }
                 },
                 value -> {

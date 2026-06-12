@@ -56,6 +56,9 @@ public final class AlternativesNodeException extends InvalidNodeException {
             if (exception instanceof InvalidNodeException invalid) {
                 return invalid.path();
             }
+            if (exception instanceof UnexpectedNodeParsingException unexpected) {
+                return unexpected.path();
+            }
             return null;
         }
 
@@ -66,6 +69,9 @@ public final class AlternativesNodeException extends InvalidNodeException {
         public Class<?> actualType() {
             if (exception instanceof InvalidNodeException invalid) {
                 return invalid.actualType();
+            }
+            if (exception instanceof UnexpectedNodeParsingException unexpected) {
+                return unexpected.actualType();
             }
             return null;
         }
@@ -80,6 +86,9 @@ public final class AlternativesNodeException extends InvalidNodeException {
             }
             if (exception instanceof InvalidNodeException invalid) {
                 return invalid.targetType();
+            }
+            if (exception instanceof UnexpectedNodeParsingException unexpected) {
+                return unexpected.targetType();
             }
             return null;
         }

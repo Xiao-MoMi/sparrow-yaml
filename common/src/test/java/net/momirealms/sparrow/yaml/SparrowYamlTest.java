@@ -8,6 +8,7 @@ import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.exception.AlternativesNodeException;
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
+import net.momirealms.sparrow.yaml.exception.UnexpectedNodeParsingException;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.serializer.TypeRef;
@@ -1233,7 +1234,7 @@ class SparrowYamlTest {
         }
 
         @Test
-        void should_ThrowInvalidException_When_XmapMapperFailsOrReturnsNull() throws IOException {
+        void should_HandleXmapMapperNullAndUnexpectedFailure() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             YamlDocument yamlDocument = sparrowYaml.load("""
             value: cat
@@ -1251,20 +1252,222 @@ class SparrowYamlTest {
             assertEquals(String.class, nullFailure.actualType());
             assertEquals(Object.class, nullFailure.targetType());
 
+            IllegalArgumentException cause = new IllegalArgumentException("bad value");
             NodeSerializer<NamedValue> throwingCodec = NodeSerializers.STRING.xmap(
                     value -> {
-                        throw new IllegalArgumentException("bad value");
+                        throw cause;
                     },
                     NamedValue::value
             );
-            InvalidNodeException throwingFailure = assertThrows(
-                    InvalidNodeException.class,
+            UnexpectedNodeParsingException throwingFailure = assertThrows(
+                    UnexpectedNodeParsingException.class,
                     () -> yamlDocument.get(throwingCodec, "value")
             );
             assertEquals(Route.from("value"), throwingFailure.path());
             assertEquals(String.class, throwingFailure.actualType());
             assertEquals(Object.class, throwingFailure.targetType());
-            assertInstanceOf(IllegalArgumentException.class, throwingFailure.getCause());
+            assertSame(cause, throwingFailure.getCause());
+        }
+
+        @Test
+        void should_WrapUnexpectedRuntimeException_When_DeserializerFailsDirectly() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: cat
+            """);
+            NullPointerException cause = new NullPointerException("boom");
+            NodeSerializer<NamedValue> throwingCodec = NodeSerializers.STRING.xmap(
+                    NamedValue.class,
+                    value -> {
+                        throw cause;
+                    },
+                    NamedValue::value
+            );
+
+            UnexpectedNodeParsingException failure = assertThrows(
+                    UnexpectedNodeParsingException.class,
+                    () -> yamlDocument.get(throwingCodec, "value")
+            );
+            assertEquals(Route.from("value"), failure.path());
+            assertEquals(String.class, failure.actualType());
+            assertEquals(NamedValue.class, failure.targetType());
+            assertSame(cause, failure.getCause());
+        }
+
+        @Test
+        void should_LetOnFailHandleUnexpectedMappingFieldFailure() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            IllegalStateException cause = new IllegalStateException("field broke");
+            List<RuntimeException> failures = new ArrayList<>();
+            NodeSerializer<Integer> throwingInt = NodeSerializer.createInternal(
+                    Integer.class,
+                    node -> {
+                        throw cause;
+                    },
+                    value -> value
+            );
+            NodeSerializer<Block> blockCodec = NodeSerializers.mapping(Block.class)
+                    .group(
+                            throwingInt.required("x").onFail(failure -> {
+                                failures.add(failure);
+                                return 10;
+                            }).forGetter(Block::x),
+                            NodeSerializers.INT.required("y").forGetter(Block::y),
+                            NodeSerializers.INT.required("z").forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            block:
+              x: 1
+              y: 2
+              z: 3
+            """);
+
+            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, "block"));
+            UnexpectedNodeParsingException failure = assertInstanceOf(UnexpectedNodeParsingException.class, failures.get(0));
+            assertEquals(Route.from("block", "x"), failure.path());
+            assertEquals(Integer.class, failure.actualType());
+            assertEquals(Integer.class, failure.targetType());
+            assertSame(cause, failure.getCause());
+        }
+
+        @Test
+        void should_LetOnFailHandleUnexpectedSequenceElementFailure() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            IllegalStateException cause = new IllegalStateException("element broke");
+            List<RuntimeException> failures = new ArrayList<>();
+            NodeSerializer<Integer> throwingInt = NodeSerializer.createInternal(
+                    Integer.class,
+                    node -> {
+                        throw cause;
+                    },
+                    value -> value
+            );
+            NodeSerializer<Block> blockCodec = NodeSerializers.sequence(Block.class)
+                    .group(
+                            throwingInt.required(0).onFail(failure -> {
+                                failures.add(failure);
+                                return 10;
+                            }).forGetter(Block::x),
+                            NodeSerializers.INT.required(1).forGetter(Block::y),
+                            NodeSerializers.INT.required(2).forGetter(Block::z)
+                    )
+                    .apply(Block::new);
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            block:
+              - 1
+              - 2
+              - 3
+            """);
+
+            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, "block"));
+            UnexpectedNodeParsingException failure = assertInstanceOf(UnexpectedNodeParsingException.class, failures.get(0));
+            assertEquals(Route.from("block", 0), failure.path());
+            assertEquals(Integer.class, failure.actualType());
+            assertEquals(Integer.class, failure.targetType());
+            assertSame(cause, failure.getCause());
+        }
+
+        @Test
+        void should_TryAlternative_When_PrimaryThrowsUnexpectedRuntimeException() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NodeSerializer<String> serializer = NodeSerializer.<String>createInternal(
+                            String.class,
+                            node -> {
+                                throw new IllegalStateException("primary broke");
+                            },
+                            value -> value
+                    )
+                    .withAlternative(NodeSerializers.STRING, value -> "alternative:" + value);
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: hello
+            """);
+
+            assertEquals("alternative:hello", yamlDocument.get(serializer, "value"));
+        }
+
+        @Test
+        void should_AggregateUnexpectedFailures_When_AllAlternativesFail() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            IllegalStateException cause = new IllegalStateException("primary broke");
+            NodeSerializer<String> serializer = NodeSerializer.<String>createInternal(
+                            String.class,
+                            node -> {
+                                throw cause;
+                            },
+                            value -> value
+                    )
+                    .withAlternative(NodeSerializers.INT, String::valueOf);
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: nope
+            """);
+
+            AlternativesNodeException failure = assertThrows(
+                    AlternativesNodeException.class,
+                    () -> yamlDocument.get(serializer, "value")
+            );
+            assertEquals(2, failure.failures().size());
+            assertEquals(2, failure.getSuppressed().length);
+            UnexpectedNodeParsingException unexpected = assertInstanceOf(
+                    UnexpectedNodeParsingException.class,
+                    failure.failures().get(0).exception()
+            );
+            assertSame(cause, unexpected.getCause());
+            assertEquals(Route.from("value"), failure.failures().get(0).path());
+            assertEquals(String.class, failure.failures().get(0).targetType());
+            assertInstanceOf(InvalidNodeException.class, failure.failures().get(1).exception());
+        }
+
+        @Test
+        void should_WrapNoClassDefFoundError_When_DeserializerFails() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            NoClassDefFoundError cause = new NoClassDefFoundError("missing/Dependency");
+            NodeSerializer<String> throwingCodec = NodeSerializer.createInternal(
+                    String.class,
+                    node -> {
+                        throw cause;
+                    },
+                    value -> value
+            );
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: hello
+            """);
+
+            UnexpectedNodeParsingException failure = assertThrows(
+                    UnexpectedNodeParsingException.class,
+                    () -> yamlDocument.get(throwingCodec, "value")
+            );
+            assertEquals(Route.from("value"), failure.path());
+            assertEquals(String.class, failure.actualType());
+            assertEquals(String.class, failure.targetType());
+            assertSame(cause, failure.getCause());
+        }
+
+        @Test
+        void should_NotWrapFatalErrors_When_DeserializerFails() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            StackOverflowError stackOverflow = new StackOverflowError("fatal");
+            ExceptionInInitializerError initializerFailure = new ExceptionInInitializerError(new OutOfMemoryError("fatal"));
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            value: hello
+            """);
+            NodeSerializer<String> stackOverflowCodec = NodeSerializer.createInternal(
+                    String.class,
+                    node -> {
+                        throw stackOverflow;
+                    },
+                    value -> value
+            );
+            NodeSerializer<String> initializerFailureCodec = NodeSerializer.createInternal(
+                    String.class,
+                    node -> {
+                        throw initializerFailure;
+                    },
+                    value -> value
+            );
+
+            assertSame(stackOverflow, assertThrows(StackOverflowError.class, () -> yamlDocument.get(stackOverflowCodec, "value")));
+            assertSame(initializerFailure, assertThrows(ExceptionInInitializerError.class, () -> yamlDocument.get(initializerFailureCodec, "value")));
         }
 
         @Test
@@ -1561,7 +1764,7 @@ class SparrowYamlTest {
             assertSame(scalarFailure.failures().get(2).exception(), scalarFailure.getSuppressed()[2]);
             assertEquals(Route.from("invalid-scalar"), scalarFailure.failures().get(2).path());
             assertEquals(Long.class, scalarFailure.failures().get(2).targetType());
-            assertInstanceOf(InvalidNodeException.class, scalarFailure.failures().get(3).exception());
+            assertInstanceOf(UnexpectedNodeParsingException.class, scalarFailure.failures().get(3).exception());
             assertSame(scalarFailure.failures().get(3).exception(), scalarFailure.getSuppressed()[3]);
             assertEquals(Route.from("invalid-scalar"), scalarFailure.failures().get(3).path());
             assertEquals(Block.class, scalarFailure.failures().get(3).targetType());

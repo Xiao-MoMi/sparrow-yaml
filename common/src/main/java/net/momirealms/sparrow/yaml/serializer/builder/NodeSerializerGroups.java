@@ -1,7 +1,7 @@
 package net.momirealms.sparrow.yaml.serializer.builder;
 
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
-import net.momirealms.sparrow.yaml.exception.MissingNodeException;
+import net.momirealms.sparrow.yaml.exception.NodeParsingException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
@@ -242,10 +242,12 @@ public final class NodeSerializerGroups {
                             throw new InvalidNodeException(node, targetType);
                         }
                         return created;
-                    } catch (MissingNodeException | InvalidNodeException e) {
+                    } catch (NodeParsingException e) {
                         throw e;
-                    } catch (Exception e) {
-                        throw new InvalidNodeException(node, targetType, e);
+                    } catch (RuntimeException e) {
+                        throw NodeSerializer.unexpectedDecodeFailure(node, targetType, e);
+                    } catch (LinkageError e) {
+                        throw NodeSerializer.unexpectedDecodeFailure(node, targetType, e);
                     }
                 },
                 value -> {

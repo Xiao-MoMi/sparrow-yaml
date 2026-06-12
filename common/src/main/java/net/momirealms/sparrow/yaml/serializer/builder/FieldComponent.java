@@ -2,6 +2,7 @@ package net.momirealms.sparrow.yaml.serializer.builder;
 
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
+import net.momirealms.sparrow.yaml.exception.NodeParsingException;
 import net.momirealms.sparrow.yaml.node.ScalarNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
@@ -53,7 +54,7 @@ public final class FieldComponent<T, A> implements NodeSerializerComponent<T, A>
         Object decoded;
         try {
             decoded = serializer.deserialize(child);
-        } catch (MissingNodeException | InvalidNodeException e) {
+        } catch (NodeParsingException e) {
             return fallback(e);
         }
         if (decoded == null) {
