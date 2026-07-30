@@ -334,6 +334,48 @@ class SparrowYamlTest {
             assertThrows(NoSuchElementException.class, () -> yamlDocument.getScalarOrThrow(null, "missing"));
             assertThrows(NoSuchElementException.class, () -> yamlDocument.getScalarOrThrow(null, "section"));
         }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void should_RecursivelyExtractRawValues_When_UsingGetValues() throws IOException {
+            // 1. 准备阶段 (Arrange)
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+            scalar: "value"
+            number: 114514
+            null-value: null
+            section:
+                user: "Catnies"
+                nested:
+                    depth: 2
+            sequence:
+                - "string"
+                - 888
+                - map: "value"
+                - - "nested"
+                  - 100.0
+            """);
+
+            // 2. 执行阶段 (Act)
+            Map<String, Object> values = yamlDocument.getValues();
+
+            // 3. 断言阶段 (Assert)
+            assertEquals(List.of("scalar", "number", "null-value", "section", "sequence"), new ArrayList<>(values.keySet()), "应按键的声明顺序返回");
+            assertEquals("value", values.get("scalar"));
+            assertEquals(114514, values.get("number"));
+            assertNull(values.get("null-value"), "Scalar 的 null 原始值应原样返回");
+
+            Map<String, Object> section = assertInstanceOf(Map.class, values.get("section"));
+            assertEquals("Catnies", section.get("user"));
+            Map<String, Object> nested = assertInstanceOf(Map.class, section.get("nested"));
+            assertEquals(2, nested.get("depth"));
+
+            List<Object> sequence = assertInstanceOf(List.class, values.get("sequence"));
+            assertEquals("string", sequence.get(0));
+            assertEquals(888, sequence.get(1));
+            assertEquals(Map.of("map", "value"), sequence.get(2));
+            assertEquals(List.of("nested", 100.0), sequence.get(3));
+        }
     }
 
     @Nested
