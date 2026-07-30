@@ -87,7 +87,7 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
 
     /**
      * 删除当前节点下的指定索引节点。
-     * @param index 索引
+     * @param key 索引
      * @return 删掉的节点，如果不存在则返回 null
      */
     @Nullable
@@ -214,6 +214,28 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
      */
     public Route getSubRoute(@NotNull Object key) {
         return Route.addTo(super.route(), key);
+    }
+
+    /**
+     * 递归获取当前 Sequence 下的原始值, 最终以 List 形式返回.
+     * @return 原始 List
+     */
+    @NotNull
+    public List<Object> getValues() {
+        List<YamlNode<?>> elements = this.value();
+        List<Object> values = new ArrayList<>(elements.size());
+        for (YamlNode<?> element : elements) {
+            if (element == null) {
+                values.add(null);
+            } else if (element instanceof SectionNode section) {
+                values.add(section.getValues());
+            } else if (element instanceof SequenceNode sequence) {
+                values.add(sequence.getValues());
+            } else {
+                values.add(element.value());
+            }
+        }
+        return values;
     }
 
     // 初始化节点

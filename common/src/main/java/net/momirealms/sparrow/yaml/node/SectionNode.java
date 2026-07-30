@@ -312,6 +312,28 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
     }
 
     /**
+     * 递归获取当前 Section 下的原始值, 最终以 Map 形式返回.
+     * @return 原始 Map
+     */
+    @NotNull
+    public Map<String, Object> getValues() {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (Map.Entry<Object, YamlNode<?>> entry : this.value().entrySet()) {
+            YamlNode<?> node = entry.getValue();
+            Object rawValue;
+            if (node instanceof SectionNode section) {
+                rawValue = section.getValues();
+            } else if (node instanceof SequenceNode sequence) {
+                rawValue = sequence.getValues();
+            } else {
+                rawValue = node.value();
+            }
+            values.put(String.valueOf(entry.getKey()), rawValue);
+        }
+        return values;
+    }
+
+    /**
      * 初始化当前Section, 将当前Section的子节点解析并添加到 value 中;
      * @param keyNode 当前 Section 的 KeyNode
      * @param valueNode 当前 Section 的 ValueNode
