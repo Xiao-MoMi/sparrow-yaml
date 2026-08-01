@@ -226,9 +226,6 @@ public final class NodeSerializer<T> {
                         keyNode.parentNode(section);
                         keyNode.key(entry.getKey());
                         K decodedKey = keySerializer.deserialize(keyNode);
-                        if (result.containsKey(decodedKey)) {
-                            throw new IllegalArgumentException("YAML map keys deserialize to duplicate Java key: " + decodedKey);
-                        }
                         T decoded = NodeSerializer.this.deserialize(entry.getValue());
                         result.put(decodedKey, decoded);
                     }
@@ -240,9 +237,6 @@ public final class NodeSerializer<T> {
                         Object encodedKey = keySerializer.serialize(entry.getKey());
                         if (encodedKey == null || encodedKey instanceof Map || encodedKey instanceof List) {
                             throw new IllegalArgumentException("Map key serializer must encode to a scalar value: " + entry.getKey());
-                        }
-                        if (result.containsKey(encodedKey)) {
-                            throw new IllegalArgumentException("Map keys serialize to duplicate YAML key: " + encodedKey);
                         }
                         result.put(encodedKey, NodeSerializer.this.serialize(entry.getValue()));
                     }

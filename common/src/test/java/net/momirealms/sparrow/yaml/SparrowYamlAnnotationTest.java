@@ -13,6 +13,7 @@ import net.momirealms.sparrow.yaml.mapper.YamlMapper;
 import net.momirealms.sparrow.yaml.mapper.YamlMapperFactory;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
@@ -227,6 +229,25 @@ class SparrowYamlAnnotationTest {
         mapper.save(path, config);
         KeyedConfig reloaded = mapper.load(path).value();
         assertEquals(config.values(), reloaded.values());
+    }
+
+    @Test
+    void should_KeepLastValue_When_MapKeysCollide() throws Exception {
+        NodeSerializer<String> keySerializer = NodeSerializers.STRING.xmap(String.class, value -> value.toLowerCase(Locale.ROOT), value -> value.toLowerCase(Locale.ROOT));
+        NodeSerializer<Map<String, String>> serializer = NodeSerializers.STRING.mapOf(keySerializer);
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlDocument document = sparrowYaml.load("""
+                values:
+                  FIRST: one
+                  first: two
+                """);
+
+        assertEquals(Map.of("first", "two"), document.get(serializer, "values"));
+
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("FIRST", "one");
+        values.put("first", "two");
+        assertEquals(Map.of("first", "two"), serializer.serialize(values));
     }
 
     @Test
