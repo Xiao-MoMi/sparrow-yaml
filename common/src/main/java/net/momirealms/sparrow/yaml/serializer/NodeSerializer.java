@@ -6,6 +6,7 @@ import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.exception.NodeParsingException;
 import net.momirealms.sparrow.yaml.exception.UnexpectedNodeParsingException;
+import net.momirealms.sparrow.yaml.node.ScalarNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
@@ -201,6 +202,13 @@ public final class NodeSerializer<T> {
      * 将当前 serializer 组合为 Map<String, T> serializer.
      */
     public NodeSerializer<Map<String, T>> mapOf() {
+        return this.mapOf(NodeSerializers.STRING);
+    }
+
+    /**
+     * 将当前 serializer 作为值 serializer, 与指定的键 serializer 组合为 Map<K, T> serializer.
+     */
+    public <K> NodeSerializer<Map<K, T>> mapOf(NodeSerializer<K> keySerializer) {
         return createInternal(
                 Map.class,
                 node -> {
@@ -212,17 +220,31 @@ public final class NodeSerializer<T> {
                         throw new InvalidNodeException(node, Map.class);
                     }
 
-                    Map<String, T> result = new LinkedHashMap<>(Math.max((int) (nodeMap.size() / 0.75f) + 1, 16));
+                    Map<K, T> result = new LinkedHashMap<>(Math.max((int) (nodeMap.size() / 0.75f) + 1, 16));
                     for (Map.Entry<Object, YamlNode<?>> entry : nodeMap.entrySet()) {
+                        ScalarNode keyNode = ScalarNode.create(section.root(), entry.getKey());
+                        keyNode.parentNode(section);
+                        keyNode.key(entry.getKey());
+                        K decodedKey = keySerializer.deserialize(keyNode);
+                        if (result.containsKey(decodedKey)) {
+                            throw new IllegalArgumentException("YAML map keys deserialize to duplicate Java key: " + decodedKey);
+                        }
                         T decoded = NodeSerializer.this.deserialize(entry.getValue());
-                        result.put(String.valueOf(entry.getKey()), decoded);
+                        result.put(decodedKey, decoded);
                     }
                     return result;
                 },
                 value -> {
-                    Map<String, Object> result = new LinkedHashMap<>(Math.max((int) (value.size() / 0.75f) + 1, 16));
-                    for (Map.Entry<String, T> entry : value.entrySet()) {
-                        result.put(entry.getKey(), NodeSerializer.this.serialize(entry.getValue()));
+                    Map<Object, Object> result = new LinkedHashMap<>(Math.max((int) (value.size() / 0.75f) + 1, 16));
+                    for (Map.Entry<K, T> entry : value.entrySet()) {
+                        Object encodedKey = keySerializer.serialize(entry.getKey());
+                        if (encodedKey == null || encodedKey instanceof Map || encodedKey instanceof List) {
+                            throw new IllegalArgumentException("Map key serializer must encode to a scalar value: " + entry.getKey());
+                        }
+                        if (result.containsKey(encodedKey)) {
+                            throw new IllegalArgumentException("Map keys serialize to duplicate YAML key: " + encodedKey);
+                        }
+                        result.put(encodedKey, NodeSerializer.this.serialize(entry.getValue()));
                     }
                     return result;
                 }

@@ -214,10 +214,6 @@ class AutoSerializerTest {
             SetContainer() {}
         }
 
-        static class NonStringKeyMapContainer {
-            Map<Integer, String> map;
-        }
-
         // ==========================================
         // 深度嵌套泛型模型
         // ==========================================
@@ -916,15 +912,6 @@ class AutoSerializerTest {
             assertDoesNotThrow(
                     () -> yaml.serializers().register(Models.InterfaceFieldContainer.class),
                     "手动注册接口序列化器后，auto 应能使用它"
-            );
-        }
-
-        @Test
-        void should_FailFast_When_NonStringMapKey() {
-            SparrowYaml yaml = SparrowYaml.builder().build();
-            assertThrows(AutoSerializerException.class,
-                    () -> yaml.serializers().register(Models.NonStringKeyMapContainer.class),
-                    "Map 的键不是 String 时应抛出异常"
             );
         }
 

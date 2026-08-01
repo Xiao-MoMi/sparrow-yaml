@@ -49,11 +49,8 @@ public class ReflectionTypeSerializerResolver implements TypeSerializerResolver 
         }
         if (rawType == Map.class) {
             Type keyType = TypeUtils.parameter(normalized, 0);
-            if (keyType != String.class) {
-                throw new AutoSerializerException("Only Map<String, T> is supported: " + normalized.getTypeName());
-            }
             Type valueType = TypeUtils.parameter(normalized, 1);
-            return ((NodeSerializer) resolve(valueType, context)).mapOf();
+            return ((NodeSerializer) resolve(valueType, context)).mapOf(resolve(keyType, context));
         }
 
         if (rawType.isArray()) {

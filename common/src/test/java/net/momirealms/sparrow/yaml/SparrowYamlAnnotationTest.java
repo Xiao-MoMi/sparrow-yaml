@@ -13,14 +13,17 @@ import net.momirealms.sparrow.yaml.mapper.YamlMapper;
 import net.momirealms.sparrow.yaml.mapper.YamlMapperFactory;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -155,6 +158,27 @@ class SparrowYamlAnnotationTest {
     ) {
     }
 
+    public record ConfigKey(String namespace, String value) {
+
+        static ConfigKey parse(String input) {
+            String[] parts = input.split(":", 2);
+            return parts.length == 2 ? new ConfigKey(parts[0], parts[1]) : null;
+        }
+
+        String asString() {
+            return this.namespace + ":" + this.value;
+        }
+    }
+
+    @Configuration
+    public static class KeyedConfig {
+        private Map<ConfigKey, String> values = Map.of();
+
+        public Map<ConfigKey, String> values() {
+            return this.values;
+        }
+    }
+
     @Test
     void testLoadObjectAndInjectComments() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
@@ -183,6 +207,26 @@ class SparrowYamlAnnotationTest {
         
         assertTrue(yamlString.contains("users:"));
         assertTrue(yamlString.contains("# Generated users section"));
+    }
+
+    @Test
+    void should_RoundTripMapWithSerializedKey_When_UsingMapper(@TempDir Path tempDir) throws Exception {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        sparrowYaml.serializers().register(ConfigKey.class, NodeSerializers.scalar(ConfigKey.class, ConfigKey::parse, ConfigKey::asString));
+        YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+        YamlMapper<KeyedConfig> mapper = factory.create(KeyedConfig.class, KeyedConfig::new);
+        Path path = tempDir.resolve("keyed-config.yml");
+        Files.writeString(path, """
+                values:
+                  "minecraft:stone": block
+                """);
+
+        KeyedConfig config = mapper.load(path).value();
+        assertEquals("block", config.values().get(new ConfigKey("minecraft", "stone")));
+
+        mapper.save(path, config);
+        KeyedConfig reloaded = mapper.load(path).value();
+        assertEquals(config.values(), reloaded.values());
     }
 
     @Test

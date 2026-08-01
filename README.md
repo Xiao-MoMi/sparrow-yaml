@@ -332,10 +332,15 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.INT.listOf().xmap(
 record NamespacedKey(String value) {}
 
 NodeSerializer<NamespacedKey> keySerializer = NodeSerializers.scalar(
+        NamespacedKey.class,
         NamespacedKey::new,
         NamespacedKey::value
 );
+
+yaml.serializers().register(NamespacedKey.class, keySerializer);
 ```
+
+注册后，自动序列化器可以直接推断声明为 `Map<NamespacedKey, T>` 的字段。
 
 如果同一个 Java 类型需要兼容多种 YAML 写法，可以从规范写法的 `NodeSerializer` 出发追加只读 alternative：
 
@@ -453,7 +458,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 - `NodeSerializers.SCALAR`：只读取 YAML scalar 节点。
 - `listOf()`：处理 `List<T>`。
 - `setOf()`：处理 `Set<T>`，解码时保持 YAML 序列顺序。
-- `mapOf()`：处理 `Map<String, T>`。
+- `mapOf()`：处理 `Map<String, T>`；`mapOf(keySerializer)` 处理键具有标量 serializer 的 `Map<K, T>`。
 - `required(name/index)` / `optional(name/index)` / `optional(name/index, value)`：声明 mapping/sequence 的字段或元素 presence。
 - `NodeSerializers.mapping(type)` / `NodeSerializers.sequence(type)`：通过 `group(...).apply(...)` 组合对象。
 - `NodeSerializers.scalar(read, write)`：处理字符串承载的值对象。
@@ -542,12 +547,12 @@ yaml.serializers().register(boxType);
 Box<String> box = document.get(boxType, "box");
 ```
 
-自动序列化支持嵌套 record/class、递归类型、`List<T>`、`Set<T>`、`Map<String, T>` 和枚举字段。
+自动序列化支持嵌套 record/class、递归类型、`List<T>`、`Set<T>`、`Map<K, T>` 和枚举字段。Map 键会使用 `K` 对应的 serializer，并要求它编码为标量值。
 
 自动序列化的限制：
 
 - 数组、接口、抽象类需要先手动注册序列化器。
-- `Map` 只支持 `Map<String, T>`。
+- `Map` 的键 serializer 必须编码为标量值，结构化的 Map/List 不能作为键。
 - raw type 和 wildcard 泛型不支持。
 - `java.lang.Object` 字段不能自动推断具体类型。
 - 单个带参构造器如果没有 `@YamlProperty` 且编译时未保留参数名，会因为无法确定 YAML key 而失败。
