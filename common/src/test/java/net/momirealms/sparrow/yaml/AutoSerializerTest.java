@@ -23,6 +23,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -207,6 +208,8 @@ class AutoSerializerTest {
         }
 
         record WithSetRecord(Set<String> tags, String name) {}
+
+        record EnumMapRecord(EnumMap<Priority, String> values) {}
 
         static class SetContainer {
             Set<Integer> numbers;
@@ -476,6 +479,13 @@ class AutoSerializerTest {
             assertNotNull(record);
             assertEquals("tagged", record.name());
             assertEquals(Set.of("a", "b"), record.tags(), "Set 应去重并正确反序列化");
+        }
+
+        @Test
+        void should_FailFast_When_RecordUsesEnumMap() {
+            SparrowYaml yaml = SparrowYaml.builder().build();
+
+            assertThrows(AutoSerializerException.class, () -> yaml.serializers().register(Models.EnumMapRecord.class));
         }
 
         @Test

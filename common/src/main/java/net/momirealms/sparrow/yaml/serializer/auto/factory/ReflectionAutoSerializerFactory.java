@@ -1,6 +1,7 @@
 package net.momirealms.sparrow.yaml.serializer.auto.factory;
 
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.Configuration;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
@@ -111,6 +112,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
         // 收集成员
         List<SerializableMember> members = new ArrayList<>();
         List<ConstructorParameter> parameters = new ArrayList<>();
+        Configuration.Naming naming = Configuration.Naming.of(rawType);
         
         for (RecordComponent component : components) {
             // 如果被标记了忽略, 则创建被忽略的Member实例.
@@ -121,7 +123,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
             }
             // 检查字段是否存在 YamlProperty 注解, 如果存在则采用注解声明的名称.
             YamlProperty property = component.getAnnotation(YamlProperty.class);
-            String name = property != null ? property.value() : component.getName();
+            String name = property != null ? property.value() : naming.convert(component.getName());
             // 获取规范化后的类型, 然后解析为一个 NodeSerializer.
             Type memberType = TypeUtils.normalize(component.getGenericType(), variables);
             NodeSerializer<?> serializer = context.resolve(memberType);
@@ -313,6 +315,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
     private List<SerializableMember> collectFields(Class<?> rawType, Map<TypeVariable<?>, Type> variables, AutoSerializerContext context) {
         List<SerializableMember> result = new ArrayList<>();
         Map<String, Field> fieldNames = new LinkedHashMap<>();
+        Configuration.Naming naming = Configuration.Naming.of(rawType);
         for (ClassFieldContext fieldContext : classHierarchy(rawType, variables)) {
             for (Field field : fieldContext.type().getDeclaredFields()) {
                 int modifiers = field.getModifiers();
@@ -320,7 +323,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
                     continue;
                 }
                 YamlProperty property = field.getAnnotation(YamlProperty.class);
-                String name = property != null ? property.value() : field.getName();
+                String name = property != null ? property.value() : naming.convert(field.getName());
                 Field previous = fieldNames.putIfAbsent(name, field);
                 if (previous != null) {
                     throw duplicateYamlField(rawType, name, previous, field);
@@ -439,12 +442,13 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
      */
     private List<String> parameterNames(Constructor<?> constructor) {
         List<String> names = new ArrayList<>();
+        Configuration.Naming naming = Configuration.Naming.of(constructor.getDeclaringClass());
         for (Parameter parameter : constructor.getParameters()) {
             YamlProperty property = parameter.getAnnotation(YamlProperty.class);
             if (property != null) {
                 names.add(property.value());
             } else if (parameter.isNamePresent()) {
-                names.add(parameter.getName());
+                names.add(naming.convert(parameter.getName()));
             } else {
                 names.add(null);
             }

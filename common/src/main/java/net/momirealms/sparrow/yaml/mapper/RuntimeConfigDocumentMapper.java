@@ -12,6 +12,7 @@ import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.AfterComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.BlankLineBefore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Comment;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.Configuration;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.InlineComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
@@ -163,6 +164,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
      */
     private static List<CommentBinding> collectComments(Class<?> type) {
         List<CommentBinding> result = new ArrayList<>();
+        Configuration.Naming naming = Configuration.Naming.of(type);
         if (type.isRecord()) {
             for (RecordComponent component : type.getRecordComponents()) {
                 if (component.isAnnotationPresent(YamlIgnore.class)) {
@@ -174,7 +176,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                 BlankLineBefore blankLineBefore = component.getAnnotation(BlankLineBefore.class);
                 if (comment != null || inlineComment != null || afterComment != null || blankLineBefore != null) {
                     result.add(new CommentBinding(
-                            yamlKey(component),
+                            yamlKey(component, naming),
                             blankLinesBefore(blankLineBefore),
                             before(comment),
                             inline(inlineComment),
@@ -196,7 +198,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
             BlankLineBefore blankLineBefore = field.getAnnotation(BlankLineBefore.class);
             if (comment != null || inlineComment != null || afterComment != null || blankLineBefore != null) {
                 result.add(new CommentBinding(
-                        yamlKey(field),
+                        yamlKey(field, naming),
                         blankLinesBefore(blankLineBefore),
                         before(comment),
                         inline(inlineComment),
@@ -212,6 +214,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
      */
     private static List<RequiredProperty> collectRequiredProperties(Class<?> type) {
         List<RequiredProperty> result = new ArrayList<>();
+        Configuration.Naming naming = Configuration.Naming.of(type);
         for (Constructor<?> constructor : type.getDeclaredConstructors()) {
             if (!constructor.isAnnotationPresent(YamlConstructor.class)) {
                 continue;
@@ -220,7 +223,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                 if (parameter.isAnnotationPresent(YamlIgnore.class)) {
                     continue;
                 }
-                result.add(new RequiredProperty(yamlKey(parameter), boxedType(TypeUtils.rawType(parameter.getParameterizedType()))));
+                result.add(new RequiredProperty(yamlKey(parameter, naming), boxedType(TypeUtils.rawType(parameter.getParameterizedType()))));
             }
         }
         return List.copyOf(result);
@@ -242,25 +245,25 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     /**
      * 解析字段映射到 YAML 中的键名.
      */
-    private static String yamlKey(Field field) {
+    private static String yamlKey(Field field, Configuration.Naming naming) {
         YamlProperty property = field.getAnnotation(YamlProperty.class);
-        return property != null ? property.value() : field.getName();
+        return property != null ? property.value() : naming.convert(field.getName());
     }
 
     /**
      * 解析 record 组件映射到 YAML 中的键名.
      */
-    private static String yamlKey(RecordComponent component) {
+    private static String yamlKey(RecordComponent component, Configuration.Naming naming) {
         YamlProperty property = component.getAnnotation(YamlProperty.class);
-        return property != null ? property.value() : component.getName();
+        return property != null ? property.value() : naming.convert(component.getName());
     }
 
     /**
      * 将注解字符串转换为 SnakeYAML 注释行.
      */
-    private static String yamlKey(Parameter parameter) {
+    private static String yamlKey(Parameter parameter, Configuration.Naming naming) {
         YamlProperty property = parameter.getAnnotation(YamlProperty.class);
-        return property != null ? property.value() : parameter.getName();
+        return property != null ? property.value() : naming.convert(parameter.getName());
     }
 
     private static Class<?> boxedType(Class<?> type) {

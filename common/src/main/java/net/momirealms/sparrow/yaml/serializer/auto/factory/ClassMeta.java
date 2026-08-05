@@ -37,6 +37,7 @@ final class ClassMeta {
         boolean hasYamlProperty; // 字段是否声明了 @YamlProperty.
         boolean hasYamlIgnore; // 字段是否声明了 @YamlIgnore.
         String yamlPropertyValue; // @YamlProperty 中声明的 YAML 键名.
+        String yamlKey; // 应用显式属性名或配置命名规则后的最终 YAML 键名.
     }
 
     /**
@@ -72,7 +73,7 @@ final class ClassMeta {
          * 获取字段最终映射到 YAML 中的键名.
          */
         String yamlKey() {
-            return field.hasYamlProperty ? field.yamlPropertyValue : field.name;
+            return field.yamlKey;
         }
     }
 }

@@ -8,6 +8,7 @@ import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerBinding;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerContext;
 import net.momirealms.sparrow.yaml.serializer.auto.accessor.FieldAccessor;
 import net.momirealms.sparrow.yaml.serializer.auto.accessor.FieldAccessors;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.Configuration;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
@@ -158,6 +159,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
     ) {
         List<ClassMeta.FieldEntry> result = new ArrayList<>();
         Map<String, Field> fieldNames = new LinkedHashMap<>();
+        Configuration.Naming naming = Configuration.Naming.of(rawType);
         for (ClassFieldContext fieldContext : classHierarchy(rawType, variables)) {
             List<ClassMeta.FieldEntry> fields = AsmClassMetaParser.parseFields(
                     fieldContext.type(),
@@ -167,7 +169,8 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
             for (int i = 0; i < fields.size(); i++) {
                 ClassMeta.FieldEntry field = fields.get(i);
                 if (!field.hasYamlIgnore) {
-                    String name = field.hasYamlProperty ? field.yamlPropertyValue : field.name;
+                    String name = field.hasYamlProperty ? field.yamlPropertyValue : naming.convert(field.name);
+                    field.yamlKey = name;
                     Field previous = fieldNames.putIfAbsent(name, field.reflectiveField);
                     if (previous != null) {
                         throw duplicateYamlField(rawType, name, previous, field.reflectiveField);
@@ -320,6 +323,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
 
         List<String> keys = new ArrayList<>();
         List<Integer> indices = new ArrayList<>();
+        Configuration.Naming naming = Configuration.Naming.of(rawType);
 
         // 按 record 组件顺序构造参数绑定.
         for (int i = 0; i < components.length; i++) {
@@ -332,7 +336,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
             }
 
             YamlProperty property = component.getAnnotation(YamlProperty.class);
-            keys.add(property != null ? property.value() : component.getName());
+            keys.add(property != null ? property.value() : naming.convert(component.getName()));
 
             java.lang.reflect.Type parameterType = TypeUtils.normalize(component.getGenericType(), typeVariables);
             indices.add(appendSer(bindings, ctx.resolve(parameterType), descriptor));
@@ -381,12 +385,13 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
         Parameter[] parameters = constructor.getParameters();
         List<String> keys = new ArrayList<>();
         List<Integer> indices = new ArrayList<>();
+        Configuration.Naming naming = Configuration.Naming.of(rawType);
 
         // 按构造器参数顺序解析 YAML 键名和序列化器.
         for (int i = 0; i < parameters.length; i++) {
             Parameter parameter = parameters[i];
             YamlProperty property = parameter.getAnnotation(YamlProperty.class);
-            String key = property != null ? property.value() : (parameter.isNamePresent() ? parameter.getName() : null);
+            String key = property != null ? property.value() : (parameter.isNamePresent() ? naming.convert(parameter.getName()) : null);
             if (key == null || key.isBlank()) {
                 throw new AutoSerializerException("No name for ctor param " + keys.size() + " in " + rawType.getName());
             }
@@ -413,14 +418,19 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
     ) {
         Parameter[] parameters = constructor.getParameters();
         List<String> keys = new ArrayList<>();
+        Configuration.Naming naming = Configuration.Naming.of(rawType);
 
         // 先校验所有参数名存在, 避免生成一半后才失败.
         for (int i = 0; i < parameters.length; i++) {
             Parameter parameter = parameters[i];
-            if (!parameter.isNamePresent()) {
+            YamlProperty property = parameter.getAnnotation(YamlProperty.class);
+            if (property != null) {
+                keys.add(property.value());
+            } else if (parameter.isNamePresent()) {
+                keys.add(naming.convert(parameter.getName()));
+            } else {
                 throw new AutoSerializerException("No param names in " + rawType.getName());
             }
-            keys.add(parameter.getName());
         }
 
         List<Integer> indices = new ArrayList<>();

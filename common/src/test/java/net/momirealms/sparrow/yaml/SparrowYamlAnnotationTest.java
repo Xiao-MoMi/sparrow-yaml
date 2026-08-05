@@ -1,5 +1,6 @@
 package net.momirealms.sparrow.yaml;
 
+import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.Comment;
@@ -15,6 +16,7 @@ import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
+import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -181,6 +183,43 @@ class SparrowYamlAnnotationTest {
         }
     }
 
+    public static class NamingBaseConfig {
+        protected int maxPlayerCount = 20;
+    }
+
+    public static class PlainNestedConfig {
+        private boolean keepInventory = true;
+    }
+
+    @Configuration(naming = Configuration.Naming.SNAKE_CASE)
+    public static class SnakeNamingConfig extends NamingBaseConfig {
+        @Comment("Online mode")
+        private boolean onlineMode = true;
+        private String httpServerURL = "localhost";
+        @YamlProperty("keep-inventory")
+        private boolean keepInventory = false;
+        private Map<ConfigKey, String> customValues = Map.of();
+        private PlainNestedConfig nestedSettings = new PlainNestedConfig();
+    }
+
+    @Configuration(naming = Configuration.Naming.KEBAB_CASE)
+    public record KebabNamingRecord(
+            boolean keepInventory,
+            @YamlProperty("online_mode") boolean onlineMode
+    ) {
+    }
+
+    @Configuration
+    public static class AsIsNamingConfig {
+        private boolean onlineMode = true;
+    }
+
+    @Configuration(naming = Configuration.Naming.SNAKE_CASE)
+    public static class NamingCollisionConfig {
+        private String onlineMode;
+        private String online_mode;
+    }
+
     @Test
     void testLoadObjectAndInjectComments() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
@@ -229,6 +268,104 @@ class SparrowYamlAnnotationTest {
         mapper.save(path, config);
         KeyedConfig reloaded = mapper.load(path).value();
         assertEquals(config.values(), reloaded.values());
+    }
+
+    @Test
+    void should_RoundTripConfigurationNamingWithoutChangingMapKeysOrNestedTypes(@TempDir Path tempDir) throws Exception {
+        AutoSerializerMode[] modes = {AutoSerializerMode.REFLECTION, AutoSerializerMode.ASM};
+        for (int i = 0; i < modes.length; i++) {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().setAutoSerializerMode(modes[i]).build();
+            sparrowYaml.serializers().register(ConfigKey.class, NodeSerializers.scalar(ConfigKey.class, ConfigKey::parse, ConfigKey::asString));
+            YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+            YamlMapper<SnakeNamingConfig> mapper = factory.create(SnakeNamingConfig.class, SnakeNamingConfig::new);
+            Path path = tempDir.resolve("snake-naming-" + modes[i].name().toLowerCase(Locale.ROOT) + ".yml");
+            Files.writeString(path, """
+                    max_player_count: 64
+                    online_mode: false
+                    http_server_url: example.org
+                    keep-inventory: true
+                    custom_values:
+                      "minecraft:stone": block
+                    nested_settings:
+                      keepInventory: false
+                    """);
+
+            SnakeNamingConfig config = mapper.load(path).value();
+
+            assertEquals(64, config.maxPlayerCount);
+            assertFalse(config.onlineMode);
+            assertEquals("example.org", config.httpServerURL);
+            assertTrue(config.keepInventory);
+            assertEquals("block", config.customValues.get(new ConfigKey("minecraft", "stone")));
+            assertFalse(config.nestedSettings.keepInventory);
+
+            mapper.save(path, config);
+            String saved = Files.readString(path).replace("\r\n", "\n");
+
+            assertTrue(saved.contains("max_player_count: 64"), saved);
+            assertTrue(saved.contains("# Online mode\nonline_mode: false"), saved);
+            assertTrue(saved.contains("http_server_url: example.org"), saved);
+            assertTrue(saved.contains("keep-inventory: true"), saved);
+            assertTrue(saved.contains("custom_values:"), saved);
+            assertTrue(saved.contains("minecraft:stone"), saved);
+            assertFalse(saved.contains("minecraft_stone"), saved);
+            assertTrue(saved.contains("nested_settings:\n  keepInventory: false"), saved);
+            assertFalse(saved.contains("nested_settings:\n  keep_inventory: false"), saved);
+
+            SnakeNamingConfig reloaded = mapper.load(path).value();
+            assertEquals(config.maxPlayerCount, reloaded.maxPlayerCount);
+            assertEquals(config.onlineMode, reloaded.onlineMode);
+            assertEquals(config.httpServerURL, reloaded.httpServerURL);
+            assertEquals(config.keepInventory, reloaded.keepInventory);
+            assertEquals(config.customValues, reloaded.customValues);
+            assertEquals(config.nestedSettings.keepInventory, reloaded.nestedSettings.keepInventory);
+        }
+    }
+
+    @Test
+    void should_RoundTripRecordNamingAndExplicitYamlProperty() throws Exception {
+        AutoSerializerMode[] modes = {AutoSerializerMode.REFLECTION, AutoSerializerMode.ASM};
+        for (int i = 0; i < modes.length; i++) {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().setAutoSerializerMode(modes[i]).build();
+            NodeSerializer<KebabNamingRecord> serializer = sparrowYaml.serializers().register(KebabNamingRecord.class);
+            YamlDocument document = sparrowYaml.load("""
+                    keep-inventory: false
+                    online_mode: true
+                    """);
+
+            KebabNamingRecord config = serializer.deserialize(document);
+            Object serialized = serializer.serialize(config);
+
+            assertEquals(new KebabNamingRecord(false, true), config);
+            assertTrue(serialized instanceof Map<?, ?>);
+            Map<?, ?> values = (Map<?, ?>) serialized;
+            assertEquals(false, values.get("keep-inventory"));
+            assertEquals(true, values.get("online_mode"));
+            assertFalse(values.containsKey("keepInventory"));
+            assertFalse(values.containsKey("online-mode"));
+        }
+    }
+
+    @Test
+    void should_KeepAsIsDefaultAndRejectConvertedFieldCollisions() throws Exception {
+        AutoSerializerMode[] modes = {AutoSerializerMode.REFLECTION, AutoSerializerMode.ASM};
+        for (int i = 0; i < modes.length; i++) {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().setAutoSerializerMode(modes[i]).build();
+            NodeSerializer<AsIsNamingConfig> serializer = sparrowYaml.serializers().register(AsIsNamingConfig.class);
+            YamlDocument document = sparrowYaml.load("onlineMode: false");
+
+            AsIsNamingConfig config = serializer.deserialize(document);
+            Object serialized = serializer.serialize(config);
+
+            assertFalse(config.onlineMode);
+            assertTrue(serialized instanceof Map<?, ?>);
+            Map<?, ?> values = (Map<?, ?>) serialized;
+            assertEquals(false, values.get("onlineMode"));
+            assertFalse(values.containsKey("online_mode"));
+
+            AutoSerializerException exception = assertThrows(AutoSerializerException.class, () -> sparrowYaml.serializers().register(NamingCollisionConfig.class));
+            assertTrue(exception.getMessage().contains("Duplicate YAML field 'online_mode'"), exception.getMessage());
+        }
     }
 
     @Test
