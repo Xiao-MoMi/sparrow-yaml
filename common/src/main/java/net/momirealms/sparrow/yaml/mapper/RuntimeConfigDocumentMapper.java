@@ -27,12 +27,15 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 运行期配置文档映射器.
@@ -45,11 +48,13 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     private final Class<T> type; // 配置类类型
     private final List<CommentBinding> comments; // 保存时需要应用到顶层键的注释
     private final List<RequiredProperty> requiredProperties;
+    private final List<Route> dynamicSectionRoutes; // 子节点属于动态用户数据的 Section 路由, 即 Map 字段对应的路由
 
     RuntimeConfigDocumentMapper(Class<T> type) {
         this.type = type;
         this.comments = collectComments(type);
         this.requiredProperties = collectRequiredProperties(type);
+        this.dynamicSectionRoutes = collectDynamicSectionRoutes(type);
     }
 
     /**
@@ -99,6 +104,11 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                 throw new MissingNodeException(requiredProperty.key(), document, requiredProperty.targetType());
             }
         }
+    }
+
+    @Override
+    public List<Route> dynamicSectionRoutes() {
+        return this.dynamicSectionRoutes;
     }
 
     /**
@@ -227,6 +237,65 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
             }
         }
         return List.copyOf(result);
+    }
+
+    /**
+     * 收集配置类中 Map 字段对应的路由, 包含嵌套配置类中的 Map 字段.
+     * 这些路由的子节点是动态用户数据, 升级时不应被模板内容合并或清理.
+     */
+    private static List<Route> collectDynamicSectionRoutes(Class<?> type) {
+        List<Route> result = new ArrayList<>();
+        collectDynamicSectionRoutes(type, null, new HashSet<>(), result);
+        return List.copyOf(result);
+    }
+
+    private static void collectDynamicSectionRoutes(Class<?> type, Route prefix, Set<Class<?>> visiting, List<Route> result) {
+        if (!visiting.add(type)) {
+            return;
+        }
+        Configuration.Naming naming = Configuration.Naming.of(type);
+        if (type.isRecord()) {
+            for (RecordComponent component : type.getRecordComponents()) {
+                if (component.isAnnotationPresent(YamlIgnore.class)) {
+                    continue;
+                }
+                collectMemberDynamicRoutes(component.getGenericType(), Route.addTo(prefix, yamlKey(component, naming)), visiting, result);
+            }
+        } else {
+            for (Field field : declaredFieldsInHierarchy(type)) {
+                int modifiers = field.getModifiers();
+                if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers) || field.isAnnotationPresent(YamlIgnore.class)) {
+                    continue;
+                }
+                collectMemberDynamicRoutes(field.getGenericType(), Route.addTo(prefix, yamlKey(field, naming)), visiting, result);
+            }
+        }
+        visiting.remove(type);
+    }
+
+    private static void collectMemberDynamicRoutes(Type memberType, Route route, Set<Class<?>> visiting, List<Route> result) {
+        Class<?> rawType;
+        try {
+            rawType = TypeUtils.rawType(memberType);
+        } catch (AutoSerializerException e) {
+            return; // 无法确定原始类型的成员交由序列化层报告, 不参与动态路由收集.
+        }
+        if (rawType == Map.class) {
+            result.add(route);
+            return;
+        }
+        if (isNestedConfigCandidate(rawType)) {
+            collectDynamicSectionRoutes(rawType, route, visiting, result);
+        }
+    }
+
+    // 判断成员类型是否可能作为嵌套配置 mapping 参与自动序列化, 与 resolver 的类型分支保持一致.
+    private static boolean isNestedConfigCandidate(Class<?> type) {
+        if (type.isPrimitive() || type.isEnum() || type.isArray() || type.isInterface() || Modifier.isAbstract(type.getModifiers())) {
+            return false;
+        }
+        String packageName = type.getPackageName();
+        return !packageName.startsWith("java.") && !packageName.startsWith("javax.") && !packageName.startsWith("jdk.") && !packageName.startsWith("sun.");
     }
 
     private static List<Field> declaredFieldsInHierarchy(Class<?> type) {

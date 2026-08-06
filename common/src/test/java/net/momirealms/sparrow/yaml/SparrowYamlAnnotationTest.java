@@ -101,6 +101,39 @@ class SparrowYamlAnnotationTest {
         public String getAdded() { return added; }
     }
 
+    @Configuration
+    public static class VersionedMapConfig {
+        @YamlProperty("config-version")
+        private String version = "2";
+
+        private Map<String, Integer> rewards = Map.of("default", 10);
+
+        public String getVersion() { return version; }
+
+        public Map<String, Integer> getRewards() { return rewards; }
+
+    }
+
+    public static class DynamicNestedConfig {
+
+        private Map<ConfigKey, String> overrides = Map.of(new ConfigKey("minecraft", "stone"), "block");
+
+        public Map<ConfigKey, String> overrides() { return this.overrides; }
+
+    }
+
+    @Configuration
+    public static class VersionedNestedMapConfig {
+
+        @YamlProperty("config-version")
+        private String version = "2";
+
+        private DynamicNestedConfig nested = new DynamicNestedConfig();
+
+        public DynamicNestedConfig nested() { return this.nested; }
+
+    }
+
     public static class InheritedBaseConfig {
         @Comment("Base host")
         protected String host = "127.0.0.1";
@@ -703,6 +736,84 @@ class SparrowYamlAnnotationTest {
         assertEquals("local", savedDocument.getNodeOrNull("value").value());
         assertEquals("created", savedDocument.getNodeOrNull("added").value());
         assertNull(savedDocument.getNodeOrNull("legacy"));
+    }
+
+    @Test
+    void should_PreserveLocalMapEntries_When_ConfigIsUpgraded(@TempDir Path tempDir) throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder()
+                .sparrowYaml(sparrowYaml)
+                .upgradePipeline(YamlUpgradePipeline.builder().build())
+                .build();
+        YamlMapper<VersionedMapConfig> mapper = factory.create(VersionedMapConfig.class, VersionedMapConfig::new);
+
+        Path configPath = tempDir.resolve("versioned-map-config.yml");
+        Files.writeString(configPath, """
+                config-version: 1
+                rewards:
+                  default: 10
+                  vip: 100
+                  mvp: 500
+                """);
+
+        VersionedMapConfig config = mapper.load(configPath).value();
+        String saved = Files.readString(configPath).replace("\r\n", "\n");
+
+        assertEquals("2", config.getVersion());
+        assertEquals(Map.of("default", 10, "vip", 100, "mvp", 500), config.getRewards(), "升级后应保留本地 Map 中用户自定义的条目");
+        assertTrue(saved.contains("vip: 100"), saved);
+        assertTrue(saved.contains("mvp: 500"), saved);
+    }
+
+    @Test
+    void should_AddMissingMapFieldWithDefaults_When_ConfigIsUpgraded(@TempDir Path tempDir) throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        YamlMapperFactory factory = YamlMapperFactory.builder()
+                .sparrowYaml(sparrowYaml)
+                .upgradePipeline(YamlUpgradePipeline.builder().build())
+                .build();
+        YamlMapper<VersionedMapConfig> mapper = factory.create(VersionedMapConfig.class, VersionedMapConfig::new);
+
+        Path configPath = tempDir.resolve("versioned-map-config-missing.yml");
+        Files.writeString(configPath, """
+                config-version: 1
+                """);
+
+        VersionedMapConfig config = mapper.load(configPath).value();
+        String saved = Files.readString(configPath).replace("\r\n", "\n");
+
+        assertEquals("2", config.getVersion());
+        assertEquals(Map.of("default", 10), config.getRewards(), "本地缺失 Map 字段时, 升级应补齐模板默认条目");
+        assertTrue(saved.contains("rewards:"), saved);
+        assertTrue(saved.contains("default: 10"), saved);
+    }
+
+    @Test
+    void should_PreserveNestedCustomKeyMapEntries_When_ConfigIsUpgraded(@TempDir Path tempDir) throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        sparrowYaml.serializers().register(ConfigKey.class, NodeSerializers.scalar(ConfigKey.class, ConfigKey::parse, ConfigKey::asString));
+        YamlMapperFactory factory = YamlMapperFactory.builder()
+                .sparrowYaml(sparrowYaml)
+                .upgradePipeline(YamlUpgradePipeline.builder().build())
+                .build();
+        YamlMapper<VersionedNestedMapConfig> mapper = factory.create(VersionedNestedMapConfig.class, VersionedNestedMapConfig::new);
+
+        Path configPath = tempDir.resolve("versioned-nested-map-config.yml");
+        Files.writeString(configPath, """
+                config-version: 1
+                nested:
+                  overrides:
+                    "minecraft:dirt": ground
+                    "custom:gem": treasure
+                """);
+
+        VersionedNestedMapConfig config = mapper.load(configPath).value();
+        String saved = Files.readString(configPath).replace("\r\n", "\n");
+
+        assertEquals(Map.of(new ConfigKey("minecraft", "dirt"), "ground", new ConfigKey("custom", "gem"), "treasure"), config.nested().overrides(), "升级后应保留嵌套 Map 中用户自定义的条目, 且不回填被用户删除的默认条目");
+        assertTrue(saved.contains("minecraft:dirt"), saved);
+        assertTrue(saved.contains("custom:gem"), saved);
+        assertFalse(saved.contains("minecraft:stone"), saved);
     }
 
     @Test

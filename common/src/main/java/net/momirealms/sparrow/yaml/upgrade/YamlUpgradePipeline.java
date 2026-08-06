@@ -67,13 +67,26 @@ public class YamlUpgradePipeline {
      * @return 升级后的 YAML 文档, 也就是 localDocument .
      */
     public YamlDocument upgrade(YamlDocument localDocument, YamlDocument defDocument) {
+        return this.upgrade(localDocument, defDocument, List.of());
+    }
+
+    /**
+     * 根据模板文档升级本地文档, 并额外登记一组动态 Section 路由.
+     * 动态 Section 路由本身仍参与补齐, 但其子节点属于用户数据, 不会被模板内容合并或清理.
+     *
+     * @param localDocument 本地 YAML 文档
+     * @param defDocument 模板 YAML 文档
+     * @param dynamicSectionRoutes 子节点属于动态用户数据的 Section 路由
+     * @return 升级后的 YAML 文档, 也就是 localDocument .
+     */
+    public YamlDocument upgrade(YamlDocument localDocument, YamlDocument defDocument, Collection<Route> dynamicSectionRoutes) {
         String localVersion = versionExtractor.extractVersion(localDocument);
         String targetVersion = versionExtractor.extractTargetVersion(defDocument);
         if (localVersion.equals(targetVersion)) {
             return localDocument;
         }
 
-        ResolvedUpgradePlan upgradePlan = this.resolveUpgradePlan(localVersion);
+        ResolvedUpgradePlan upgradePlan = this.resolveUpgradePlan(localVersion, dynamicSectionRoutes);
         PatchContext patchContext = new PatchContext();
 
         // 打版本 Patch
@@ -113,12 +126,13 @@ public class YamlUpgradePipeline {
     /**
      * 解析本次升级命中的补丁, 并编译全局忽略节点匹配器.
      */
-    private ResolvedUpgradePlan resolveUpgradePlan(String localVersion) {
+    private ResolvedUpgradePlan resolveUpgradePlan(String localVersion, Collection<Route> dynamicSectionRoutes) {
         List<Patch> executablePatches = new ArrayList<>();
         IgnoredRouteMatcher.Builder ignoredRouteMatcherBuilder = IgnoredRouteMatcher.builder();
         for (Route route : options.globallyIgnoredRoutes()) {
             ignoredRouteMatcherBuilder.add(route);
         }
+        ignoredRouteMatcherBuilder.addDescendants(dynamicSectionRoutes);
         for (VersionPatch versionPatch : versionPatches) {
             if (!versionPatch.predicate().matches(localVersion)) {
                 continue;

@@ -68,7 +68,7 @@ public class YamlMapper<T> {
             T defaultInstance = this.defaultInstanceSupplier.get();
             YamlDocument defDocument = documentMapper.toDocument(defaultInstance, null, sparrowYaml);
             if (upgradePipeline.needsUpgrade(localDocument, defDocument)) {
-                YamlDocument upgradedDocument = upgradePipeline.upgrade(localDocument, defDocument);
+                YamlDocument upgradedDocument = upgradePipeline.upgrade(localDocument, defDocument, documentMapper.dynamicSectionRoutes());
                 backupBeforeUpgrade(path);
                 saveDocument(path, upgradedDocument);
                 T upgradedInstance = documentMapper.fromDocument(upgradedDocument, sparrowYaml);

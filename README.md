@@ -208,6 +208,7 @@ upgraded.save(Path.of("config.yml"));
 - `updateComments(true)` 会把默认文档中的非空注释同步到已有本地节点。
 - `deleteRemovedNodes(true)` 会删除默认文档中已不存在的本地节点，默认值为 `true`。
 - `addIgnoredRoute(...)` 标记的路径不会参与合并，也不会参与清理。
+- `pipeline.upgrade(local, defaults, dynamicSectionRoutes)` 可以额外登记一组动态 Section 路由：路由本身仍参与补齐（本地缺失时写入默认内容），但其子节点视为用户数据，不会被默认文档合并，也不会被清理删除。
 
 常用补丁规则：
 
@@ -618,6 +619,7 @@ mapper.save(Path.of("config.yml"), config);
 - 文件不存在时，调用 `defaultInstanceSupplier` 创建默认配置实例，将它序列化成 YAML 文件并返回该实例。
 - 文件存在时，读取文件并反序列化成配置对象。
 - 配置了 `YamlUpgradePipeline` 时，会把 `defaultInstanceSupplier` 返回的默认实例序列化成默认文档，再用升级管线比较本地版本和目标版本；版本不同则升级、保存、再反序列化。
+- 升级时配置类中的 `Map<K, V>` 字段（含嵌套配置类中的 Map 字段）会被自动登记为动态 Section：字段本身缺失时仍会补齐默认条目，但字段内的键值属于用户数据，不会被默认实例的内容合并或清理。
 - `backupOnUpgrade(true)` 只会在实际发生升级且写回文件前备份原文件；`backupPathResolver(...)` 可以自定义备份路径，默认路径为 `原文件名.bak.<timestamp>`。
 - 同一个 mapper 会缓存最近一次加载的实例；当路径、最后修改时间和文件大小都没变时，`load` 返回缓存实例。
 - `loadForce(path)` 会忽略缓存，强制重新读取。
