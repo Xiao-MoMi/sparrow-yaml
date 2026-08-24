@@ -437,6 +437,42 @@ class SparrowYamlTest {
         }
 
         @Test
+        void should_ReplaceExistingLeaf_When_SettingRoute() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+                    server:
+                      host: old
+                    items: [old]
+                    """);
+
+            YamlNode<?> host = yamlDocument.set(Route.from("server", "host"), "new");
+            YamlNode<?> item = yamlDocument.set(Route.from("items", 0), "new");
+
+            assertEquals("new", host.value());
+            assertEquals("new", item.value());
+            assertEquals("new", yamlDocument.get(String.class, "server", "host"));
+            assertEquals("new", yamlDocument.get(String.class, "items", 0));
+        }
+
+        @Test
+        void should_ReplaceMismatchedIntermediateNode_When_SettingRoute() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+                    mapping: old
+                    sequence: old
+                    items: [old]
+                    """);
+
+            yamlDocument.set(Route.from("mapping", "enabled"), true);
+            yamlDocument.set(Route.from("sequence", 1), "second");
+            yamlDocument.set(Route.from("items", 0, "name"), "first");
+
+            assertEquals(true, yamlDocument.get(Boolean.class, "mapping", "enabled"));
+            assertEquals("second", yamlDocument.get(String.class, "sequence", 1));
+            assertEquals("first", yamlDocument.get(String.class, "items", 0, "name"));
+        }
+
+        @Test
         void should_AutoFillWithNull_When_SettingSequenceNodeOutOfBound() throws IOException {
             // 1. 准备阶段 (Arrange)
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();

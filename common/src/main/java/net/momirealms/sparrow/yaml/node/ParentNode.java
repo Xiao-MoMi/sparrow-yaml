@@ -6,7 +6,6 @@ import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.TypeRef;
 import net.momirealms.sparrow.yaml.route.element.IndexElement;
-import net.momirealms.sparrow.yaml.route.element.KeyElement;
 import net.momirealms.sparrow.yaml.route.element.RouteElement;
 import net.momirealms.sparrow.yaml.util.TypeUtils;
 import org.jetbrains.annotations.NotNull;
@@ -462,88 +461,63 @@ public interface ParentNode<T extends YamlNode<?>> {
         Objects.requireNonNull(route, "路由不可为 null !");
 
         YamlNode<?> currentNode = this.yamlNode();
+        if (route.length() == 0) {
+            return currentNode;
+        }
         YamlDocument root = currentNode.root();
 
-        // 循环搜索路由元素
-        int routeLength = route.routeKeys().length;
+        int routeLength = route.length();
         for (int i = 0; i < routeLength; i++) {
             RouteElement<?> nextRouteElement = route.getRouteElement(i);
             boolean isLastElement = (i == routeLength - 1);
 
-            // 如果当前节点是 Sequence 节点, 则检查当前路由是不是 IndexElement, 则进行搜索获取下一个节点;
             if (currentNode instanceof SequenceNode sequenceNode) {
-                // 拦截不匹配的路由元素.
                 if (!(nextRouteElement instanceof IndexElement indexElement)) {
                     throw new UnsupportedOperationException("当前节点类型为 SequenceNode , 所以 Route 的第一个元素必须是一个 IndexElement ,但是实际是: " + nextRouteElement.getClass().getSimpleName());
                 }
 
                 int nextRouteKey = indexElement.key();
-                YamlNode<?> targetNode = sequenceNode.getNodeOrNull(nextRouteKey);
-
-                // 没有节点就新建
-                if (targetNode == null) {
-                    // 如果末尾节点, 则直接建立叶子节点的 Node;
-                    if (isLastElement) {
-                        sequenceNode.setSubNode(nextRouteKey, value);
-                        targetNode = sequenceNode.getNodeOrNull(nextRouteKey);
-                    } else {
-                        // 获取下下个节点元素, 确定目标节点类型
-                        RouteElement<?> createRouteElement = route.getRouteElement(i + 1);
-
-                        // 第一种情况, 是 IndexElement, 则建立 SequenceNode;
-                        if (createRouteElement instanceof IndexElement) {
-                            targetNode = SequenceNode.createEmpty(root);
-                        }
-                        // 第二种情况, 是 KeyElement, 则建立 SectionNode;
-                        else if (createRouteElement instanceof KeyElement) {
-                            targetNode = SectionNode.createEmpty(root);
-                        }
-                        
-                        sequenceNode.setSubNode(nextRouteKey, targetNode);
-                    }
+                if (isLastElement) {
+                    sequenceNode.setSubNode(nextRouteKey, value);
+                    return sequenceNode.getNodeOrNull(nextRouteKey);
                 }
 
-                // 记录下一个节点
+                RouteElement<?> childRouteElement = route.getRouteElement(i + 1);
+                YamlNode<?> targetNode = sequenceNode.getNodeOrNull(nextRouteKey);
+                if (!matchesContainer(targetNode, childRouteElement)) {
+                    targetNode = createContainer(root, childRouteElement);
+                    sequenceNode.setSubNode(nextRouteKey, targetNode);
+                }
                 currentNode = targetNode;
             }
-            // 如果当前节点是 Section 节点, 则进行搜索获取下一个节点;
             else if (currentNode instanceof SectionNode sectionNode) {
                 Object nextRouteKey = nextRouteElement.key();
-                YamlNode<?> targetNode = sectionNode.getNodeOrNull(nextRouteElement);
-
-                // 没有节点就新建
-                if (targetNode == null) {
-                    // 是末尾节点, 则直接建立叶子节点的 Node;
-                    if (isLastElement) {
-                        sectionNode.setSubNode(nextRouteKey, value);
-                        targetNode = sectionNode.getNodeOrNull(nextRouteKey);
-                    } else {
-                        // 获取下下个节点元素, 确定目标节点类型;
-                        RouteElement<?> createRouteElement = route.getRouteElementOrNull(i + 1);
-
-                        // 第一种情况, 是 IndexElement, 则建立 SequenceNode;
-                        if (createRouteElement instanceof IndexElement) {
-                            targetNode = SequenceNode.createEmpty(root);
-                        }
-                        // 第二种情况, 是 KeyElement, 则建立 SectionNode;
-                        else if (createRouteElement instanceof KeyElement) {
-                            targetNode = SectionNode.createEmpty(root);
-                        }
-                        
-                        sectionNode.setSubNode(nextRouteKey, targetNode);
-                    }
+                if (isLastElement) {
+                    sectionNode.setSubNode(nextRouteKey, value);
+                    return sectionNode.getNodeOrNull(nextRouteKey);
                 }
 
-                // 记录下一个节点
+                RouteElement<?> childRouteElement = route.getRouteElement(i + 1);
+                YamlNode<?> targetNode = sectionNode.getNodeOrNull(nextRouteElement);
+                if (!matchesContainer(targetNode, childRouteElement)) {
+                    targetNode = createContainer(root, childRouteElement);
+                    sectionNode.setSubNode(nextRouteKey, targetNode);
+                }
                 currentNode = targetNode;
             }
-            // 理论上不会进入
             else {
                 throw new UnsupportedOperationException("当前节点不支持寻找或创建子节点，或路由类型不匹配。节点类型: " + currentNode.getClass().getSimpleName() + ", 路由元素: " + nextRouteElement.getClass().getSimpleName());
             }
         }
-        // 循环结束返回创建完成的 Node;
         return currentNode;
+    }
+
+    private static boolean matchesContainer(@Nullable YamlNode<?> node, RouteElement<?> routeElement) {
+        return routeElement instanceof IndexElement ? node instanceof SequenceNode : node instanceof SectionNode;
+    }
+
+    private static YamlNode<?> createContainer(YamlDocument root, RouteElement<?> routeElement) {
+        return routeElement instanceof IndexElement ? SequenceNode.createEmpty(root) : SectionNode.createEmpty(root);
     }
 
     /**
