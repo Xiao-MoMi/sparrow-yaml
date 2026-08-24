@@ -8,6 +8,7 @@ import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.TypeRef;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerBinding;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
+import net.momirealms.sparrow.yaml.serializer.auto.annotation.Configuration;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
@@ -63,6 +64,14 @@ class AutoSerializerTest {
                 @YamlProperty("custom_name") String name,
                 @YamlIgnore String secret
         ) {}
+
+        record DuplicateYamlRecord(
+                @YamlProperty("same") String first,
+                @YamlProperty("same") String second
+        ) {}
+
+        @Configuration(naming = Configuration.Naming.SNAKE_CASE)
+        record DuplicateNamingRecord(String fooBar, String foo_bar) {}
 
         // ==========================================
         // 普通 Class 相关的测试模型
@@ -1133,6 +1142,26 @@ class AutoSerializerTest {
     class AutoSerializerModeTests {
 
         @Test
+        void should_RejectDuplicateRecordYamlKeysInReflectionMode() {
+            this.assertDuplicateRecordYamlKeysRejected(AutoSerializerMode.REFLECTION, Models.DuplicateYamlRecord.class, "same", "first", "second");
+        }
+
+        @Test
+        void should_RejectDuplicateRecordYamlKeysInAsmMode() {
+            this.assertDuplicateRecordYamlKeysRejected(AutoSerializerMode.ASM, Models.DuplicateYamlRecord.class, "same", "first", "second");
+        }
+
+        @Test
+        void should_RejectNamingCollisionInReflectionMode() {
+            this.assertDuplicateRecordYamlKeysRejected(AutoSerializerMode.REFLECTION, Models.DuplicateNamingRecord.class, "foo_bar", "fooBar", "foo_bar");
+        }
+
+        @Test
+        void should_RejectNamingCollisionInAsmMode() {
+            this.assertDuplicateRecordYamlKeysRejected(AutoSerializerMode.ASM, Models.DuplicateNamingRecord.class, "foo_bar", "fooBar", "foo_bar");
+        }
+
+        @Test
         void should_UseAdaptiveDefaultAcrossIsolatedClassLoader(@TempDir Path tempDir) throws Exception {
             Class<?> type = compileAndLoadExternal(tempDir, "external.ExternalPojo", """
                     package external;
@@ -1231,6 +1260,26 @@ class AutoSerializerTest {
 
             assertNotNull(result);
             assertEquals("reflection", type.getField("name").get(result));
+        }
+
+        private void assertDuplicateRecordYamlKeysRejected(
+                AutoSerializerMode mode,
+                Class<?> type,
+                String yamlKey,
+                String firstComponent,
+                String secondComponent
+        ) {
+            SparrowYaml yaml = SparrowYaml.builder()
+                    .setAutoSerializerMode(mode)
+                    .build();
+
+            AutoSerializerException exception = assertThrows(
+                    AutoSerializerException.class,
+                    () -> yaml.serializers().register(type)
+            );
+            assertTrue(exception.getMessage().contains("Duplicate YAML field '" + yamlKey + "'"));
+            assertTrue(exception.getMessage().contains("." + firstComponent));
+            assertTrue(exception.getMessage().contains("." + secondComponent));
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})

@@ -112,6 +112,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
         // 收集成员
         List<SerializableMember> members = new ArrayList<>();
         List<ConstructorParameter> parameters = new ArrayList<>();
+        Map<String, RecordComponent> componentNames = new LinkedHashMap<>();
         Configuration.Naming naming = Configuration.Naming.of(rawType);
         
         for (RecordComponent component : components) {
@@ -124,6 +125,10 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
             // 检查字段是否存在 YamlProperty 注解, 如果存在则采用注解声明的名称.
             YamlProperty property = component.getAnnotation(YamlProperty.class);
             String name = property != null ? property.value() : naming.convert(component.getName());
+            RecordComponent previous = componentNames.putIfAbsent(name, component);
+            if (previous != null) {
+                throw this.duplicateYamlField(rawType, name, previous, component);
+            }
             // 获取规范化后的类型, 然后解析为一个 NodeSerializer.
             Type memberType = TypeUtils.normalize(component.getGenericType(), variables);
             NodeSerializer<?> serializer = context.resolve(memberType);
@@ -326,7 +331,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
                 String name = property != null ? property.value() : naming.convert(field.getName());
                 Field previous = fieldNames.putIfAbsent(name, field);
                 if (previous != null) {
-                    throw duplicateYamlField(rawType, name, previous, field);
+                    throw this.duplicateYamlField(rawType, name, previous, field);
                 }
                 Type fieldType = TypeUtils.normalize(field.getGenericType(), fieldContext.variables());
                 NodeSerializer<?> serializer = context.resolve(fieldType);
@@ -374,11 +379,29 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
     }
 
     private AutoSerializerException duplicateYamlField(Class<?> rawType, String name, Field previous, Field current) {
+        return this.duplicateYamlMember(
+                rawType,
+                name,
+                previous.getDeclaringClass().getName() + "." + previous.getName(),
+                current.getDeclaringClass().getName() + "." + current.getName()
+        );
+    }
+
+    private AutoSerializerException duplicateYamlField(Class<?> rawType, String name, RecordComponent previous, RecordComponent current) {
+        return this.duplicateYamlMember(
+                rawType,
+                name,
+                previous.getDeclaringRecord().getName() + "." + previous.getName(),
+                current.getDeclaringRecord().getName() + "." + current.getName()
+        );
+    }
+
+    private AutoSerializerException duplicateYamlMember(Class<?> rawType, String name, String previous, String current) {
         return new AutoSerializerException("Duplicate YAML field '" + name + "' while auto-serializing "
                 + rawType.getName() + ": "
-                + previous.getDeclaringClass().getName() + "." + previous.getName()
+                + previous
                 + " conflicts with "
-                + current.getDeclaringClass().getName() + "." + current.getName());
+                + current);
     }
 
     private record ClassFieldContext(Class<?> type, Map<TypeVariable<?>, Type> variables) {
