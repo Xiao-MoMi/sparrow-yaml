@@ -32,6 +32,14 @@ public interface ParentNode<T extends YamlNode<?>> {
      * @param route 路由
      * @return 目标 JavaBean
      */
+    default <R> R get(NodeSerializer<R> serializer, Route route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        if (yamlNode == null) {
+            throw missing(route, serializer.targetType());
+        }
+        return yamlNode.get(serializer);
+    }
+
     default <R> R get(NodeSerializer<R> serializer, Object... route) {
         YamlNode<?> yamlNode = this.getNodeOrNull(route);
         if (yamlNode == null) {
@@ -47,12 +55,28 @@ public interface ParentNode<T extends YamlNode<?>> {
      * @param route 路由
      * @return 目标 JavaBean
      */
+    default <R> R get(Class<R> clazz, Route route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        if (yamlNode == null) {
+            throw missing(route, clazz);
+        }
+        return yamlNode.get(clazz);
+    }
+
     default <R> R get(Class<R> clazz, Object... route) {
         YamlNode<?> yamlNode = this.getNodeOrNull(route);
         if (yamlNode == null) {
             throw missing(route, clazz);
         }
         return yamlNode.get(clazz);
+    }
+
+    default <R> R get(TypeRef<R> typeRef, Route route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        if (yamlNode == null) {
+            throw missing(route, TypeUtils.rawType(typeRef.type()));
+        }
+        return yamlNode.get(typeRef);
     }
 
     default <R> R get(TypeRef<R> typeRef, Object... route) {
@@ -76,6 +100,11 @@ public interface ParentNode<T extends YamlNode<?>> {
         return yamlNode != null ? yamlNode.get(serializer) : defaultValue;
     }
 
+    default <R> R getOrDefault(NodeSerializer<R> serializer, R defaultValue, Route route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        return yamlNode != null ? yamlNode.get(serializer) : defaultValue;
+    }
+
     /**
      * 根据路由, 从当前节点出发, 获得目标路由的节点;
      * 然后根据 Class 从 SerializerRegistry 中获取反序列化器进行解析.
@@ -84,9 +113,19 @@ public interface ParentNode<T extends YamlNode<?>> {
      * @param route 路由
      * @return 目标 JavaBean
      */
+    default <R> R getOrDefault(Class<R> clazz, R defaultValue, Route route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        return yamlNode != null ? yamlNode.get(clazz) : defaultValue;
+    }
+
     default <R> R getOrDefault(Class<R> clazz, R defaultValue, Object... route) {
         YamlNode<?> yamlNode = this.getNodeOrNull(route);
         return yamlNode != null ? yamlNode.get(clazz) : defaultValue;
+    }
+
+    default <R> R getOrDefault(TypeRef<R> typeRef, R defaultValue, Route route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        return yamlNode != null ? yamlNode.get(typeRef) : defaultValue;
     }
 
     default <R> R getOrDefault(TypeRef<R> typeRef, R defaultValue, Object... route) {
@@ -94,10 +133,13 @@ public interface ParentNode<T extends YamlNode<?>> {
         return yamlNode != null ? yamlNode.get(typeRef) : defaultValue;
     }
 
+    private static MissingNodeException missing(Route route, Class<?> targetType) {
+        Object key = route.length() == 0 ? null : route.getRouteElement(route.length() - 1).key();
+        return new MissingNodeException(key, route, targetType);
+    }
+
     private static MissingNodeException missing(Object[] route, Class<?> targetType) {
-        Route path = Route.from(route);
-        Object key = path.length() == 0 ? null : path.getRouteElement(path.length() - 1).key();
-        return new MissingNodeException(key, path, targetType);
+        return missing(Route.from(route), targetType);
     }
 
     /**
@@ -140,8 +182,13 @@ public interface ParentNode<T extends YamlNode<?>> {
     }
 
     @NotNull
+    default Optional<YamlNode<?>> getNodeOptional(@NotNull Route route) {
+        return Optional.ofNullable(this.getNodeOrNull(route));
+    }
+
+    @NotNull
     default Optional<YamlNode<?>> getNodeOptional(@NotNull Object... route) {
-        return Optional.ofNullable(this.getNodeOrNull(Route.from(route)));
+        return this.getNodeOptional(Route.from(route));
     }
 
     /**
