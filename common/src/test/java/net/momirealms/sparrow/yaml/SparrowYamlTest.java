@@ -376,6 +376,29 @@ class SparrowYamlTest {
             assertEquals(Map.of("map", "value"), sequence.get(2));
             assertEquals(List.of("nested", 100.0), sequence.get(3));
         }
+
+        @Test
+        void should_RepresentYamlNullAsJavaNull() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+                    scalar-null: null
+                    section:
+                      nested-null: null
+                    sequence: [null]
+                    """);
+
+            Map<?, ?> represented = assertInstanceOf(Map.class, yamlDocument.representValue());
+            Map<?, ?> section = assertInstanceOf(Map.class, represented.get("section"));
+            List<?> sequence = assertInstanceOf(List.class, represented.get("sequence"));
+
+            assertNull(yamlDocument.getScalarOrNull("scalar-null").representValue());
+            assertTrue(represented.containsKey("scalar-null"));
+            assertNull(represented.get("scalar-null"));
+            assertTrue(section.containsKey("nested-null"));
+            assertNull(section.get("nested-null"));
+            assertEquals(1, sequence.size());
+            assertNull(sequence.get(0));
+        }
     }
 
     @Nested

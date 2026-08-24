@@ -149,6 +149,26 @@ class YamlUpgradePipelineTest {
         }
 
         @Test
+        void should_PreserveYamlNull_When_MergingAndRelocating() throws IOException {
+            YamlDocument localDoc = loadDoc("config-version: 1\nold-null: null");
+            YamlDocument jarDoc = loadDoc("config-version: 2\nmoved-null: null\nadded-null: null");
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
+                    .addPatch(new VersionPatch(new NumberVersionMatcher(2), List.of(
+                            new RelocateRule(Route.from("old-null"), Route.from("moved-null"))
+                    )))
+                    .build();
+
+            YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
+
+            assertNull(upgraded.getNodeOrNull("old-null"));
+            assertNotNull(upgraded.getScalarOrNull("moved-null"));
+            assertNull(upgraded.getScalarOrNull("moved-null").value());
+            assertNotNull(upgraded.getScalarOrNull("added-null"));
+            assertNull(upgraded.getScalarOrNull("added-null").value());
+            assertFalse(dumpDoc(upgraded).contains("'null'"));
+        }
+
+        @Test
         void should_OverwriteExistingValue_When_UsingConverterRule() throws IOException {
             // 1. 准备阶段 (Arrange)
             YamlDocument localDoc = loadDoc("config-version: 1\nsettings:\n  threshold: 5");

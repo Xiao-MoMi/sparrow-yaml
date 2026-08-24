@@ -258,9 +258,7 @@ public interface YamlNode<T> {
      * 提取当前节点可用于重新表示的 Java 值.
      */
     default Object representValue() {
-        if (this instanceof ScalarNode scalar) {
-            return scalar.value() == null ? "null" : scalar.value();
-        } else if (this instanceof SectionNode section) {
+        if (this instanceof SectionNode section) {
             Map<Object, Object> map = new LinkedHashMap<>();
             for (Map.Entry<Object, YamlNode<?>> entry : section.value().entrySet()) {
                 map.put(entry.getKey(), entry.getValue().representValue());
@@ -273,7 +271,7 @@ public interface YamlNode<T> {
             }
             return list;
         }
-        return "null";
+        return this.value();
     }
 
     /**

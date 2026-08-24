@@ -47,13 +47,9 @@ public class RelocateRule implements Patch {
                 currentParent = currentParent.parent();
             }
 
-            Object valueToMove = fromNode.representValue();
             Route writeRoute = this.writeRouteBeforeRemoval(localDoc);
-            YamlNode<?> newNode = localDoc.setAndGet(writeRoute, valueToMove);
+            YamlNode<?> newNode = localDoc.setAndGet(writeRoute, fromNode);
             if (newNode != null) {
-                fromNode.preserveFlowStyleTo(newNode);
-                fromNode.deepCopyCommentsTo(newNode);
-
                 // 如果新节点成为首个子节点, 去掉顶部多余的空白注释行.
                 if (newNode instanceof AbstractYamlNode<?> absNode) {
                     boolean isFirstChild = false;

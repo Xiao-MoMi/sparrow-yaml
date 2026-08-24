@@ -204,13 +204,7 @@ public class YamlUpgradePipeline {
                 copyNodeTo(parentSection, localNode.key(), defNode);
             } else if (localNode.parentNode() instanceof SequenceNode parentSequence) {
                 if (localNode.key() instanceof Integer index) {
-                    Object extractedValue = defNode.representValue();
-                    parentSequence.setSubNode(index, extractedValue);
-                    YamlNode<?> newNode = parentSequence.value().get(index);
-                    if (newNode != null) {
-                        defNode.preserveFlowStyleTo(newNode);
-                        defNode.deepCopyCommentsTo(newNode);
-                    }
+                    parentSequence.setSubNode(index, defNode);
                 }
             }
         }
@@ -244,13 +238,6 @@ public class YamlUpgradePipeline {
      * 将源节点复制到目标 SectionNode 下, 并同步表示风格与注释.
      */
     private void copyNodeTo(SectionNode parent, Object key, YamlNode<?> sourceNode) {
-        Object extractedValue = sourceNode.representValue();
-        parent.setSubNode(key, extractedValue);
-        
-        YamlNode<?> newNode = parent.value().get(key);
-        if (newNode != null) {
-            sourceNode.preserveFlowStyleTo(newNode);
-            sourceNode.deepCopyCommentsTo(newNode);
-        }
+        parent.setSubNode(key, sourceNode);
     }
 }
