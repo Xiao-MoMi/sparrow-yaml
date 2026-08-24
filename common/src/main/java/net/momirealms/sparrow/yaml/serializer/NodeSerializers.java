@@ -151,6 +151,22 @@ public final class NodeSerializers {
             value -> value
     );
 
+    public static final NodeSerializer<List<Object>> OBJECT_LIST = OBJECT.listOf();
+
+    public static final NodeSerializer<List<Object>> SCALAR_LIST = SCALAR.listOf();
+
+    public static final NodeSerializer<List<String>> STRING_LIST = STRING.listOf();
+
+    public static final NodeSerializer<List<Integer>> INT_LIST = INT.listOf();
+
+    public static final NodeSerializer<List<Double>> DOUBLE_LIST = DOUBLE.listOf();
+
+    public static final NodeSerializer<List<Float>> FLOAT_LIST = FLOAT.listOf();
+
+    public static final NodeSerializer<List<Long>> LONG_LIST = LONG.listOf();
+
+    public static final NodeSerializer<List<Boolean>> BOOLEAN_LIST = BOOLEAN.listOf();
+
     public static final NodeSerializer<UUID> UUID = scalar(
             UUID.class,
             str -> {
@@ -217,6 +233,7 @@ public final class NodeSerializers {
 
     /**
      * 创建枚举 serializer, 解码时忽略大小写, 编码时写出 enum.name().
+     * todo for循环太慢了, toLowerCase 提成一种转换方法, 以匹配有小写的enum.
      */
     public static <E extends Enum<E>> NodeSerializer<E> enumCodec(Class<E> enumClass) {
         E[] constants = enumClass.getEnumConstants();

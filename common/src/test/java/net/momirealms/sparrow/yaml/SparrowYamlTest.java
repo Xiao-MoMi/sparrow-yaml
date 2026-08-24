@@ -1778,8 +1778,8 @@ class SparrowYamlTest {
             assertEquals(Route.from("missing-list"), typeRefMissing.path());
             assertEquals(List.class, typeRefMissing.targetType());
 
-            assertEquals(42, yamlDocument.getOrDefault(NodeSerializers.INT, 42, "missing"));
-            assertEquals(5, yamlDocument.getOrDefault(NodeSerializers.INT, 42, "value"));
+            assertEquals(42, yamlDocument.getOrDefault(42, NodeSerializers.INT, Route.from("missing")));
+            assertEquals(5, yamlDocument.getOrDefault(42, NodeSerializers.INT, Route.from("value")));
         }
 
         @Test
@@ -1791,7 +1791,7 @@ class SparrowYamlTest {
 
             InvalidNodeException failure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.getOrDefault(NodeSerializers.INT, 42, "value")
+                    () -> yamlDocument.getOrDefault(42, NodeSerializers.INT, Route.from("value"))
             );
             assertEquals(Route.from("value"), failure.path());
             assertEquals(String.class, failure.actualType());

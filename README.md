@@ -42,8 +42,8 @@ YamlDocument document = yaml.load("""
           port: 25565
         """);
 
-String host = document.get(String.class, "server", "host");
-int port = document.getOrDefault(Integer.class, 25565, "server", "port");
+String host = document.get(String.class, Route.from("server", "host"));
+int port = document.getIntOrDefault(25565, Route.from("server", "port"));
 
 document.set(Route.from("server", "host"), "0.0.0.0");
 document.set(Route.from("server", "motd"), "Welcome");
