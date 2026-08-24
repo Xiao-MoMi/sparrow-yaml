@@ -188,7 +188,9 @@ public class YamlUpgradePipeline {
                 }
             }
 
-            localSection.reorderKeys(desiredOrder);
+            if (!localKeys.equals(desiredOrder)) {
+                localSection.reorderKeys(desiredOrder);
+            }
         }
         else if (defNode instanceof SequenceNode && localNode instanceof SequenceNode) {
             if (options.updateComments()) {
@@ -228,9 +230,7 @@ public class YamlUpgradePipeline {
                     clean(localSection.value().get(key), defSection.value().get(key), childRoute, ignoredRouteMatcher);
                 }
             }
-            for (Object key : keysToRemove) {
-                localSection.removeSubNode(key);
-            }
+            localSection.removeSubNodes(keysToRemove);
         }
     }
 

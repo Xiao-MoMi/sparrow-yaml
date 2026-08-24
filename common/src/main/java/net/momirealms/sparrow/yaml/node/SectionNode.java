@@ -7,14 +7,16 @@ import net.momirealms.sparrow.yaml.route.Route;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.snakeyaml.engine.v2.nodes.MappingNode;
 import org.snakeyaml.engine.v2.nodes.Node;
 import org.snakeyaml.engine.v2.nodes.NodeTuple;
-import org.snakeyaml.engine.v2.nodes.ScalarNode;
-import org.snakeyaml.engine.v2.nodes.MappingNode;
 
 import java.util.*;
 
 public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> implements ParentNode<SectionNode> {
+
+    private final Map<Object, Integer> tupleIndexes = new HashMap<>();
+    private Set<Object> duplicateTupleKeys;
 
     public SectionNode(
             @NotNull ParentNode<?> parent,
@@ -126,29 +128,27 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
     @Nullable
     @Override
     public YamlNode<?> removeSubNode(Object key) {
-        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
-        Object adaptedKey = adaptKey(key);
-        YamlNode<?> removed = this.value().remove(adaptedKey);
-        if (removed != null) {
-            removed.parentNode(null);
-            
-            // 从底层的 NodeTuple 列表中移除对应的 Tuple
-            MappingNode mappingNode = (MappingNode) this.valueNode;
-            java.util.List<NodeTuple> tuples = mappingNode.getValue();
-            java.util.Iterator<NodeTuple> iterator = tuples.iterator();
-            while (iterator.hasNext()) {
-                NodeTuple tuple = iterator.next();
-                Object tupleKey = tuple.getKeyNode() instanceof ScalarNode sn 
-                                ? sn.getValue() 
-                                : null;
-                if (tupleKey != null && Objects.equals(adaptKey(tupleKey), adaptedKey)) {
-                    iterator.remove();
-                    // 这里不能直接清空内部，可能抛出 NPE 或破坏深拷贝引用
-                }
-            }
-            this.syncAliasValues(references);
+        Object adaptedKey = this.adaptKey(key);
+        YamlNode<?> removed = this.value().get(adaptedKey);
+        if (removed == null) {
+            return null;
         }
+        this.removeSubNodesByAdaptedKeys(Collections.singleton(adaptedKey));
         return removed;
+    }
+
+    /**
+     * 批量删除当前节点下的指定子节点，只执行一次底层 Tuple 与别名同步。
+     *
+     * @param keys 子节点的 Key
+     */
+    @ApiStatus.Internal
+    public void removeSubNodes(@NotNull Collection<?> keys) {
+        Set<Object> adaptedKeys = new HashSet<>();
+        for (Object key : keys) {
+            adaptedKeys.add(this.adaptKey(key));
+        }
+        this.removeSubNodesByAdaptedKeys(adaptedKeys);
     }
 
     /**
@@ -160,27 +160,15 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
      */
     public <T> void setSubNode(Object key, Object value) {
         List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
-        Object adaptedKey = adaptKey(key);
+        Object adaptedKey = this.adaptKey(key);
         YamlNode<?> targetNode = this.createSubNode(adaptedKey, value);
         YamlNode<?> yamlNode = this.value().get(adaptedKey);
+        Node previousKeyNode = yamlNode == null ? null : yamlNode.internalKeyNode();
         if (yamlNode != null) {
-            MappingNode mappingNode = (MappingNode) this.valueNode;
-            List<NodeTuple> tuples = mappingNode.getValue();
-            Iterator<NodeTuple> iterator = tuples.iterator();
-            while (iterator.hasNext()) {
-                NodeTuple tuple = iterator.next();
-                Object tupleKey = tuple.getKeyNode() instanceof ScalarNode sn 
-                                ? sn.getValue() 
-                                : null;
-                if (tupleKey != null && Objects.equals(adaptKey(tupleKey), adaptedKey)) {
-                    iterator.remove();
-                }
-            }
-
             yamlNode.parentNode(null);
         }
         this.value().put(adaptedKey, targetNode);
-        syncNodeTuple(adaptedKey, targetNode);
+        this.syncNodeTuple(adaptedKey, targetNode, previousKeyNode, true);
         this.syncAliasValues(references);
     }
 
@@ -212,33 +200,56 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
     }
     
     public void syncValueNode(YamlNode<?> child) {
-        syncNodeTuple(child.key(), child);
+        this.syncNodeTuple(child.key(), child, child.internalKeyNode(), false);
     }
-    
-    private void syncNodeTuple(Object key, YamlNode<?> targetNode) {
+
+    private void syncNodeTuple(Object key, YamlNode<?> targetNode, @Nullable Node expectedKeyNode, boolean collapseDuplicates) {
+        Object adaptedKey = this.adaptKey(key);
         MappingNode mappingNode = (MappingNode) this.valueNode;
         List<NodeTuple> tuples = mappingNode.getValue();
-        Node newKeyNode = root().sparrowYaml().standardRepresenter().represent(key);
         Node newValueNode = targetNode.internalValueNode();
-        
+        Integer tupleIndex = this.resolveTupleIndex(adaptedKey, expectedKeyNode, tuples);
+        if (tupleIndex == null) {
+            Node newKeyNode = this.root().sparrowYaml().standardRepresenter().represent(adaptedKey);
+            tuples.add(new NodeTuple(newKeyNode, newValueNode));
+            this.registerTupleIndex(adaptedKey, tuples.size() - 1);
+            if (targetNode instanceof AbstractYamlNode<?> abstractNode) {
+                abstractNode.internalKeyNode(newKeyNode);
+            }
+            return;
+        }
+
+        NodeTuple previousTuple = tuples.get(tupleIndex);
+        Node keyNode = previousTuple.getKeyNode();
+        if (targetNode instanceof AbstractYamlNode<?> abstractNode) {
+            abstractNode.keyNode = keyNode;
+            abstractNode.initComments(keyNode, abstractNode.valueNode);
+        }
+        if (!collapseDuplicates || this.duplicateTupleKeys == null || !this.duplicateTupleKeys.contains(adaptedKey)) {
+            tuples.set(tupleIndex, new NodeTuple(keyNode, newValueNode));
+            return;
+        }
+        this.rebuildTupleState();
+    }
+
+    @Nullable
+    private Integer resolveTupleIndex(Object key, @Nullable Node expectedKeyNode, List<NodeTuple> tuples) {
+        Integer tupleIndex = this.tupleIndexes.get(key);
+        if (tupleIndex != null && tupleIndex < tuples.size()
+                && (expectedKeyNode == null || tuples.get(tupleIndex).getKeyNode() == expectedKeyNode)) {
+            return tupleIndex;
+        }
+        if (expectedKeyNode == null) {
+            return null;
+        }
+        // 底层高级接口可能原地重排 Tuple，索引失配时按原 Key Node identity 惰性校正。
         for (int i = 0; i < tuples.size(); i++) {
-            NodeTuple tuple = tuples.get(i);
-            // In SnakeYAML, the key node is usually a ScalarNode, its value is the string key.
-            if (tuple.getKeyNode() instanceof org.snakeyaml.engine.v2.nodes.ScalarNode sn) {
-                if (adaptKey(sn.getValue()).equals(key)) {
-                    tuples.set(i, new NodeTuple(tuple.getKeyNode(), newValueNode));
-                    if (targetNode instanceof AbstractYamlNode<?> abs) {
-                        abs.internalKeyNode(tuple.getKeyNode());
-                    }
-                    return;
-                }
+            if (tuples.get(i).getKeyNode() == expectedKeyNode) {
+                this.tupleIndexes.put(key, i);
+                return i;
             }
         }
-        // Not found, add new tuple
-        tuples.add(new NodeTuple(newKeyNode, newValueNode));
-        if (targetNode instanceof AbstractYamlNode<?> abs) {
-            abs.internalKeyNode(newKeyNode);
-        }
+        return null;
     }
 
     /**
@@ -246,49 +257,98 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
      * Keys not present in the desiredOrder list will be appended at the end in their original relative order.
      */
     public void reorderKeys(List<Object> desiredOrder) {
-        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
-        Map<Object, YamlNode<?>> newMap = new java.util.LinkedHashMap<>();
-        MappingNode mappingNode = (MappingNode) this.valueNode;
-        List<NodeTuple> oldTuples = new java.util.ArrayList<>(mappingNode.getValue());
-        List<NodeTuple> newTuples = new java.util.ArrayList<>();
+        Map<Object, YamlNode<?>> newMap = new LinkedHashMap<>();
 
-        // Add keys in the desired order
         for (Object key : desiredOrder) {
-            Object adaptedKey = adaptKey(key);
+            Object adaptedKey = this.adaptKey(key);
             YamlNode<?> node = this.value.get(adaptedKey);
             if (node != null) {
                 newMap.put(adaptedKey, node);
-                // Find and add the corresponding tuple
-                for (NodeTuple tuple : oldTuples) {
-                    if (tuple.getKeyNode() instanceof org.snakeyaml.engine.v2.nodes.ScalarNode sn) {
-                        if (adaptKey(sn.getValue()).equals(adaptedKey)) {
-                            newTuples.add(tuple);
-                            break;
-                        }
-                    }
-                }
             }
         }
 
-        // Add remaining keys
         for (Map.Entry<Object, YamlNode<?>> entry : this.value.entrySet()) {
-            if (!newMap.containsKey(entry.getKey())) {
-                newMap.put(entry.getKey(), entry.getValue());
-                for (NodeTuple tuple : oldTuples) {
-                    if (tuple.getKeyNode() instanceof org.snakeyaml.engine.v2.nodes.ScalarNode sn) {
-                        if (adaptKey(sn.getValue()).equals(entry.getKey())) {
-                            newTuples.add(tuple);
-                            break;
-                        }
-                    }
-                }
-            }
+            newMap.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+        if (hasSameKeyOrder(this.value, newMap)) {
+            return;
         }
 
+        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
         this.value.clear();
         this.value.putAll(newMap);
-        mappingNode.setValue(newTuples);
+        this.rebuildTupleState();
         this.syncAliasValues(references);
+    }
+
+    private void removeSubNodesByAdaptedKeys(Set<Object> adaptedKeys) {
+        adaptedKeys = new HashSet<>(adaptedKeys);
+        adaptedKeys.retainAll(this.value.keySet());
+        if (adaptedKeys.isEmpty()) {
+            return;
+        }
+
+        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
+        Iterator<Map.Entry<Object, YamlNode<?>>> valueIterator = this.value.entrySet().iterator();
+        while (valueIterator.hasNext()) {
+            Map.Entry<Object, YamlNode<?>> entry = valueIterator.next();
+            if (adaptedKeys.contains(entry.getKey())) {
+                valueIterator.remove();
+                entry.getValue().parentNode(null);
+            }
+        }
+
+        this.rebuildTupleState();
+        this.syncAliasValues(references);
+    }
+
+    private void rebuildTupleState() {
+        MappingNode mappingNode = (MappingNode) this.valueNode;
+        List<NodeTuple> tuples = new ArrayList<>(this.value.size());
+        this.tupleIndexes.clear();
+        this.duplicateTupleKeys = null;
+        for (Map.Entry<Object, YamlNode<?>> entry : this.value.entrySet()) {
+            YamlNode<?> child = entry.getValue();
+            Node keyNode = child.internalKeyNode();
+            if (keyNode == null) {
+                keyNode = this.root().sparrowYaml().standardRepresenter().represent(entry.getKey());
+                if (child instanceof AbstractYamlNode<?> abstractNode) {
+                    abstractNode.internalKeyNode(keyNode);
+                }
+            }
+            tuples.add(new NodeTuple(keyNode, child.internalValueNode()));
+            this.registerTupleIndex(entry.getKey(), tuples.size() - 1);
+        }
+        mappingNode.setValue(tuples);
+    }
+
+    private void registerTupleIndex(Object key, int index) {
+        if (this.tupleIndexes.put(key, index) != null) {
+            if (this.duplicateTupleKeys == null) {
+                this.duplicateTupleKeys = new HashSet<>();
+            }
+            this.duplicateTupleKeys.add(key);
+        }
+    }
+
+    private void copyTupleStateFrom(SectionNode source) {
+        this.tupleIndexes.clear();
+        this.tupleIndexes.putAll(source.tupleIndexes);
+        this.duplicateTupleKeys = source.duplicateTupleKeys == null ? null : new HashSet<>(source.duplicateTupleKeys);
+    }
+
+    private static boolean hasSameKeyOrder(Map<Object, YamlNode<?>> first, Map<Object, YamlNode<?>> second) {
+        if (first.size() != second.size()) {
+            return false;
+        }
+        Iterator<Object> firstKeys = first.keySet().iterator();
+        Iterator<Object> secondKeys = second.keySet().iterator();
+        while (firstKeys.hasNext()) {
+            if (!Objects.equals(firstKeys.next(), secondKeys.next())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void syncAliasValues(List<AbstractYamlNode<?>> references) {
@@ -306,6 +366,7 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
                 values.put(entry.getKey(), AbstractYamlNode.aliasOf(child, alias, entry.getKey(), child.internalKeyNode()));
             }
             alias.value = values;
+            alias.copyTupleStateFrom(this);
         }
     }
 
@@ -349,7 +410,10 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
     protected void init(@Nullable Node keyNode, @NotNull MappingNode valueNode, ExtendedConstructor constructor) {
         // 初始化注释
         super.initComments(keyNode, valueNode);
+        this.tupleIndexes.clear();
+        this.duplicateTupleKeys = null;
         // 解析子节点
+        int tupleIndex = 0;
         for (NodeTuple tuple : valueNode.getValue()) {
             Object key = this.adaptKey(constructor.getConstructed(tuple.getKeyNode()));
             Object value = constructor.getConstructed(tuple.getValueNode());
@@ -366,6 +430,7 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
             }
 
             value().put(key, Objects.requireNonNull(node));
+            this.registerTupleIndex(key, tupleIndex++);
         }
     }
 

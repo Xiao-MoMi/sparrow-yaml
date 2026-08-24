@@ -345,7 +345,7 @@ public interface ParentNode<T extends YamlNode<?>> {
     default YamlNode<?> getNodeOrNull(@NotNull Route route) {
         YamlNode<?> currentNode = this.yamlNode();
         // 循环搜索路由元素
-        for (int i = 0; i < Objects.requireNonNull(route, "路由不可为 null !").routeKeys().length; i++) {
+        for (int i = 0; i < route.length(); i++) {
             RouteElement<?> routeElement = route.getRouteElement(i);
             // 如果当前节点是 Sequence 节点, 并且路由是 IndexElement, 则进行搜索获取下一个节点;
             if (currentNode instanceof SequenceNode sequenceNode && routeElement instanceof IndexElement indexElement) {
