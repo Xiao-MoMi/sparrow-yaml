@@ -81,6 +81,48 @@ class NodeConvenienceReadTest {
         }
 
         @Test
+        void should_ReadCommonTypesFromPathElements() throws IOException {
+            YamlDocument document = document();
+            TypeRef<Integer> integerType = new TypeRef<>() {};
+            Supplier<Integer> defaultValueSupplier = () -> 7;
+
+            assertEquals("localhost", document.getString("server", "host"));
+            assertEquals(25565, document.getInt("server", "port"));
+            assertTrue(document.getBoolean("server", "enabled"));
+            assertEquals(1234567890123L, document.getLong("server", "timeout"));
+            assertEquals(1.25F, document.getFloat("server", "float-ratio"));
+            assertEquals(1.5D, document.getDouble("server", "ratio"));
+            assertEquals("indexed", document.getString("servers", 0, "host"));
+            assertEquals(TestMode.SECOND, document.getEnum(TestMode.class, "enum-value"));
+            assertEquals("literal", document.getString("literal.key"));
+            assertEquals("nested", document.getString("literal", "key"));
+
+            assertEquals("fallback", document.getStringOrDefault("fallback", "missing"));
+            assertTrue(document.getBooleanOrDefault(true, "missing"));
+            assertEquals(7, document.getIntOrDefault(7, "missing"));
+            assertEquals(7L, document.getLongOrDefault(7L, "missing"));
+            assertEquals(7F, document.getFloatOrDefault(7F, "missing"));
+            assertEquals(7D, document.getDoubleOrDefault(7D, "missing"));
+            assertEquals(TestMode.FIRST, document.getEnumOrDefault(TestMode.FIRST, TestMode.class, "missing"));
+            assertEquals(7, document.getIntOrDefault(() -> 7, "missing"));
+
+            assertEquals("localhost", document.get(String.class, "server", "host"));
+            assertEquals(25565, document.get(NodeSerializers.INT, "server", "port"));
+            assertEquals(25565, document.get(integerType, "server", "port"));
+            assertEquals(7, document.getOrDefault(7, Integer.class, "missing"));
+            assertEquals(7, document.getOrDefault(7, NodeSerializers.INT, "missing"));
+            assertEquals(7, document.getOrDefault(7, integerType, "missing"));
+            assertEquals(7, document.getOrDefault(defaultValueSupplier, Integer.class, "missing"));
+            assertEquals(7, document.getOrDefault(defaultValueSupplier, NodeSerializers.INT, "missing"));
+            assertEquals(7, document.getOrDefault(defaultValueSupplier, integerType, "missing"));
+
+            assertTrue(document.contains("null-value"));
+            assertFalse(document.contains("missing"));
+            assertNull(document.getValue("null-value"));
+            assertEquals("localhost", assertInstanceOf(Map.class, document.getValue("server")).get("host"));
+        }
+
+        @Test
         void should_UseDefaultsOnlyForMissingAndYamlNull() throws IOException {
             YamlDocument document = document();
 
@@ -162,9 +204,13 @@ class NodeConvenienceReadTest {
             TypeRef<Integer> integerType = new TypeRef<>() {};
 
             assertEquals(List.of("alice", "2"), document.getList(String.class, Route.from("admins")));
+            assertEquals(List.of("alice", "2"), document.getStringList("admins"));
+            assertEquals(List.of("alice", "2"), document.getList(String.class, "admins"));
             assertEquals(List.of(1, 2), document.getList(NodeSerializers.INT, Route.from("numbers")));
+            assertEquals(List.of(1, 2), document.getList(NodeSerializers.INT, "numbers"));
             assertEquals(List.of(1, 2), document.getList(Integer.class, Route.from("numbers")));
             assertEquals(List.of(1, 2), document.getList(integerType, Route.from("numbers")));
+            assertEquals(List.of(1, 2), document.getList(integerType, "numbers"));
             assertEquals(List.of(), document.getList(NodeSerializers.INT, Route.from("empty-list")));
             assertEquals(List.of(), document.getList(Integer.class, Route.from("empty-list")));
             assertEquals(List.of(), document.getList(integerType, Route.from("empty-list")));
@@ -302,9 +348,12 @@ class NodeConvenienceReadTest {
 
             List<Map<String, Integer>> maps = document.getMapList(String.class, Integer.class, Route.from("typed-maps"));
             List<Map<String, Integer>> mapsByTypeRef = document.getMapList(keyType, valueType, Route.from("typed-maps"));
+            List<Map<String, Integer>> mapsByPathElements = document.getMapList(String.class, Integer.class, "typed-maps");
 
             assertEquals(List.of(Map.of("alpha", 1), Map.of("beta", 2)), maps);
             assertEquals(maps, mapsByTypeRef);
+            assertEquals(maps, mapsByPathElements);
+            assertEquals(maps, document.getMapList(keyType, valueType, "typed-maps"));
             assertEquals(List.of(), document.getMapList(String.class, Integer.class, Route.from("empty-map-list")));
             assertEquals(List.of(), document.getMapList(keyType, valueType, Route.from("empty-map-list")));
             assertNull(document.getMapList(String.class, Integer.class, Route.from("missing")));
@@ -331,6 +380,7 @@ class NodeConvenienceReadTest {
             List<Map<MapKey, MapValue>> byClass = document.getMapList(MapKey.class, MapValue.class, Route.from("typed-maps"));
             List<Map<MapKey, MapValue>> byTypeRef = document.getMapList(keyType, valueType, Route.from("typed-maps"));
             List<Map<MapKey, MapValue>> bySerializer = document.getMapList(keySerializer, valueSerializer, Route.from("typed-maps"));
+            List<Map<MapKey, MapValue>> bySerializerPathElements = document.getMapList(keySerializer, valueSerializer, "typed-maps");
 
             List<Map<MapKey, MapValue>> expected = List.of(
                     Map.of(new MapKey("alpha"), new MapValue(1)),
@@ -339,6 +389,7 @@ class NodeConvenienceReadTest {
             assertEquals(expected, byClass);
             assertEquals(expected, byTypeRef);
             assertEquals(expected, bySerializer);
+            assertEquals(expected, bySerializerPathElements);
             assertEquals(List.of(), document.getMapList(keySerializer, valueSerializer, Route.from("empty-map-list")));
             assertNull(document.getMapList(keySerializer, valueSerializer, Route.from("missing")));
         }
