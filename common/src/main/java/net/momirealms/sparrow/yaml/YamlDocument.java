@@ -5,6 +5,7 @@ import net.momirealms.sparrow.yaml.node.AbstractYamlNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.LoadSettings;
@@ -24,18 +25,29 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
 public class YamlDocument extends SectionNode {
     private final SparrowYaml sparrowYaml;
     private final Map<Node, List<AbstractYamlNode<?>>> nodeReferences = new IdentityHashMap<>();
 
-    public YamlDocument(SparrowYaml sparrowYaml, InputStream inputStream) throws IOException {
-        super(null, null, (MappingNode) sparrowYaml.standardRepresenter().represent(new java.util.LinkedHashMap<>()), null, new ExtendedConstructor(sparrowYaml.loadSettings()));
+    YamlDocument(@NotNull SparrowYaml sparrowYaml) {
+        super(null, null, createEmptyRoot(sparrowYaml), null, new ExtendedConstructor(sparrowYaml.loadSettings()));
         this.sparrowYaml = sparrowYaml;
+    }
+
+    /**
+     * 从输入流创建 YAML 文档.
+     *
+     * @param sparrowYaml 提供解析与表示设置的 SparrowYaml
+     * @param inputStream YAML 输入流
+     * @throws IOException 当输入流读取失败时
+     */
+    public YamlDocument(@NotNull SparrowYaml sparrowYaml, @NotNull InputStream inputStream) throws IOException {
+        this(sparrowYaml);
         this.reload(inputStream);
     }
 
@@ -126,36 +138,62 @@ public class YamlDocument extends SectionNode {
     }
 
     /**
-     * 加载和读取 Yaml 文件;
+     * 从输入流重新加载文档, 空输入清空当前内容, 解析失败时保留原状态.
+     *
+     * @param inputStream YAML 输入流
+     * @throws IOException 当输入流读取失败时
      */
-    public void reload(InputStream inputStream) throws IOException {
+    public void reload(@NotNull InputStream inputStream) throws IOException {
+        YamlDocument replacement = this.readReplacement(inputStream);
+        this.replaceRoot(replacement);
+    }
+
+    private YamlDocument readReplacement(InputStream inputStream) throws IOException {
         LoadSettings loadSettings = this.sparrowYaml().loadSettings();
-        Parser parser = new ParserImpl(loadSettings, new StreamReader(loadSettings, new YamlUnicodeReader(Objects.requireNonNull(inputStream, "Input stream cannot be null!"))));
+        Parser parser = new ParserImpl(loadSettings, new StreamReader(loadSettings, new YamlUnicodeReader(inputStream)));
         Composer composer = new Composer(loadSettings, parser);
         ExtendedConstructor constructor = new ExtendedConstructor(loadSettings);
+        MappingNode mappingNode = createEmptyRoot(this.sparrowYaml);
 
         if (composer.hasNext()) {
             Node node = composer.next();
-            // 检查合法性
             if (composer.hasNext()) {
                 throw new InvalidObjectException("暂不支持多文档解析!");
             }
-            if (!(node instanceof MappingNode mappingNode)) {
+            if (!(node instanceof MappingNode parsedMappingNode)) {
                 throw new IllegalArgumentException(String.format("根节点对象不是MappingNode！解析节点: %s", node.toString()));
             }
-            // 将解析完的节点构造成 Java 对象.
             constructor.constructSingleDocument(Optional.of(node));
-            for (YamlNode<?> child : this.value().values()) {
-                child.parentNode(null);
-            }
-            this.nodeReferences.clear();
-            this.valueNode = mappingNode;
-            this.value().clear();
-            // 构造节点
-            super.init(null, mappingNode, constructor);
-            // 清理构造器缓存.
+            mappingNode = parsedMappingNode;
+        }
+
+        YamlDocument replacement = new YamlDocument(this.sparrowYaml);
+        replacement.valueNode = mappingNode;
+        try {
+            replacement.init(null, mappingNode, constructor);
+            return replacement;
+        } finally {
             constructor.clear();
         }
+    }
+
+    private void replaceRoot(YamlDocument replacement) {
+        for (YamlNode<?> child : this.value().values()) {
+            child.parentNode(null);
+        }
+        this.nodeReferences.clear();
+
+        this.valueNode = replacement.valueNode;
+        this.value = replacement.value();
+        this.copyTupleStateFrom(replacement);
+        this.initComments(null, this.valueNode);
+        for (YamlNode<?> child : this.value.values()) {
+            child.parentNode(this);
+        }
+    }
+
+    private static MappingNode createEmptyRoot(SparrowYaml sparrowYaml) {
+        return (MappingNode) sparrowYaml.standardRepresenter().represent(new LinkedHashMap<>());
     }
 
     /**
@@ -187,39 +225,31 @@ public class YamlDocument extends SectionNode {
     }
 
     /**
-     * 将当前 YamlDocument 保存到 Writer 中;
+     * 将当前 YamlDocument 保存到 Writer.
      * @param writer 目标 Writer
+     * @throws IOException 当 Writer 写入或刷新失败时
      */
-    public void save(Writer writer) throws IOException {
-        StreamDataWriter streamDataWriter = new StreamDataWriter() {
-            @Override
-            public void flush() {
-                try {
-                    writer.flush();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+    public void save(@NotNull Writer writer) throws IOException {
+        try {
+            this.dump(new WriterStreamDataWriter(writer));
+        } catch (WriterIOException exception) {
+            throw exception.ioException();
+        }
+    }
 
-            @Override
-            public void write(String str) {
-                try {
-                    writer.write(str);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+    /**
+     * 将当前文档序列化为字符串.
+     *
+     * @return 完整 YAML 文本
+     */
+    @NotNull
+    public String dumpToString() {
+        StringStreamDataWriter writer = new StringStreamDataWriter();
+        this.dump(writer);
+        return writer.content();
+    }
 
-            @Override
-            public void write(String str, int off, int len) {
-                try {
-                    writer.write(str, off, len);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        };
-
+    private void dump(StreamDataWriter streamDataWriter) {
         Dump dump = new Dump(this.sparrowYaml().dumpSettings());
         List<Runnable> restorers = new ArrayList<>();
         try {
@@ -286,5 +316,71 @@ public class YamlDocument extends SectionNode {
     @Override
     public boolean isRoot() {
         return true;
+    }
+
+    private static final class WriterStreamDataWriter implements StreamDataWriter {
+        private final Writer writer;
+
+        private WriterStreamDataWriter(Writer writer) {
+            this.writer = writer;
+        }
+
+        @Override
+        public void flush() {
+            try {
+                this.writer.flush();
+            } catch (IOException exception) {
+                throw new WriterIOException(exception);
+            }
+        }
+
+        @Override
+        public void write(String str) {
+            try {
+                this.writer.write(str);
+            } catch (IOException exception) {
+                throw new WriterIOException(exception);
+            }
+        }
+
+        @Override
+        public void write(String str, int off, int len) {
+            try {
+                this.writer.write(str, off, len);
+            } catch (IOException exception) {
+                throw new WriterIOException(exception);
+            }
+        }
+    }
+
+    private static final class StringStreamDataWriter implements StreamDataWriter {
+        private final StringBuilder content = new StringBuilder();
+
+        @Override
+        public void write(String str) {
+            this.content.append(str);
+        }
+
+        @Override
+        public void write(String str, int off, int len) {
+            this.content.append(str, off, off + len);
+        }
+
+        private String content() {
+            return this.content.toString();
+        }
+    }
+
+    private static final class WriterIOException extends RuntimeException {
+        private final IOException ioException;
+
+        private WriterIOException(IOException ioException) {
+            super(ioException);
+            this.ioException = ioException;
+        }
+
+        private IOException ioException() {
+            return this.ioException;
+        }
     }
 }

@@ -6,7 +6,6 @@ import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.serializer.TypeRef;
 import org.junit.jupiter.api.Test;
 
-import java.io.StringWriter;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -18,8 +17,8 @@ class PublicApiConsumerTest {
 
     @Test
     void should_CompileAndUseRouteAndPathElementOverloads() throws Exception {
-        SparrowYaml yaml = SparrowYaml.builder().build();
-        YamlDocument document = yaml.load("");
+        SparrowYaml yaml = SparrowYaml.create();
+        YamlDocument document = yaml.createDocument();
         TypeRef<Integer> integerType = new TypeRef<>() {};
         Supplier<Integer> defaultValueSupplier = () -> 7;
 
@@ -34,8 +33,6 @@ class PublicApiConsumerTest {
         assertTrue(document.contains("server", "ports", 1));
         assertEquals(7, document.getIntOrDefault(7, "missing"));
         assertEquals(7, document.getOrDefault(defaultValueSupplier, Integer.class, "missing"));
-        StringWriter writer = new StringWriter();
-        document.save(writer);
-        assertEquals(25566, yaml.load(writer.toString()).getInt("server", "ports", 1));
+        assertEquals(25566, yaml.load(document.dumpToString()).getInt("server", "ports", 1));
     }
 }

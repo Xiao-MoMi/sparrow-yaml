@@ -3,6 +3,7 @@ package net.momirealms.sparrow.yaml;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.api.*;
 import org.snakeyaml.engine.v2.common.FlowStyle;
@@ -35,6 +36,16 @@ public class SparrowYaml {
         this.allowObjectKey = allowObjectKey;
         this.representer =  new StandardRepresenter(dumpSettings);
         this.serializers = new SerializerRegistry(this, autoSerializerMode);
+    }
+
+    /**
+     * 创建不包含任何节点的 YAML 文档.
+     *
+     * @return 新文档
+     */
+    @NotNull
+    public YamlDocument createDocument() {
+        return new YamlDocument(this);
     }
 
     /**
@@ -223,6 +234,16 @@ public class SparrowYaml {
      */
     public static SparrowYaml.Builder builder() {
         return new SparrowYaml.Builder();
+    }
+
+    /**
+     * 使用默认设置创建 SparrowYaml.
+     *
+     * @return 新的 SparrowYaml 实例
+     */
+    @NotNull
+    public static SparrowYaml create() {
+        return builder().build();
     }
 
     public static class Builder {

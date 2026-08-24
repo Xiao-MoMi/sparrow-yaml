@@ -34,7 +34,7 @@ import net.momirealms.sparrow.yaml.route.Route;
 
 import java.nio.file.Path;
 
-SparrowYaml yaml = SparrowYaml.builder().build();
+SparrowYaml yaml = SparrowYaml.create();
 
 YamlDocument document = yaml.load("""
         server:
@@ -42,8 +42,8 @@ YamlDocument document = yaml.load("""
           port: 25565
         """);
 
-String host = document.get(String.class, Route.from("server", "host"));
-int port = document.getIntOrDefault(25565, Route.from("server", "port"));
+String host = document.getString("server", "host");
+int port = document.getIntOrDefault(25565, "server", "port");
 
 document.set(Route.from("server", "host"), "0.0.0.0");
 document.set(Route.from("server", "motd"), "Welcome");
@@ -69,10 +69,14 @@ YamlDocument fromFile = yaml.load(Path.of("config.yml"));
 YamlDocument fromString = yaml.load("key: value");
 YamlDocument fromBytes = yaml.load("key: value".getBytes());
 YamlDocument fromResource = yaml.loadFromResource("config.yml");
+YamlDocument empty = yaml.createDocument();
+String yamlText = fromString.dumpToString();
 
 // 保存可以写入 `File`、`Path`、`OutputStream` 或 `Writer`：
 document.save(Path.of("config.yml"));
 ```
+
+`SparrowYaml.create()` 使用默认设置并且每次返回新实例；serializer 注册表不会在不同实例之间共享。
 
 如果你需要“本地文件不存在时写入默认配置，存在时执行升级并保存”，可以使用：
 

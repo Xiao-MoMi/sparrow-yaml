@@ -331,7 +331,8 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
         }
     }
 
-    private void copyTupleStateFrom(SectionNode source) {
+    @ApiStatus.Internal
+    protected void copyTupleStateFrom(SectionNode source) {
         this.tupleIndexes.clear();
         this.tupleIndexes.putAll(source.tupleIndexes);
         this.duplicateTupleKeys = source.duplicateTupleKeys == null ? null : new HashSet<>(source.duplicateTupleKeys);
