@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.nodes.Node;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -64,6 +65,9 @@ public class ScalarNode extends AbstractYamlNode<Object> {
             SparrowYaml sparrowYaml = root.sparrowYaml();
             org.snakeyaml.engine.v2.nodes.ScalarNode represented =
                 (org.snakeyaml.engine.v2.nodes.ScalarNode) sparrowYaml.standardRepresenter().represent(value);
+            represented.setBlockComments(this.beforeValueComments == null ? null : new ArrayList<>(this.beforeValueComments));
+            represented.setInLineComments(this.inlineValueComments == null ? null : new ArrayList<>(this.inlineValueComments));
+            represented.setEndComments(this.afterValueComments == null ? null : new ArrayList<>(this.afterValueComments));
             for (int i = 0; i < references.size(); i++) {
                 AbstractYamlNode<?> reference = references.get(i);
                 if (!(reference instanceof ScalarNode alias)) {
@@ -72,6 +76,7 @@ public class ScalarNode extends AbstractYamlNode<Object> {
                 Node previousNode = alias.valueNode;
                 alias.value = value;
                 alias.valueNode = represented;
+                alias.initComments(alias.keyNode, represented);
                 root.rebindNode(alias, previousNode);
             }
             for (int i = 0; i < references.size(); i++) {

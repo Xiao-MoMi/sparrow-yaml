@@ -18,12 +18,15 @@ import net.momirealms.sparrow.yaml.upgrade.version.FieldVersionExtractor;
 import net.momirealms.sparrow.yaml.upgrade.version.NumberVersionMatcher;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.snakeyaml.engine.v2.common.FlowStyle;
+import org.snakeyaml.engine.v2.nodes.CollectionNode;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -161,6 +164,46 @@ class YamlUpgradePipelineTest {
 
             // 3. 断言阶段 (Assert)
             assertEquals(9, upgraded.getNodeOrNull("settings", "threshold").value(), "转换器应成功应用并覆盖旧值");
+        }
+
+        @Test
+        void should_PreserveStylesAndComments_When_ConverterReplacesNodes() throws IOException {
+            YamlDocument localDoc = loadDoc("""
+                    config-version: 1
+                    # scalar before
+                    scalar: old # scalar inline
+                    section: # section inline
+                      old: value
+                    sequence: [a, b] # sequence inline
+                    # sequence after
+                    """);
+            YamlDocument jarDoc = loadDoc("""
+                    config-version: 2
+                    scalar: default
+                    section:
+                      default: value
+                    sequence: [default]
+                    """);
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
+                    .addPatch(new VersionPatch(new NumberVersionMatcher(2), List.of(
+                            new ConverterRule(Route.from("scalar"), node -> "new"),
+                            new ConverterRule(Route.from("section"), node -> Map.of("new", "value")),
+                            new ConverterRule(Route.from("sequence"), node -> List.of("c", "d"))
+                    )))
+                    .build();
+
+            YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
+            String dumped = dumpDoc(upgraded);
+
+            CollectionNode<?> sectionNode = (CollectionNode<?>) upgraded.getNodeOrNull("section").internalValueNode();
+            CollectionNode<?> sequenceNode = (CollectionNode<?>) upgraded.getNodeOrNull("sequence").internalValueNode();
+            assertEquals(FlowStyle.BLOCK, sectionNode.getFlowStyle());
+            assertEquals(FlowStyle.FLOW, sequenceNode.getFlowStyle());
+            assertTrue(dumped.contains("# scalar before"));
+            assertTrue(dumped.contains("scalar: new # scalar inline"));
+            assertTrue(dumped.contains("section: # section inline"));
+            assertTrue(dumped.contains("sequence: [c, d] # sequence inline"));
+            assertTrue(dumped.contains("# sequence after"));
         }
 
         @Test

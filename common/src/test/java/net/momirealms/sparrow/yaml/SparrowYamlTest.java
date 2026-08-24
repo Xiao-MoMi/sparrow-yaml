@@ -635,6 +635,18 @@ class SparrowYamlTest {
         }
 
         @Test
+        void should_PreserveInlineComment_When_UpdatingScalarValue() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("key: old # keep me");
+
+            yamlDocument.getScalarOrNull("key").setValue("new");
+            StringWriter writer = new StringWriter();
+            yamlDocument.save(writer);
+
+            assertTrue(writer.toString().contains("key: new # keep me"));
+        }
+
+        @Test
         void should_KeepRoutesIndependent_When_NodeIsCopied() throws IOException {
             // 1. 准备阶段 (Arrange)
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();

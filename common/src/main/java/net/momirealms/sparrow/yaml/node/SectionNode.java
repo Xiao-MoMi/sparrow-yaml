@@ -12,7 +12,6 @@ import org.snakeyaml.engine.v2.nodes.NodeTuple;
 import org.snakeyaml.engine.v2.nodes.ScalarNode;
 import org.snakeyaml.engine.v2.nodes.MappingNode;
 
-import java.lang.reflect.Field;
 import java.util.*;
 
 public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> implements ParentNode<SectionNode> {
@@ -179,13 +178,6 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
             }
 
             yamlNode.parentNode(null);
-            if (yamlNode instanceof AbstractYamlNode<?> abs) {
-                try {
-                    Field valueNodeField = AbstractYamlNode.class.getDeclaredField("valueNode");
-                    valueNodeField.setAccessible(true);
-                    valueNodeField.set(abs, null);
-                } catch (Exception ignored) {}
-            }
         }
         this.value().put(adaptedKey, targetNode);
         syncNodeTuple(adaptedKey, targetNode);
