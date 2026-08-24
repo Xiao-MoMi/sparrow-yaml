@@ -48,7 +48,8 @@ public class RelocateRule implements Patch {
             }
 
             Object valueToMove = fromNode.representValue();
-            YamlNode<?> newNode = localDoc.setAndGet(to, valueToMove);
+            Route writeRoute = this.writeRouteBeforeRemoval(localDoc);
+            YamlNode<?> newNode = localDoc.setAndGet(writeRoute, valueToMove);
             if (newNode != null) {
                 fromNode.preserveFlowStyleTo(newNode);
                 fromNode.deepCopyCommentsTo(newNode);
@@ -99,6 +100,22 @@ public class RelocateRule implements Patch {
             localDoc.removeNode(from);
         }
         return localDoc;
+    }
+
+    private Route writeRouteBeforeRemoval(YamlDocument localDoc) {
+        Route fromParent = this.from.parent();
+        Route toParent = this.to.parent();
+        if (fromParent == null || !fromParent.equals(toParent)
+                || !(localDoc.getNodeOrNull(fromParent) instanceof SequenceNode)) {
+            return this.to;
+        }
+        Object fromKey = this.from.getLastRouteElement().key();
+        Object toKey = this.to.getLastRouteElement().key();
+        if (fromKey instanceof Integer fromIndex && toKey instanceof Integer toIndex && fromIndex < toIndex) {
+            // 删除较小索引后后续元素会左移一位, 因此写入时先为最终坐标预留这一位.
+            return toParent.add(toIndex + 1);
+        }
+        return this.to;
     }
 
     /**

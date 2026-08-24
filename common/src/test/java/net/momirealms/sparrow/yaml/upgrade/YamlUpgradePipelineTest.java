@@ -25,6 +25,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -294,6 +295,55 @@ class YamlUpgradePipelineTest {
 
             // 3. 断言阶段 (Assert)
             assertEquals("copied-from-context", upgraded.getNodeOrNull("target").value(), "后续 Patch 应能读取前序 Patch 存入的上下文数据");
+        }
+
+        @Test
+        void should_OrderPatchesGlobally_When_MultipleVersionPatchesMatch() throws IOException {
+            YamlDocument localDoc = loadDoc("config-version: 1\nold-key: moved");
+            YamlDocument jarDoc = loadDoc("config-version: 2\nnew-key: default");
+            ValidationRule validationRule = new ValidationRule(local -> {
+                if (!"moved".equals(local.get(String.class, "new-key"))) {
+                    throw new PatchValidationException("new-key must be relocated before validation");
+                }
+            });
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
+                    .addPatch(new VersionPatch(new NumberVersionMatcher(2), List.of(validationRule)))
+                    .addPatch(new VersionPatch(new NumberVersionMatcher(2), List.of(
+                            new RelocateRule(Route.from("old-key"), Route.from("new-key"))
+                    )))
+                    .build();
+
+            YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
+
+            assertNull(upgraded.getNodeOrNull("old-key"));
+            assertEquals("moved", upgraded.get(String.class, "new-key"));
+        }
+
+        @Test
+        void should_KeepFinalIndex_When_RelocatingForwardWithinSequence() throws IOException {
+            YamlDocument localDoc = loadDoc("items: [a, b]");
+            YamlDocument defDoc = loadDoc("items: []");
+            RelocateRule rule = new RelocateRule(Route.from("items", 0), Route.from("items", 3));
+
+            rule.apply(defDoc, localDoc);
+
+            assertEquals(Arrays.asList("b", null, null, "a"), localDoc.getSequenceOrNull("items").getValues());
+            assertEquals("a", localDoc.get(String.class, "items", 3));
+        }
+
+        @Test
+        void should_RespectOccupiedAndCrossSequenceTargets_When_Relocating() throws IOException {
+            YamlDocument occupiedDoc = loadDoc("items: [a, b, c]");
+            YamlDocument crossDoc = loadDoc("source: [a, b]\ntarget: [x]");
+            YamlDocument defDoc = loadDoc("source: []\ntarget: []");
+
+            new RelocateRule(Route.from("items", 2), Route.from("items", 0)).apply(defDoc, occupiedDoc);
+            new RelocateRule(Route.from("items", 1), Route.from("items", 1)).apply(defDoc, occupiedDoc);
+            new RelocateRule(Route.from("source", 0), Route.from("target", 2)).apply(defDoc, crossDoc);
+
+            assertEquals(List.of("a", "b", "c"), occupiedDoc.getSequenceOrNull("items").getValues());
+            assertEquals(List.of("b"), crossDoc.getSequenceOrNull("source").getValues());
+            assertEquals(Arrays.asList("x", null, "a"), crossDoc.getSequenceOrNull("target").getValues());
         }
     }
 

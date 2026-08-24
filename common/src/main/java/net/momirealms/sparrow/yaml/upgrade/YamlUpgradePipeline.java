@@ -139,6 +139,7 @@ public class YamlUpgradePipeline {
             }
             executablePatches.addAll(versionPatch.orderedPatches());
         }
+        executablePatches.sort(Comparator.naturalOrder());
         return new ResolvedUpgradePlan(List.copyOf(executablePatches), ignoredRouteMatcherBuilder.build());
     }
 
