@@ -58,16 +58,32 @@ public class ScalarNode extends AbstractYamlNode<Object> {
         }
         this.value = value;
         // 双向同步到底层的 SnakeYAML Node 中
-        if (this.valueNode instanceof org.snakeyaml.engine.v2.nodes.ScalarNode sn) {
-            SparrowYaml sparrowYaml = root().sparrowYaml();
-            org.snakeyaml.engine.v2.nodes.ScalarNode represented = 
+        if (this.valueNode instanceof org.snakeyaml.engine.v2.nodes.ScalarNode) {
+            YamlDocument root = this.root();
+            List<AbstractYamlNode<?>> references = root.nodeReferences(this);
+            SparrowYaml sparrowYaml = root.sparrowYaml();
+            org.snakeyaml.engine.v2.nodes.ScalarNode represented =
                 (org.snakeyaml.engine.v2.nodes.ScalarNode) sparrowYaml.standardRepresenter().represent(value);
-            // 通过反射或直接覆盖, 但因为 Node 没有公开的 setValue, 我们需要更新父节点的 Tuple/List
-            this.valueNode = represented;
-            if (this.parent instanceof SectionNode section) {
-                section.syncValueNode(this);
-            } else if (this.parent instanceof SequenceNode seq) {
-                seq.syncValueNode(this);
+            for (int i = 0; i < references.size(); i++) {
+                AbstractYamlNode<?> reference = references.get(i);
+                if (!(reference instanceof ScalarNode alias)) {
+                    continue;
+                }
+                Node previousNode = alias.valueNode;
+                alias.value = value;
+                alias.valueNode = represented;
+                root.rebindNode(alias, previousNode);
+            }
+            for (int i = 0; i < references.size(); i++) {
+                AbstractYamlNode<?> reference = references.get(i);
+                if (!(reference instanceof ScalarNode alias)) {
+                    continue;
+                }
+                if (alias.parent instanceof SectionNode section) {
+                    section.syncValueNode(alias);
+                } else if (alias.parent instanceof SequenceNode sequence) {
+                    sequence.syncValueNode(alias);
+                }
             }
         }
     }

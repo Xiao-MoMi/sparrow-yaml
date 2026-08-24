@@ -487,6 +487,7 @@ public interface ParentNode<T extends YamlNode<?>> {
                 if (!matchesContainer(targetNode, childRouteElement)) {
                     targetNode = createContainer(root, childRouteElement);
                     sequenceNode.setSubNode(nextRouteKey, targetNode);
+                    targetNode = sequenceNode.getNodeOrNull(nextRouteKey);
                 }
                 currentNode = targetNode;
             }
@@ -502,6 +503,7 @@ public interface ParentNode<T extends YamlNode<?>> {
                 if (!matchesContainer(targetNode, childRouteElement)) {
                     targetNode = createContainer(root, childRouteElement);
                     sectionNode.setSubNode(nextRouteKey, targetNode);
+                    targetNode = sectionNode.getNodeOrNull(nextRouteElement);
                 }
                 currentNode = targetNode;
             }

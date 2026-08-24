@@ -473,6 +473,87 @@ class SparrowYamlTest {
         }
 
         @Test
+        void should_CopyYamlNode_When_SettingItIntoAnotherLocation() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument sourceDocument = sparrowYaml.load("""
+                    source:
+                      value: original
+                    """);
+            YamlDocument targetDocument = sparrowYaml.load("");
+            SectionNode source = sourceDocument.getSectionOrNull("source");
+
+            SectionNode sameDocumentCopy = (SectionNode) sourceDocument.set(Route.from("copy"), source);
+            SectionNode otherDocumentCopy = (SectionNode) targetDocument.set(Route.from("copy"), source);
+            sameDocumentCopy.getScalarOrNull("value").setValue("same-document");
+            otherDocumentCopy.getScalarOrNull("value").setValue("other-document");
+
+            assertNotSame(source, sameDocumentCopy);
+            assertNotSame(source, otherDocumentCopy);
+            assertNotSame(source.internalValueNode(), sameDocumentCopy.internalValueNode());
+            assertNotSame(source.internalValueNode(), otherDocumentCopy.internalValueNode());
+            assertSame(sourceDocument, source.root());
+            assertSame(targetDocument, otherDocumentCopy.root());
+            assertEquals("original", sourceDocument.get(String.class, "source", "value"));
+            assertEquals("same-document", sourceDocument.get(String.class, "copy", "value"));
+            assertEquals("other-document", targetDocument.get(String.class, "copy", "value"));
+
+            StringWriter sourceWriter = new StringWriter();
+            sourceDocument.save(sourceWriter);
+            YamlDocument reloaded = sparrowYaml.load(sourceWriter.toString());
+            assertEquals("original", reloaded.get(String.class, "source", "value"));
+            assertEquals("same-document", reloaded.get(String.class, "copy", "value"));
+        }
+
+        @Test
+        void should_SynchronizeMappingAliases_When_MutatingSharedNode() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+                    base: &base
+                      value: old
+                    alias: *base
+                    """);
+
+            yamlDocument.getScalarOrNull("base", "value").setValue("new");
+            yamlDocument.set(Route.from("base", "added"), true);
+
+            assertSame(yamlDocument.getNodeOrNull("base").internalValueNode(), yamlDocument.getNodeOrNull("alias").internalValueNode());
+            assertEquals("new", yamlDocument.get(String.class, "alias", "value"));
+            assertEquals(true, yamlDocument.get(Boolean.class, "alias", "added"));
+
+            StringWriter writer = new StringWriter();
+            yamlDocument.save(writer);
+            assertTrue(writer.toString().contains("*"));
+            YamlDocument reloaded = sparrowYaml.load(writer.toString());
+            assertEquals("new", reloaded.get(String.class, "base", "value"));
+            assertEquals("new", reloaded.get(String.class, "alias", "value"));
+            assertEquals(true, reloaded.get(Boolean.class, "base", "added"));
+            assertEquals(true, reloaded.get(Boolean.class, "alias", "added"));
+        }
+
+        @Test
+        void should_SynchronizeSequenceAliases_When_MutatingSharedNode() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+            YamlDocument yamlDocument = sparrowYaml.load("""
+                    base: &base [a]
+                    alias: *base
+                    """);
+
+            yamlDocument.getSequenceOrNull("base").setSubNode(1, "b");
+            yamlDocument.getSequenceOrNull("base").removeSubNode(0);
+
+            assertSame(yamlDocument.getNodeOrNull("base").internalValueNode(), yamlDocument.getNodeOrNull("alias").internalValueNode());
+            assertEquals(List.of("b"), yamlDocument.getSequenceOrNull("base").getValues());
+            assertEquals(List.of("b"), yamlDocument.getSequenceOrNull("alias").getValues());
+
+            StringWriter writer = new StringWriter();
+            yamlDocument.save(writer);
+            assertTrue(writer.toString().contains("*"));
+            YamlDocument reloaded = sparrowYaml.load(writer.toString());
+            assertEquals(List.of("b"), reloaded.getSequenceOrNull("base").getValues());
+            assertEquals(List.of("b"), reloaded.getSequenceOrNull("alias").getValues());
+        }
+
+        @Test
         void should_AutoFillWithNull_When_SettingSequenceNodeOutOfBound() throws IOException {
             // 1. 准备阶段 (Arrange)
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
@@ -554,7 +635,7 @@ class SparrowYamlTest {
         }
 
         @Test
-        void should_UpdateRouteDynamically_When_NodeIsMoved() throws IOException {
+        void should_KeepRoutesIndependent_When_NodeIsCopied() throws IOException {
             // 1. 准备阶段 (Arrange)
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             YamlDocument yamlDocument = sparrowYaml.load("");
@@ -564,15 +645,18 @@ class SparrowYamlTest {
             ScalarNode nodeC = yamlDocument.getScalarOrNull("A", "B", "C");
             assertEquals(Route.from("A", "B", "C"), nodeC.route(), "初始路由应匹配");
 
-            // 将 B 节点移动到 D 下
+            // 将 B 节点复制到 D 下
             SectionNode nodeB = yamlDocument.getSectionOrNull("A", "B");
             yamlDocument.setSubNode("D", SectionNode.createEmpty(yamlDocument));
             SectionNode nodeD = yamlDocument.getSectionOrNull("D");
-            
+
             nodeD.setSubNode("B", nodeB);
+            ScalarNode copiedNodeC = yamlDocument.getScalarOrNull("D", "B", "C");
 
             // 3. 断言阶段 (Assert)
-            assertEquals(Route.from("D", "B", "C"), nodeC.route(), "节点移动后，其路由(Route)应动态更新以反映新位置");
+            assertNotSame(nodeC, copiedNodeC);
+            assertEquals(Route.from("A", "B", "C"), nodeC.route(), "源节点的路由不应被复制操作改变");
+            assertEquals(Route.from("D", "B", "C"), copiedNodeC.route(), "复制节点的路由应反映新位置");
         }
         
         @Test

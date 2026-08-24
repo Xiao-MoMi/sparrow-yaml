@@ -1,8 +1,10 @@
 package net.momirealms.sparrow.yaml;
 
 import net.momirealms.sparrow.yaml.engine.ExtendedConstructor;
+import net.momirealms.sparrow.yaml.node.AbstractYamlNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.LoadSettings;
@@ -21,12 +23,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 public class YamlDocument extends SectionNode {
     private final SparrowYaml sparrowYaml;
+    private final Map<Node, List<AbstractYamlNode<?>>> nodeReferences = new IdentityHashMap<>();
 
     public YamlDocument(SparrowYaml sparrowYaml, InputStream inputStream) throws IOException {
         super(null, null, (MappingNode) sparrowYaml.standardRepresenter().represent(new java.util.LinkedHashMap<>()), null, new ExtendedConstructor(sparrowYaml.loadSettings()));
@@ -40,6 +45,75 @@ public class YamlDocument extends SectionNode {
      */
     public SparrowYaml sparrowYaml() {
         return sparrowYaml;
+    }
+
+    @ApiStatus.Internal
+    public void attachNode(AbstractYamlNode<?> node) {
+        this.registerNode(node);
+        if (node instanceof SectionNode sectionNode) {
+            for (YamlNode<?> child : sectionNode.value().values()) {
+                this.attachNode((AbstractYamlNode<?>) child);
+            }
+        } else if (node instanceof net.momirealms.sparrow.yaml.node.SequenceNode sequenceNode) {
+            for (YamlNode<?> child : sequenceNode.value()) {
+                this.attachNode((AbstractYamlNode<?>) child);
+            }
+        }
+    }
+
+    @ApiStatus.Internal
+    public void detachNode(AbstractYamlNode<?> node) {
+        if (node instanceof SectionNode sectionNode) {
+            for (YamlNode<?> child : sectionNode.value().values()) {
+                this.detachNode((AbstractYamlNode<?>) child);
+            }
+        } else if (node instanceof net.momirealms.sparrow.yaml.node.SequenceNode sequenceNode) {
+            for (YamlNode<?> child : sequenceNode.value()) {
+                this.detachNode((AbstractYamlNode<?>) child);
+            }
+        }
+        this.unregisterNode(node, node.internalValueNode());
+    }
+
+    @ApiStatus.Internal
+    public void rebindNode(AbstractYamlNode<?> node, @Nullable Node previousNode) {
+        this.unregisterNode(node, previousNode);
+        this.registerNode(node);
+    }
+
+    @ApiStatus.Internal
+    public List<AbstractYamlNode<?>> nodeReferences(AbstractYamlNode<?> node) {
+        Node internalNode = node.internalValueNode();
+        if (internalNode == null) {
+            return List.of(node);
+        }
+        List<AbstractYamlNode<?>> references = this.nodeReferences.get(internalNode);
+        return references == null || references.isEmpty() ? List.of(node) : List.copyOf(references);
+    }
+
+    private void registerNode(AbstractYamlNode<?> node) {
+        Node internalNode = node.internalValueNode();
+        if (internalNode == null) {
+            return;
+        }
+        List<AbstractYamlNode<?>> references = this.nodeReferences.computeIfAbsent(internalNode, ignored -> new ArrayList<>());
+        if (!references.contains(node)) {
+            references.add(node);
+        }
+    }
+
+    private void unregisterNode(AbstractYamlNode<?> node, @Nullable Node internalNode) {
+        if (internalNode == null) {
+            return;
+        }
+        List<AbstractYamlNode<?>> references = this.nodeReferences.get(internalNode);
+        if (references == null) {
+            return;
+        }
+        references.remove(node);
+        if (references.isEmpty()) {
+            this.nodeReferences.remove(internalNode);
+        }
     }
 
     /**
@@ -71,6 +145,10 @@ public class YamlDocument extends SectionNode {
             }
             // 将解析完的节点构造成 Java 对象.
             constructor.constructSingleDocument(Optional.of(node));
+            for (YamlNode<?> child : this.value().values()) {
+                child.parentNode(null);
+            }
+            this.nodeReferences.clear();
             this.valueNode = mappingNode;
             this.value().clear();
             // 构造节点

@@ -104,6 +104,7 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
         if (index < 0 || index >= size()) {
             return null;
         }
+        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
         YamlNode<?> removed = this.value().remove(index);
         if (removed != null) {
             removed.parentNode(null);
@@ -119,6 +120,7 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
                     node.key(i);
                 }
             }
+            this.syncAliasValues(references);
         }
         return removed;
     }
@@ -126,11 +128,13 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
      * 在当前节点下创建一个新的子节点, 子节点的值默认为 null ;
      * 如果当前存在这样的一个子节点, 那么会覆盖这个子节点;
      * 如果目标索引越界, 那么会补全节点至目标节点, 补全的节点均为 ScalarNode, 值为 null ;
+     * 传入 {@link YamlNode} 时会复制节点值、注释与集合样式, 不改变源节点;
      * @param index 目标索引;
      * @param value 子节点的 Value;
      */
     public void setSubNode(int index, Object value) {
-        // 解除当前存在的节点的关联引用;
+        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
+        YamlNode<?> targetNode = this.createSubNode(index, value);
         YamlNode<?> yamlNode = index <= size() - 1 ? this.value().get(index) : null;
         if (yamlNode != null) {
             yamlNode.parentNode(null);
@@ -154,39 +158,54 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
                 }
             }
         }
-        
-        // 给目标节点预分配空间, 然后设置新的节点.
-        YamlNode<?> targetNode;
-        if (value instanceof YamlNode<?> existingNode) {
-            targetNode = existingNode;
-            targetNode.parentNode(this);
-            targetNode.key(index);
-        } else {
-            if (value instanceof Map map) {
-                targetNode = SectionNode.createEmpty(root());
-                targetNode.parentNode(this);
-                targetNode.key(index);
-                SectionNode sectionNode = (SectionNode) targetNode;
-                map.forEach((k, v) -> sectionNode.setSubNode(k, v));
-            } else if (value instanceof List list) {
-                targetNode = SequenceNode.createEmpty(root());
-                targetNode.parentNode(this);
-                targetNode.key(index);
-                SequenceNode seqNode = (SequenceNode) targetNode;
-                for (int i = 0; i < list.size(); i++) {
-                    seqNode.setSubNode(i, list.get(i));
-                }
-            } else {
-                Node valueNode = root().sparrowYaml().standardRepresenter().represent(value);
-                if (valueNode == null || (valueNode instanceof org.snakeyaml.engine.v2.nodes.ScalarNode sn && sn.getValue() == null)) {
-                    valueNode = root().sparrowYaml().standardRepresenter().represent("null");
-                }
-                targetNode = new net.momirealms.sparrow.yaml.node.ScalarNode(this, null, valueNode, index, value);
-            }
-        }
         this.value().set(index, targetNode);
-        
         nodes.set(index, targetNode.internalValueNode());
+        this.syncAliasValues(references);
+    }
+
+    private YamlNode<?> createSubNode(int index, Object value) {
+        if (value instanceof YamlNode<?> existingNode) {
+            return AbstractYamlNode.copyOf(existingNode, this, index, null);
+        }
+        if (value instanceof Map map) {
+            SectionNode sectionNode = SectionNode.createEmpty(this.root());
+            sectionNode.parentNode(this);
+            sectionNode.key(index);
+            map.forEach(sectionNode::setSubNode);
+            return sectionNode;
+        }
+        if (value instanceof List list) {
+            SequenceNode sequenceNode = SequenceNode.createEmpty(this.root());
+            sequenceNode.parentNode(this);
+            sequenceNode.key(index);
+            for (int i = 0; i < list.size(); i++) {
+                sequenceNode.setSubNode(i, list.get(i));
+            }
+            return sequenceNode;
+        }
+        Node valueNode = this.root().sparrowYaml().standardRepresenter().represent(value);
+        if (valueNode == null || valueNode instanceof org.snakeyaml.engine.v2.nodes.ScalarNode scalarNode && scalarNode.getValue() == null) {
+            valueNode = this.root().sparrowYaml().standardRepresenter().represent("null");
+        }
+        return new net.momirealms.sparrow.yaml.node.ScalarNode(this, null, valueNode, index, value);
+    }
+
+    private void syncAliasValues(List<AbstractYamlNode<?>> references) {
+        for (int i = 0; i < references.size(); i++) {
+            AbstractYamlNode<?> reference = references.get(i);
+            if (reference == this || !(reference instanceof SequenceNode alias)) {
+                continue;
+            }
+            for (YamlNode<?> child : alias.value()) {
+                child.parentNode(null);
+            }
+            List<YamlNode<?>> values = new ArrayList<>(this.size());
+            for (int index = 0; index < this.size(); index++) {
+                YamlNode<?> child = this.value().get(index);
+                values.add(AbstractYamlNode.aliasOf(child, alias, index, child.internalKeyNode()));
+            }
+            alias.value = values;
+        }
     }
     
     public void syncValueNode(YamlNode<?> child) {

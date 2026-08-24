@@ -7,10 +7,12 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.comments.CommentLine;
+import org.snakeyaml.engine.v2.nodes.MappingNode;
 import org.snakeyaml.engine.v2.nodes.Node;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public abstract class AbstractYamlNode<T> implements YamlNode<T> {
     protected ParentNode<?> parent;
@@ -50,6 +52,9 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
         this.key = key;
         this.value = value;
         initComments(keyNode, valueNode);
+        if (parent != null) {
+            this.root().attachNode(this);
+        }
     }
 
     /**
@@ -107,6 +112,9 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
     @ApiStatus.Internal
     public void internalKeyNode(Node keyNode) {
         this.keyNode = keyNode;
+        this.keyNode.setBlockComments(this.beforeKeyComments);
+        this.keyNode.setInLineComments(this.inlineKeyComments);
+        this.keyNode.setEndComments(this.afterKeyComments);
     }
 
     @Override
@@ -116,7 +124,16 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
 
     @Override
     public void parentNode(ParentNode<?> parentNode) {
+        if (this.parent == parentNode) {
+            return;
+        }
+        if (this.parent != null) {
+            this.root().detachNode(this);
+        }
         this.parent = parentNode;
+        if (parentNode != null) {
+            this.root().attachNode(this);
+        }
     }
     
     @Override
@@ -217,6 +234,74 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
         if (valueNode != null) {
             valueNode.setEndComments(comments);
         }
+    }
+
+    static YamlNode<?> copyOf(YamlNode<?> source, ParentNode<?> parent, Object key, @Nullable Node keyNode) {
+        YamlDocument root = parent.yamlNode().root();
+        AbstractYamlNode<?> target;
+        if (source instanceof SectionNode sourceSection) {
+            SectionNode copy = SectionNode.createEmpty(root);
+            copy.keyNode = keyNode;
+            copy.key = key;
+            copy.parentNode(parent);
+            for (Map.Entry<Object, YamlNode<?>> entry : sourceSection.value().entrySet()) {
+                copy.setSubNode(entry.getKey(), entry.getValue());
+            }
+            target = copy;
+        } else if (source instanceof SequenceNode sourceSequence) {
+            SequenceNode copy = SequenceNode.createEmpty(root);
+            copy.keyNode = keyNode;
+            copy.key = key;
+            copy.parentNode(parent);
+            for (int i = 0; i < sourceSequence.size(); i++) {
+                copy.setSubNode(i, sourceSequence.value().get(i));
+            }
+            target = copy;
+        } else if (source instanceof ScalarNode sourceScalar) {
+            ScalarNode copy = ScalarNode.create(root, sourceScalar.value());
+            copy.keyNode = keyNode;
+            copy.key = key;
+            copy.parentNode(parent);
+            target = copy;
+        } else {
+            throw new UnsupportedOperationException("不支持复制节点类型: " + source.getClass().getName());
+        }
+        copyMetadata(source, target);
+        return target;
+    }
+
+    static YamlNode<?> aliasOf(YamlNode<?> source, ParentNode<?> parent, Object key, @Nullable Node keyNode) {
+        AbstractYamlNode<?> target;
+        if (source instanceof SectionNode sourceSection) {
+            SectionNode alias = new SectionNode(keyNode, (MappingNode) sourceSection.internalValueNode());
+            alias.key = key;
+            alias.parentNode(parent);
+            for (Map.Entry<Object, YamlNode<?>> entry : sourceSection.value().entrySet()) {
+                YamlNode<?> child = entry.getValue();
+                alias.value().put(entry.getKey(), aliasOf(child, alias, entry.getKey(), child.internalKeyNode()));
+            }
+            target = alias;
+        } else if (source instanceof SequenceNode sourceSequence) {
+            SequenceNode alias = new SequenceNode(keyNode, (org.snakeyaml.engine.v2.nodes.SequenceNode) sourceSequence.internalValueNode());
+            alias.key = key;
+            alias.parentNode(parent);
+            for (int i = 0; i < sourceSequence.size(); i++) {
+                YamlNode<?> child = sourceSequence.value().get(i);
+                alias.value().add(aliasOf(child, alias, i, child.internalKeyNode()));
+            }
+            target = alias;
+        } else if (source instanceof ScalarNode sourceScalar) {
+            target = new ScalarNode(parent, keyNode, sourceScalar.internalValueNode(), key, sourceScalar.value());
+        } else {
+            throw new UnsupportedOperationException("不支持创建节点别名: " + source.getClass().getName());
+        }
+        copyMetadata(source, target);
+        return target;
+    }
+
+    private static void copyMetadata(YamlNode<?> source, AbstractYamlNode<?> target) {
+        source.preserveFlowStyleTo(target);
+        source.copyCommentsTo(target);
     }
 
 }

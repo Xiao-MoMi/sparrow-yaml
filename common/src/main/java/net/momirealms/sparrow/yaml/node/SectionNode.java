@@ -127,6 +127,7 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
     @Nullable
     @Override
     public YamlNode<?> removeSubNode(Object key) {
+        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
         Object adaptedKey = adaptKey(key);
         YamlNode<?> removed = this.value().remove(adaptedKey);
         if (removed != null) {
@@ -146,6 +147,7 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
                     // 这里不能直接清空内部，可能抛出 NPE 或破坏深拷贝引用
                 }
             }
+            this.syncAliasValues(references);
         }
         return removed;
     }
@@ -153,15 +155,16 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
     /**
      * 在当前节点下创建一个新的子节点, 子节点的值默认为 null ;
      * 如果当前存在这样的一个子节点, 那么就会覆盖这个子节点;
+     * 传入 {@link YamlNode} 时会复制节点值、注释与集合样式, 不改变源节点;
      * @param key 子节点的 Key;
      * @param value 子节点的 Value;
      */
     public <T> void setSubNode(Object key, Object value) {
+        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
         Object adaptedKey = adaptKey(key);
-        // 解除当前存在的节点的关联引用;
+        YamlNode<?> targetNode = this.createSubNode(adaptedKey, value);
         YamlNode<?> yamlNode = this.value().get(adaptedKey);
         if (yamlNode != null) {
-            // 顺便从底层 tuple 中先移除，后续重建。这是为了避免直接覆盖导致的问题
             MappingNode mappingNode = (MappingNode) this.valueNode;
             List<NodeTuple> tuples = mappingNode.getValue();
             Iterator<NodeTuple> iterator = tuples.iterator();
@@ -174,8 +177,7 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
                     iterator.remove();
                 }
             }
-            
-            // 解决NPE的关键：一旦移除，我们也要切断引用
+
             yamlNode.parentNode(null);
             if (yamlNode instanceof AbstractYamlNode<?> abs) {
                 try {
@@ -185,43 +187,36 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
                 } catch (Exception ignored) {}
             }
         }
-        // 设置新的节点
-        YamlNode<?> targetNode;
-        if (value instanceof YamlNode<?> existingNode) {
-            targetNode = existingNode;
-            targetNode.parentNode(this);
-            targetNode.key(adaptedKey);
-            // 这里会导致将另一个 document 中的内部引用强行挂载到当前 document
-            // 这也是触发 NullPointerException 的关键原因！如果强行挂载，底层 SnakeYAML 的 IdentityHashMap 将出错。
-            // 因此我们需要确保所有的值都被转化为普通的 Java 对象！我们在 YamlUpdater 中已经做到了，
-            // 但如果这里被传入的是原有节点引用，我们应当拒绝或使用拷贝。
-        } else {
-            if (value instanceof Map map) {
-                targetNode = SectionNode.createEmpty(root());
-                targetNode.parentNode(this);
-                targetNode.key(adaptedKey);
-                SectionNode sectionNode = (SectionNode) targetNode;
-                map.forEach((k, v) -> sectionNode.setSubNode(k, v));
-            } else if (value instanceof List list) {
-                targetNode = SequenceNode.createEmpty(root());
-                targetNode.parentNode(this);
-                targetNode.key(adaptedKey);
-                SequenceNode sequenceNode = (SequenceNode) targetNode;
-                for (int i = 0; i < list.size(); i++) {
-                    sequenceNode.setSubNode(i, list.get(i));
-                }
-            } else {
-                Node valueNode = root().sparrowYaml().standardRepresenter().represent(value);
-                if (valueNode == null || (valueNode instanceof org.snakeyaml.engine.v2.nodes.ScalarNode sn && sn.getValue() == null)) {
-                    valueNode = root().sparrowYaml().standardRepresenter().represent("null");
-                }
-                targetNode = new net.momirealms.sparrow.yaml.node.ScalarNode(this, null, valueNode, adaptedKey, value);
-            }
-        }
         this.value().put(adaptedKey, targetNode);
-        
-        // 双向同步到底层 NodeTuple 列表
         syncNodeTuple(adaptedKey, targetNode);
+        this.syncAliasValues(references);
+    }
+
+    private YamlNode<?> createSubNode(Object key, Object value) {
+        if (value instanceof YamlNode<?> existingNode) {
+            return AbstractYamlNode.copyOf(existingNode, this, key, null);
+        }
+        if (value instanceof Map map) {
+            SectionNode sectionNode = SectionNode.createEmpty(this.root());
+            sectionNode.parentNode(this);
+            sectionNode.key(key);
+            map.forEach(sectionNode::setSubNode);
+            return sectionNode;
+        }
+        if (value instanceof List list) {
+            SequenceNode sequenceNode = SequenceNode.createEmpty(this.root());
+            sequenceNode.parentNode(this);
+            sequenceNode.key(key);
+            for (int i = 0; i < list.size(); i++) {
+                sequenceNode.setSubNode(i, list.get(i));
+            }
+            return sequenceNode;
+        }
+        Node valueNode = this.root().sparrowYaml().standardRepresenter().represent(value);
+        if (valueNode == null || valueNode instanceof org.snakeyaml.engine.v2.nodes.ScalarNode scalarNode && scalarNode.getValue() == null) {
+            valueNode = this.root().sparrowYaml().standardRepresenter().represent("null");
+        }
+        return new net.momirealms.sparrow.yaml.node.ScalarNode(this, null, valueNode, key, value);
     }
     
     public void syncValueNode(YamlNode<?> child) {
@@ -259,6 +254,7 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
      * Keys not present in the desiredOrder list will be appended at the end in their original relative order.
      */
     public void reorderKeys(List<Object> desiredOrder) {
+        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
         Map<Object, YamlNode<?>> newMap = new java.util.LinkedHashMap<>();
         MappingNode mappingNode = (MappingNode) this.valueNode;
         List<NodeTuple> oldTuples = new java.util.ArrayList<>(mappingNode.getValue());
@@ -300,6 +296,25 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
         this.value.clear();
         this.value.putAll(newMap);
         mappingNode.setValue(newTuples);
+        this.syncAliasValues(references);
+    }
+
+    private void syncAliasValues(List<AbstractYamlNode<?>> references) {
+        for (int i = 0; i < references.size(); i++) {
+            AbstractYamlNode<?> reference = references.get(i);
+            if (reference == this || !(reference instanceof SectionNode alias)) {
+                continue;
+            }
+            for (YamlNode<?> child : alias.value().values()) {
+                child.parentNode(null);
+            }
+            Map<Object, YamlNode<?>> values = new LinkedHashMap<>();
+            for (Map.Entry<Object, YamlNode<?>> entry : this.value().entrySet()) {
+                YamlNode<?> child = entry.getValue();
+                values.put(entry.getKey(), AbstractYamlNode.aliasOf(child, alias, entry.getKey(), child.internalKeyNode()));
+            }
+            alias.value = values;
+        }
     }
 
     /**
