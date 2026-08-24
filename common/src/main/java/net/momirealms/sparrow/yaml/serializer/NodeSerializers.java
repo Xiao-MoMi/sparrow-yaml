@@ -31,6 +31,14 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 public final class NodeSerializers {
+    // 默认枚举 codec 跟随枚举 Class 生命周期复用和释放
+    private static final ClassValue<NodeSerializer<?>> ENUM_CODECS = new ClassValue<>() {
+        @Override
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        protected NodeSerializer<?> computeValue(Class<?> type) {
+            return createEnumCodec((Class) type);
+        }
+    };
 
     public static final NodeSerializer<Object> OBJECT = NodeSerializer.createInternal(
             Object.class,
@@ -232,18 +240,35 @@ public final class NodeSerializers {
     }
 
     /**
-     * 创建枚举 serializer, 解码时忽略大小写, 编码时写出 enum.name().
-     * todo for循环太慢了, toLowerCase 提成一种转换方法, 以匹配有小写的enum.
+     * 获取枚举 serializer, 解码时先匹配大写名称, 再按真实名称精确匹配.
+     *
+     * @param enumClass 枚举类型
+     * @param <E> 枚举类型
+     * @return 按枚举类型复用的 serializer
      */
+    @SuppressWarnings("unchecked")
     public static <E extends Enum<E>> NodeSerializer<E> enumCodec(Class<E> enumClass) {
-        E[] constants = enumClass.getEnumConstants();
-        Map<String, E> map = new LinkedHashMap<>(Math.max((int) (constants.length / 0.75f) + 1, 16));
-        for (E constant : constants) {
-            map.put(constant.name().toLowerCase(Locale.ROOT), constant);
-        }
+        return (NodeSerializer<E>) ENUM_CODECS.get(enumClass);
+    }
+
+    private static <E extends Enum<E>> NodeSerializer<E> createEnumCodec(Class<E> enumClass) {
         return scalar(
                 enumClass,
-                str -> map.get(str.toLowerCase(Locale.ROOT)),
+                value -> {
+                    String upperValue = value.toUpperCase(Locale.ROOT);
+                    try {
+                        return Enum.valueOf(enumClass, upperValue);
+                    } catch (IllegalArgumentException ignored) {
+                        if (upperValue.equals(value)) {
+                            return null;
+                        }
+                        try {
+                            return Enum.valueOf(enumClass, value);
+                        } catch (IllegalArgumentException ignoredAgain) {
+                            return null;
+                        }
+                    }
+                },
                 Enum::name
         );
     }

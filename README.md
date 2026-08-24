@@ -260,7 +260,7 @@ var registry = yaml.serializers();
 - `Duration`
 - `Period`
 
-枚举可以通过 `NodeSerializers.enumCodec(MyEnum.class)` 手动创建序列化器；自动序列化 record/class 字段时也会解析枚举字段。
+枚举可以通过 `NodeSerializers.enumCodec(MyEnum.class)` 获取序列化器；自动序列化 record/class 字段时也会解析枚举字段。解码先按大写名称匹配，未命中再按 `enum.name()` 的真实名称精确匹配；编码写出真实名称。
 
 ### 自定义序列化器
 
