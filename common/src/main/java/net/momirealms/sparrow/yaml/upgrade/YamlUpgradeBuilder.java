@@ -47,13 +47,23 @@ public class YamlUpgradeBuilder {
         return this;
     }
 
-    // 控制合并阶段是否同步模板注释
+    /**
+     * 控制是否用模板中的非空注释更新已有本地节点, 默认为 false.
+     *
+     * @param updateComments 是否更新已有节点的注释
+     * @return 此构建器
+     */
     public YamlUpgradeBuilder updateComments(boolean updateComments) {
         this.updateComments = updateComments;
         return this;
     }
 
-    // 控制清理阶段是否删除模板中已移除的本地节点
+    /**
+     * 控制是否清理模板中已移除且未被忽略的本地节点, 默认为 true.
+     *
+     * @param deleteRemovedNodes 是否清理已移除节点
+     * @return 此构建器
+     */
     public YamlUpgradeBuilder deleteRemovedNodes(boolean deleteRemovedNodes) {
         this.deleteRemovedNodes = deleteRemovedNodes;
         return this;

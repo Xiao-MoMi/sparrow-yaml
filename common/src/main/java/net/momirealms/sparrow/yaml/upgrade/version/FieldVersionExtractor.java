@@ -8,7 +8,7 @@ import net.momirealms.sparrow.yaml.route.Route;
 
 /**
  * 默认的配置版本提取器.
- * 从指定路由读取标量节点并解析为整数版本号.
+ * 从指定路由读取非 null 标量并转换为版本字符串.
  */
 public class FieldVersionExtractor implements VersionExtractor {
     private final Route versionRoute;
@@ -33,13 +33,16 @@ public class FieldVersionExtractor implements VersionExtractor {
      */
     @Override
     public String extractVersion(YamlDocument doc) throws InvalidConfigVersionException {
-        YamlNode<?> node = doc.getNodeOrNull(versionRoute);
+        YamlNode<?> node = doc.getNodeOrNull(this.versionRoute);
         if (node == null) {
-            throw new InvalidConfigVersionException("Missing version configuration at route: " + versionRoute);
+            throw new InvalidConfigVersionException("Missing version configuration at route: " + this.versionRoute);
         }
 
         if (node instanceof ScalarNode scalarNode) {
             Object value = scalarNode.value();
+            if (value == null) {
+                throw new InvalidConfigVersionException("Invalid YAML version at path " + Route.pathName(this.versionRoute) + ": value must be a non-null scalar.");
+            }
             if (value instanceof String str) {
                 return str;
             }
@@ -51,16 +54,16 @@ public class FieldVersionExtractor implements VersionExtractor {
             }
         }
 
-        throw new InvalidConfigVersionException("Invalid node type for version at route " + versionRoute + ": expected scalar node.");
+        throw new InvalidConfigVersionException("Invalid node type for version at route " + this.versionRoute + ": expected scalar node.");
     }
 
     @Override
     public void writeVersion(YamlDocument doc, String version) {
-        YamlNode<?> versionNode = doc.getNodeOrNull(versionRoute);
+        YamlNode<?> versionNode = doc.getNodeOrNull(this.versionRoute);
         if (versionNode instanceof ScalarNode scalarNode) {
             scalarNode.setValue(version);
         } else {
-            doc.setAndGet(versionRoute, version);
+            doc.setAndGet(this.versionRoute, version);
         }
     }
 }

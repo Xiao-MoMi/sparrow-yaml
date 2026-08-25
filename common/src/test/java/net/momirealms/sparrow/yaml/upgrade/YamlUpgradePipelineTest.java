@@ -104,6 +104,27 @@ class YamlUpgradePipelineTest {
         }
 
         @Test
+        void should_ThrowDomainExceptionWithRoute_When_VersionValueIsNull() throws IOException {
+            Route versionRoute = Route.from("meta", "version");
+            YamlDocument doc = loadDoc("meta:\n  version: null");
+            FieldVersionExtractor extractor = new FieldVersionExtractor(versionRoute);
+
+            InvalidConfigVersionException exception = assertThrows(InvalidConfigVersionException.class, () -> extractor.extractVersion(doc));
+
+            assertTrue(exception.getMessage().contains(Route.pathName(versionRoute)), exception.getMessage());
+        }
+
+        @Test
+        void should_RejectNullLocalAndTargetVersions_When_CheckingUpgrade() throws IOException {
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder().build();
+            YamlDocument nullVersion = loadDoc("config-version: null");
+            YamlDocument validVersion = loadDoc("config-version: 2");
+
+            assertThrows(InvalidConfigVersionException.class, () -> pipeline.needsUpgrade(nullVersion, validVersion));
+            assertThrows(InvalidConfigVersionException.class, () -> pipeline.needsUpgrade(validVersion, nullVersion));
+        }
+
+        @Test
         void should_WriteVersion_When_UsingFieldVersionExtractor() throws IOException {
             YamlDocument doc = loadDoc("name: test");
             FieldVersionExtractor extractor = new FieldVersionExtractor();
@@ -369,6 +390,47 @@ class YamlUpgradePipelineTest {
 
     @Nested
     class MergeAndCleanTests {
+
+        @Test
+        void should_UseBuilderContractForDefaultMergeOptions() {
+            MergeOptions options = MergeOptions.defaultOptions();
+            MergeOptions builderOptions = YamlUpgradePipeline.builder().build().getOptions();
+
+            assertEquals(builderOptions, options);
+            assertFalse(options.updateComments());
+            assertTrue(options.deleteRemovedNodes());
+            assertEquals(List.of(), options.globallyIgnoredRoutes());
+        }
+
+        @Test
+        void should_PreserveLocalCommentsAndDeleteRemovedNodes_When_UsingDefaultMergeOptions() throws IOException {
+            YamlDocument localDoc = loadDoc("""
+                    config-version: 1
+                    # Local value comment
+                    value: local
+                    legacy: old
+                    """);
+            YamlDocument jarDoc = loadDoc("""
+                    config-version: 2
+                    # Template value comment
+                    value: default
+                    # Added value comment
+                    added: created
+                    """);
+            YamlUpgradePipeline pipeline = new YamlUpgradePipeline(
+                    new FieldVersionExtractor(),
+                    List.of(),
+                    MergeOptions.defaultOptions()
+            );
+
+            YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
+            String dumped = dumpDoc(upgraded).replace("\r\n", "\n");
+
+            assertTrue(dumped.contains("# Local value comment\nvalue: local"), dumped);
+            assertFalse(dumped.contains("# Template value comment\nvalue: local"), dumped);
+            assertTrue(dumped.contains("# Added value comment\nadded: created"), dumped);
+            assertNull(upgraded.getNodeOrNull(Route.from("legacy")));
+        }
 
         @Test
         void should_PreventMergeAndClean_When_IgnoredRouteIsConfigured() throws IOException {

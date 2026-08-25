@@ -171,7 +171,7 @@ if (host != null) {
 - 默认文档代表当前程序版本需要的最新结构。
 - 当本地版本和目标版本不同，先对本地文档执行补丁，再把本地文档合并到默认文档结构中。
 
-默认版本字段是 `config-version`，由 `FieldVersionExtractor` 读取。版本字段必须是标量；缺失或不是标量会抛出 `InvalidConfigVersionException`。
+默认版本字段是 `config-version`，由 `FieldVersionExtractor` 读取。版本字段必须是非 null 标量；缺失、YAML null 或不是标量都会抛出 `InvalidConfigVersionException`。
 
 ```java
 import net.momirealms.sparrow.yaml.route.Route;
@@ -211,8 +211,9 @@ upgraded.save(Path.of("config.yml"));
 - 合并和清理完成后，通过 `VersionExtractor#writeVersion(...)` 把本地文档版本写成目标版本。
 - 合并阶段保留本地已有值，只补齐默认文档中存在但本地缺失的节点。
 - 合并后会按默认文档 key 顺序重排；本地独有 key 会保留在最后。
-- `updateComments(true)` 会把默认文档中的非空注释同步到已有本地节点。
+- `updateComments(true)` 会把默认文档中的非空注释同步到已有本地节点，默认值为 `false`；缺失节点仍会连同模板注释一起补入。
 - `deleteRemovedNodes(true)` 会删除默认文档中已不存在的本地节点，默认值为 `true`。
+- `MergeOptions.defaultOptions()` 与 `YamlUpgradePipeline.builder().build()` 使用相同默认值：保留已有本地注释，清理未被忽略的已移除节点。
 - `addIgnoredRoute(...)` 标记的路径不会参与合并，也不会参与清理。
 - `addIgnoredRoute(Route.empty())` 会关闭整份文档的自动合并和清理；显式 `Patch` 和目标版本字段更新仍会执行。
 - `pipeline.upgrade(local, defaults, dynamicSectionRoutes)` 可以额外登记一组动态 Section 路由：路由本身仍参与补齐（本地缺失时写入默认内容），但其子节点视为用户数据，不会被默认文档合并，也不会被清理删除。

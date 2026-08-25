@@ -161,7 +161,7 @@ public class YamlUpgradePipeline {
             for (Object defKey : defKeys) {
                 Route childRoute = Route.addTo(currentRoute, new KeyElement(defKey));
                 if (ignoredRouteMatcher.matches(childRoute)) {
-                    if (localKeys.contains(defKey)) {
+                    if (localSection.value().containsKey(defKey)) {
                         desiredOrder.add(defKey);
                         desiredOrderLookup.add(defKey);
                     }
