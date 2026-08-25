@@ -41,51 +41,16 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(String.class);
     }
 
-    /**
-     * 按路径元素读取字符串, missing 或 YAML null 返回 null.
-     *
-     * @param route 路径元素
-     * @return 转换后的字符串
-     */
-    @Nullable
-    default String getString(@NotNull Object... route) {
-        return this.getString(Route.from(route));
-    }
-
     @NotNull
     default String getStringOrDefault(@NotNull String defaultValue, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValue : node.get(String.class);
     }
 
-    /**
-     * 按路径元素读取字符串, missing 或 YAML null 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param route 路径元素
-     * @return 转换后的字符串
-     */
-    @NotNull
-    default String getStringOrDefault(@NotNull String defaultValue, @NotNull Object... route) {
-        return this.getStringOrDefault(defaultValue, Route.from(route));
-    }
-
     @NotNull
     default String getStringOrDefault(@NotNull Supplier<String> defaultValueSupplier, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValueSupplier.get() : node.get(String.class);
-    }
-
-    /**
-     * 按路径元素读取字符串, missing 或 YAML null 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param route 路径元素
-     * @return 转换后的字符串
-     */
-    @NotNull
-    default String getStringOrDefault(@NotNull Supplier<String> defaultValueSupplier, @NotNull Object... route) {
-        return this.getStringOrDefault(defaultValueSupplier, Route.from(route));
     }
 
     /**
@@ -98,46 +63,14 @@ public interface ParentNode<T extends YamlNode<?>> {
         return this.getBooleanOrDefault(false, route);
     }
 
-    /**
-     * 按路径元素读取 boolean, missing 或 YAML null 返回 false.
-     *
-     * @param route 路径元素
-     * @return 转换后的 boolean
-     */
-    default boolean getBoolean(@NotNull Object... route) {
-        return this.getBoolean(Route.from(route));
-    }
-
     default boolean getBooleanOrDefault(boolean defaultValue, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValue : node.get(Boolean.class);
     }
 
-    /**
-     * 按路径元素读取 boolean, missing 或 YAML null 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param route 路径元素
-     * @return 转换后的 boolean
-     */
-    default boolean getBooleanOrDefault(boolean defaultValue, @NotNull Object... route) {
-        return this.getBooleanOrDefault(defaultValue, Route.from(route));
-    }
-
     default boolean getBooleanOrDefault(@NotNull Supplier<Boolean> defaultValueSupplier, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValueSupplier.get() : node.get(Boolean.class);
-    }
-
-    /**
-     * 按路径元素读取 boolean, missing 或 YAML null 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param route 路径元素
-     * @return 转换后的 boolean
-     */
-    default boolean getBooleanOrDefault(@NotNull Supplier<Boolean> defaultValueSupplier, @NotNull Object... route) {
-        return this.getBooleanOrDefault(defaultValueSupplier, Route.from(route));
     }
 
     /**
@@ -150,46 +83,14 @@ public interface ParentNode<T extends YamlNode<?>> {
         return this.getIntOrDefault(0, route);
     }
 
-    /**
-     * 按路径元素读取 int, missing 或 YAML null 返回 0.
-     *
-     * @param route 路径元素
-     * @return 转换后的 int
-     */
-    default int getInt(@NotNull Object... route) {
-        return this.getInt(Route.from(route));
-    }
-
     default int getIntOrDefault(int defaultValue, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValue : node.get(Integer.class);
     }
 
-    /**
-     * 按路径元素读取 int, missing 或 YAML null 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param route 路径元素
-     * @return 转换后的 int
-     */
-    default int getIntOrDefault(int defaultValue, @NotNull Object... route) {
-        return this.getIntOrDefault(defaultValue, Route.from(route));
-    }
-
     default int getIntOrDefault(@NotNull Supplier<Integer> defaultValueSupplier, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValueSupplier.get() : node.get(Integer.class);
-    }
-
-    /**
-     * 按路径元素读取 int, missing 或 YAML null 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param route 路径元素
-     * @return 转换后的 int
-     */
-    default int getIntOrDefault(@NotNull Supplier<Integer> defaultValueSupplier, @NotNull Object... route) {
-        return this.getIntOrDefault(defaultValueSupplier, Route.from(route));
     }
 
     /**
@@ -202,46 +103,14 @@ public interface ParentNode<T extends YamlNode<?>> {
         return this.getLongOrDefault(0L, route);
     }
 
-    /**
-     * 按路径元素读取 long, missing 或 YAML null 返回 0.
-     *
-     * @param route 路径元素
-     * @return 转换后的 long
-     */
-    default long getLong(@NotNull Object... route) {
-        return this.getLong(Route.from(route));
-    }
-
     default long getLongOrDefault(long defaultValue, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValue : node.get(Long.class);
     }
 
-    /**
-     * 按路径元素读取 long, missing 或 YAML null 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param route 路径元素
-     * @return 转换后的 long
-     */
-    default long getLongOrDefault(long defaultValue, @NotNull Object... route) {
-        return this.getLongOrDefault(defaultValue, Route.from(route));
-    }
-
     default long getLongOrDefault(@NotNull Supplier<Long> defaultValueSupplier, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValueSupplier.get() : node.get(Long.class);
-    }
-
-    /**
-     * 按路径元素读取 long, missing 或 YAML null 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param route 路径元素
-     * @return 转换后的 long
-     */
-    default long getLongOrDefault(@NotNull Supplier<Long> defaultValueSupplier, @NotNull Object... route) {
-        return this.getLongOrDefault(defaultValueSupplier, Route.from(route));
     }
 
     /**
@@ -254,46 +123,14 @@ public interface ParentNode<T extends YamlNode<?>> {
         return this.getFloatOrDefault(0F, route);
     }
 
-    /**
-     * 按路径元素读取 float, missing 或 YAML null 返回 0.
-     *
-     * @param route 路径元素
-     * @return 转换后的 float
-     */
-    default float getFloat(@NotNull Object... route) {
-        return this.getFloat(Route.from(route));
-    }
-
     default float getFloatOrDefault(float defaultValue, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValue : node.get(Float.class);
     }
 
-    /**
-     * 按路径元素读取 float, missing 或 YAML null 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param route 路径元素
-     * @return 转换后的 float
-     */
-    default float getFloatOrDefault(float defaultValue, @NotNull Object... route) {
-        return this.getFloatOrDefault(defaultValue, Route.from(route));
-    }
-
     default float getFloatOrDefault(@NotNull Supplier<Float> defaultValueSupplier, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValueSupplier.get() : node.get(Float.class);
-    }
-
-    /**
-     * 按路径元素读取 float, missing 或 YAML null 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param route 路径元素
-     * @return 转换后的 float
-     */
-    default float getFloatOrDefault(@NotNull Supplier<Float> defaultValueSupplier, @NotNull Object... route) {
-        return this.getFloatOrDefault(defaultValueSupplier, Route.from(route));
     }
 
     /**
@@ -306,46 +143,14 @@ public interface ParentNode<T extends YamlNode<?>> {
         return this.getDoubleOrDefault(0D, route);
     }
 
-    /**
-     * 按路径元素读取 double, missing 或 YAML null 返回 0.
-     *
-     * @param route 路径元素
-     * @return 转换后的 double
-     */
-    default double getDouble(@NotNull Object... route) {
-        return this.getDouble(Route.from(route));
-    }
-
     default double getDoubleOrDefault(double defaultValue, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValue : node.get(Double.class);
     }
 
-    /**
-     * 按路径元素读取 double, missing 或 YAML null 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param route 路径元素
-     * @return 转换后的 double
-     */
-    default double getDoubleOrDefault(double defaultValue, @NotNull Object... route) {
-        return this.getDoubleOrDefault(defaultValue, Route.from(route));
-    }
-
     default double getDoubleOrDefault(@NotNull Supplier<Double> defaultValueSupplier, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValueSupplier.get() : node.get(Double.class);
-    }
-
-    /**
-     * 按路径元素读取 double, missing 或 YAML null 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param route 路径元素
-     * @return 转换后的 double
-     */
-    default double getDoubleOrDefault(@NotNull Supplier<Double> defaultValueSupplier, @NotNull Object... route) {
-        return this.getDoubleOrDefault(defaultValueSupplier, Route.from(route));
     }
 
     /**
@@ -357,17 +162,6 @@ public interface ParentNode<T extends YamlNode<?>> {
     @Nullable
     default List<String> getStringList(@NotNull Route route) {
         return this.getList(NodeSerializers.STRING, route);
-    }
-
-    /**
-     * 按路径元素严格读取字符串列表, missing 或 YAML null 返回 null.
-     *
-     * @param route 路径元素
-     * @return 转换后的字符串列表
-     */
-    @Nullable
-    default List<String> getStringList(@NotNull Object... route) {
-        return this.getStringList(Route.from(route));
     }
 
     /**
@@ -387,19 +181,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(this.registeredSerializer(elementType).listOf());
     }
 
-    /**
-     * 按路径元素使用已注册的元素类型严格读取列表.
-     *
-     * @param elementType 元素类型
-     * @param route 路径元素
-     * @param <R> 元素类型
-     * @return 解析后的列表, missing 或 YAML null 返回 null
-     */
-    @Nullable
-    default <R> List<R> getList(@NotNull Class<R> elementType, @NotNull Object... route) {
-        return this.getList(elementType, Route.from(route));
-    }
-
     @Nullable
     default <R> List<R> getList(@NotNull NodeSerializer<R> elementSerializer, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
@@ -409,19 +190,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(elementSerializer.listOf());
     }
 
-    /**
-     * 按路径元素使用元素 serializer 严格读取列表.
-     *
-     * @param elementSerializer 元素 serializer
-     * @param route 路径元素
-     * @param <R> 元素类型
-     * @return 解析后的列表, missing 或 YAML null 返回 null
-     */
-    @Nullable
-    default <R> List<R> getList(@NotNull NodeSerializer<R> elementSerializer, @NotNull Object... route) {
-        return this.getList(elementSerializer, Route.from(route));
-    }
-
     @Nullable
     default <R> List<R> getList(@NotNull TypeRef<R> elementType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
@@ -429,19 +197,6 @@ public interface ParentNode<T extends YamlNode<?>> {
             return null;
         }
         return node.get(this.registeredSerializer(elementType).listOf());
-    }
-
-    /**
-     * 按路径元素使用已注册的泛型元素类型严格读取列表.
-     *
-     * @param elementType 元素类型
-     * @param route 路径元素
-     * @param <R> 元素类型
-     * @return 解析后的列表, missing 或 YAML null 返回 null
-     */
-    @Nullable
-    default <R> List<R> getList(@NotNull TypeRef<R> elementType, @NotNull Object... route) {
-        return this.getList(elementType, Route.from(route));
     }
 
     /**
@@ -465,21 +220,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(valueSerializer.mapOf(keySerializer).listOf());
     }
 
-    /**
-     * 按路径元素使用已注册的 key/value 类型严格读取 Map 列表.
-     *
-     * @param keyType Map key 类型
-     * @param valueType Map value 类型
-     * @param route 路径元素
-     * @param <K> Map key 类型
-     * @param <V> Map value 类型
-     * @return 解析后的 Map 列表, missing 或 YAML null 返回 null
-     */
-    @Nullable
-    default <K, V> List<Map<K, V>> getMapList(@NotNull Class<K> keyType, @NotNull Class<V> valueType, @NotNull Object... route) {
-        return this.getMapList(keyType, valueType, Route.from(route));
-    }
-
     @Nullable
     default <K, V> List<Map<K, V>> getMapList(@NotNull TypeRef<K> keyType, @NotNull TypeRef<V> valueType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
@@ -491,39 +231,9 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(valueSerializer.mapOf(keySerializer).listOf());
     }
 
-    /**
-     * 按路径元素使用已注册的泛型 key/value 类型严格读取 Map 列表.
-     *
-     * @param keyType Map key 类型
-     * @param valueType Map value 类型
-     * @param route 路径元素
-     * @param <K> Map key 类型
-     * @param <V> Map value 类型
-     * @return 解析后的 Map 列表, missing 或 YAML null 返回 null
-     */
-    @Nullable
-    default <K, V> List<Map<K, V>> getMapList(@NotNull TypeRef<K> keyType, @NotNull TypeRef<V> valueType, @NotNull Object... route) {
-        return this.getMapList(keyType, valueType, Route.from(route));
-    }
-
     @Nullable
     default <K, V> List<Map<K, V>> getMapList(@NotNull NodeSerializer<K> keySerializer, @NotNull NodeSerializer<V> valueSerializer, @NotNull Route route) {
         return this.getList(valueSerializer.mapOf(keySerializer), route);
-    }
-
-    /**
-     * 按路径元素使用 key/value serializer 严格读取 Map 列表.
-     *
-     * @param keySerializer Map key serializer
-     * @param valueSerializer Map value serializer
-     * @param route 路径元素
-     * @param <K> Map key 类型
-     * @param <V> Map value 类型
-     * @return 解析后的 Map 列表, missing 或 YAML null 返回 null
-     */
-    @Nullable
-    default <K, V> List<Map<K, V>> getMapList(@NotNull NodeSerializer<K> keySerializer, @NotNull NodeSerializer<V> valueSerializer, @NotNull Object... route) {
-        return this.getMapList(keySerializer, valueSerializer, Route.from(route));
     }
 
     /**
@@ -540,57 +250,16 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node == null || node.value() == null ? null : node.get(this.enumSerializer(enumType));
     }
 
-    /**
-     * 按路径元素读取枚举, missing 或 YAML null 返回 null.
-     *
-     * @param enumType 枚举类型
-     * @param route 路径元素
-     * @param <E> 枚举类型
-     * @return 转换后的枚举
-     */
-    @Nullable
-    default <E extends Enum<E>> E getEnum(@NotNull Class<E> enumType, @NotNull Object... route) {
-        return this.getEnum(enumType, Route.from(route));
-    }
-
     @NotNull
     default <E extends Enum<E>> E getEnumOrDefault(@NotNull Enum<E> defaultValue, @NotNull Class<E> enumType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? enumType.cast(defaultValue) : node.get(this.enumSerializer(enumType));
     }
 
-    /**
-     * 按路径元素读取枚举, missing 或 YAML null 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param enumType 枚举类型
-     * @param route 路径元素
-     * @param <E> 枚举类型
-     * @return 转换后的枚举
-     */
-    @NotNull
-    default <E extends Enum<E>> E getEnumOrDefault(@NotNull Enum<E> defaultValue, @NotNull Class<E> enumType, @NotNull Object... route) {
-        return this.getEnumOrDefault(defaultValue, enumType, Route.from(route));
-    }
-
     @NotNull
     default <E extends Enum<E>> E getEnumOrDefault(@NotNull Supplier<E> defaultValueSupplier, @NotNull Class<E> enumType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null || node.value() == null ? defaultValueSupplier.get() : node.get(this.enumSerializer(enumType));
-    }
-
-    /**
-     * 按路径元素读取枚举, missing 或 YAML null 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param enumType 枚举类型
-     * @param route 路径元素
-     * @param <E> 枚举类型
-     * @return 转换后的枚举
-     */
-    @NotNull
-    default <E extends Enum<E>> E getEnumOrDefault(@NotNull Supplier<E> defaultValueSupplier, @NotNull Class<E> enumType, @NotNull Object... route) {
-        return this.getEnumOrDefault(defaultValueSupplier, enumType, Route.from(route));
     }
 
     /**
@@ -603,17 +272,6 @@ public interface ParentNode<T extends YamlNode<?>> {
     default Object getValue(@NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         return node == null ? null : node.representValue();
-    }
-
-    /**
-     * 按路径元素递归提取 Java 值, missing 或 YAML null 返回 null.
-     *
-     * @param route 路径元素
-     * @return Java 值
-     */
-    @Nullable
-    default Object getValue(@NotNull Object... route) {
-        return this.getValue(Route.from(route));
     }
 
     /**
@@ -631,36 +289,12 @@ public interface ParentNode<T extends YamlNode<?>> {
         return yamlNode.get(serializer);
     }
 
-    /**
-     * 按路径元素使用指定 serializer 读取值.
-     *
-     * @param serializer serializer
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
-    default <R> R get(@NotNull NodeSerializer<R> serializer, @NotNull Object... route) {
-        return this.get(serializer, Route.from(route));
-    }
-
     default <R> R get(Class<R> clazz, Route route) {
         YamlNode<?> yamlNode = this.getNodeOrNull(route);
         if (yamlNode == null) {
             throw missing(route, clazz);
         }
         return yamlNode.get(clazz);
-    }
-
-    /**
-     * 按路径元素使用已注册的目标类型读取值.
-     *
-     * @param clazz 目标类型
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
-    default <R> R get(@NotNull Class<R> clazz, @NotNull Object... route) {
-        return this.get(clazz, Route.from(route));
     }
 
     default <R> R get(TypeRef<R> typeRef, Route route) {
@@ -671,56 +305,10 @@ public interface ParentNode<T extends YamlNode<?>> {
         return yamlNode.get(typeRef);
     }
 
-    /**
-     * 按路径元素使用已注册的泛型目标类型读取值.
-     *
-     * @param typeRef 目标类型
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
-    default <R> R get(@NotNull TypeRef<R> typeRef, @NotNull Object... route) {
-        return this.get(typeRef, Route.from(route));
-    }
-
     @Nullable
     default <R> R getOrDefault(@Nullable R defaultValue, @NotNull NodeSerializer<R> serializer, @NotNull Route route) {
         YamlNode<?> yamlNode = this.getNodeOrNull(route);
         return yamlNode != null ? yamlNode.get(serializer) : defaultValue;
-    }
-
-    /**
-     * 按路径元素使用指定 serializer 读取值, missing 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param serializer serializer
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
-    @Nullable
-    default <R> R getOrDefault(@Nullable R defaultValue, @NotNull NodeSerializer<R> serializer, @NotNull Object... route) {
-        return this.getOrDefault(defaultValue, serializer, Route.from(route));
-    }
-
-    @Nullable
-    default <R> R getOrDefault(@NotNull Supplier<? extends R> defaultValueSupplier, @NotNull NodeSerializer<R> serializer, @NotNull Route route) {
-        YamlNode<?> yamlNode = this.getNodeOrNull(route);
-        return yamlNode != null ? yamlNode.get(serializer) : defaultValueSupplier.get();
-    }
-
-    /**
-     * 按路径元素使用指定 serializer 读取值, missing 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param serializer serializer
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
-    @Nullable
-    default <R> R getOrDefault(@NotNull Supplier<? extends R> defaultValueSupplier, @NotNull NodeSerializer<R> serializer, @NotNull Object... route) {
-        return this.getOrDefault(defaultValueSupplier, serializer, Route.from(route));
     }
 
     @Nullable
@@ -729,18 +317,10 @@ public interface ParentNode<T extends YamlNode<?>> {
         return yamlNode != null ? yamlNode.get(clazz) : defaultValue;
     }
 
-    /**
-     * 按路径元素使用已注册的目标类型读取值, missing 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param clazz 目标类型
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
     @Nullable
-    default <R> R getOrDefault(@Nullable R defaultValue, @NotNull Class<R> clazz, @NotNull Object... route) {
-        return this.getOrDefault(defaultValue, clazz, Route.from(route));
+    default <R> R getOrDefault(@NotNull Supplier<? extends R> defaultValueSupplier, @NotNull NodeSerializer<R> serializer, @NotNull Route route) {
+        YamlNode<?> yamlNode = this.getNodeOrNull(route);
+        return yamlNode != null ? yamlNode.get(serializer) : defaultValueSupplier.get();
     }
 
     @Nullable
@@ -749,58 +329,16 @@ public interface ParentNode<T extends YamlNode<?>> {
         return yamlNode != null ? yamlNode.get(clazz) : defaultValueSupplier.get();
     }
 
-    /**
-     * 按路径元素使用已注册的目标类型读取值, missing 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param clazz 目标类型
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
-    @Nullable
-    default <R> R getOrDefault(@NotNull Supplier<? extends R> defaultValueSupplier, @NotNull Class<R> clazz, @NotNull Object... route) {
-        return this.getOrDefault(defaultValueSupplier, clazz, Route.from(route));
-    }
-
     @Nullable
     default <R> R getOrDefault(@Nullable R defaultValue, @NotNull TypeRef<R> typeRef, @NotNull Route route) {
         YamlNode<?> yamlNode = this.getNodeOrNull(route);
         return yamlNode != null ? yamlNode.get(typeRef) : defaultValue;
     }
 
-    /**
-     * 按路径元素使用已注册的泛型目标类型读取值, missing 返回给定默认值.
-     *
-     * @param defaultValue 默认值
-     * @param typeRef 目标类型
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
-    @Nullable
-    default <R> R getOrDefault(@Nullable R defaultValue, @NotNull TypeRef<R> typeRef, @NotNull Object... route) {
-        return this.getOrDefault(defaultValue, typeRef, Route.from(route));
-    }
-
     @Nullable
     default <R> R getOrDefault(@NotNull Supplier<? extends R> defaultValueSupplier, @NotNull TypeRef<R> typeRef, @NotNull Route route) {
         YamlNode<?> yamlNode = this.getNodeOrNull(route);
         return yamlNode != null ? yamlNode.get(typeRef) : defaultValueSupplier.get();
-    }
-
-    /**
-     * 按路径元素使用已注册的泛型目标类型读取值, missing 时调用 Supplier.
-     *
-     * @param defaultValueSupplier 默认值 Supplier
-     * @param typeRef 目标类型
-     * @param route 路径元素
-     * @param <R> 目标类型
-     * @return 解析后的值
-     */
-    @Nullable
-    default <R> R getOrDefault(@NotNull Supplier<? extends R> defaultValueSupplier, @NotNull TypeRef<R> typeRef, @NotNull Object... route) {
-        return this.getOrDefault(defaultValueSupplier, typeRef, Route.from(route));
     }
 
     private static MissingNodeException missing(Route route, Class<?> targetType) {
@@ -1254,5 +792,4 @@ public interface ParentNode<T extends YamlNode<?>> {
         }
         throw new UnsupportedOperationException("not found registered serializer for " + type);
     }
-
 }
