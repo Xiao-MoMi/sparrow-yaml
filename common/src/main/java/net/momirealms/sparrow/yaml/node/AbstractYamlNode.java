@@ -2,6 +2,8 @@ package net.momirealms.sparrow.yaml.node;
 
 import net.momirealms.sparrow.yaml.YamlDocument;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.route.element.IndexElement;
+import net.momirealms.sparrow.yaml.route.element.KeyElement;
 import net.momirealms.sparrow.yaml.route.element.RouteElement;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
@@ -82,9 +84,10 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
 
 
     @Override
-    public @Nullable RouteElement<?> keyRouteElement() {
-        Route route = route();
-        if (route == null) return null;
+    @Nullable
+    public RouteElement<?> keyRouteElement() {
+        Route route = this.route();
+        if (route == null || route.length() == 0) return null;
         return route.getRouteElement(route.length() - 1);
     }
 
@@ -142,15 +145,16 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
     }
 
     @Override
+    @Nullable
     public Route route() {
-        if (parent == null) {
+        if (this.parent == null) {
             return this instanceof YamlDocument ? Route.empty() : null;
         }
-        Route parentRoute = parent.yamlNode().route();
-        if (parentRoute == null) {
-            return Route.from(key);
-        }
-        return Route.addTo(parentRoute, key);
+        YamlNode<?> parentNode = this.parent.yamlNode();
+        RouteElement<?> routeElement = parentNode instanceof SequenceNode
+                ? new IndexElement((Integer) this.key)
+                : new KeyElement(this.key);
+        return Route.addTo(parentNode.route(), routeElement);
     }
 
     @Override

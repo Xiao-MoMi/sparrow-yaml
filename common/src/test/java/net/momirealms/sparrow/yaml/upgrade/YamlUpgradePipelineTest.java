@@ -401,6 +401,41 @@ class YamlUpgradePipelineTest {
         }
 
         @Test
+        void should_RunPatchesAndWriteVersion_When_RootMergeAndCleanIsIgnored() throws IOException {
+            YamlDocument localDoc = loadDoc("config-version: 1\nlegacy: true");
+            YamlDocument jarDoc = loadDoc("config-version: 2\nadded: true");
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
+                    .deleteRemovedNodes(true)
+                    .addIgnoredRoute(Route.empty())
+                    .addPatch(new VersionPatch(new NumberVersionMatcher(2), List.of(
+                            new DefaultValueRule(Route.from("patched"), true)
+                    )))
+                    .build();
+
+            YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
+
+            assertEquals(true, upgraded.get(Boolean.class, Route.from("legacy")));
+            assertEquals(true, upgraded.get(Boolean.class, Route.from("patched")));
+            assertNull(upgraded.getNodeOrNull(Route.from("added")));
+            assertEquals("2", upgraded.get(String.class, Route.from("config-version")));
+        }
+
+        @Test
+        void should_IgnoreEveryNonRootRoute_When_EmptyRouteIsDynamic() throws IOException {
+            YamlDocument localDoc = loadDoc("config-version: 1\nlegacy: true");
+            YamlDocument jarDoc = loadDoc("config-version: 2\nadded: true");
+            YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
+                    .deleteRemovedNodes(true)
+                    .build();
+
+            YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc, List.of(Route.empty()));
+
+            assertEquals(true, upgraded.get(Boolean.class, Route.from("legacy")));
+            assertNull(upgraded.getNodeOrNull(Route.from("added")));
+            assertEquals("2", upgraded.get(String.class, Route.from("config-version")));
+        }
+
+        @Test
         void should_NotDeleteOldNodes_When_DeleteRemovedNodesIsFalse() throws IOException {
             // 1. 准备阶段 (Arrange)
             YamlDocument localDoc = loadDoc("config-version: 1\nlegacy: true");

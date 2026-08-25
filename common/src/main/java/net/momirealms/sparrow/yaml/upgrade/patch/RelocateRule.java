@@ -6,6 +6,7 @@ import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.route.element.IndexElement;
 import org.snakeyaml.engine.v2.comments.CommentLine;
 
 import java.util.ArrayList;
@@ -65,8 +66,7 @@ public class RelocateRule implements Patch {
                             }
                         }
                     } else if (parentNode instanceof SequenceNode sequenceNode) {
-                        Object currentKey = to.getRouteElement(to.length() - 1).key();
-                        if (currentKey instanceof Integer idx && idx == 0) {
+                        if (to.getLastRouteElement() instanceof IndexElement indexElement && indexElement.key() == 0) {
                             isFirstChild = true;
                         }
                     }
@@ -105,11 +105,11 @@ public class RelocateRule implements Patch {
                 || !(localDoc.getNodeOrNull(fromParent) instanceof SequenceNode)) {
             return this.to;
         }
-        Object fromKey = this.from.getLastRouteElement().key();
-        Object toKey = this.to.getLastRouteElement().key();
-        if (fromKey instanceof Integer fromIndex && toKey instanceof Integer toIndex && fromIndex < toIndex) {
+        if (this.from.getLastRouteElement() instanceof IndexElement fromIndex
+                && this.to.getLastRouteElement() instanceof IndexElement toIndex
+                && fromIndex.key() < toIndex.key()) {
             // 删除较小索引后后续元素会左移一位, 因此写入时先为最终坐标预留这一位.
-            return toParent.add(toIndex + 1);
+            return toParent.add(toIndex.key() + 1);
         }
         return this.to;
     }

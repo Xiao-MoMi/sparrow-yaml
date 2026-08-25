@@ -28,31 +28,19 @@ public class Route {
     /**
      * 构造一个多路由.
      * 如果传入的值是 Integer 且 >= 0, 那么会被识别为 IndexElement;
-     * 如果传入的值是 RouteElement, 那么会直接作为路由节点;
+     * 如果传入的值是 RouteElement, 那么会保留其显式节点类型;
      * 否则, 都会被进行toString, 然后识别为 KeyElement;
      * @param routeKeys 路由节点
      */
     public Route(@NotNull Object... routeKeys) {
-        this.routeKeys = routeKeys.clone();
-        if (this.routeKeys.length == 0) {
-            this.routeElements = new RouteElement[0];
-            return;
+        Objects.requireNonNull(routeKeys, "用于路由定位的节点数组不能为 null !");
+        this.routeElements = new RouteElement<?>[routeKeys.length];
+        this.routeKeys = new Object[routeKeys.length];
+        for (int i = 0; i < routeKeys.length; i++) {
+            RouteElement<?> routeElement = normalizeRouteElement(routeKeys[i]);
+            this.routeElements[i] = routeElement;
+            this.routeKeys[i] = routeElement.key();
         }
-        for (Object key : this.routeKeys) {
-            Objects.requireNonNull(key, "用于路由定位的数组中不可包含 null 节点!");
-        }
-        this.routeElements = Arrays.stream(this.routeKeys)
-                .map(it -> {
-                    if (it instanceof Integer integer && integer >= 0) {
-                        return new IndexElement(integer);
-                    }
-                    if (it instanceof RouteElement<?> routeElement) {
-                        Objects.requireNonNull(routeElement.key(), "用于路由定位的数组中的 RouteElement 元素的值不可为 null !");
-                        return routeElement;
-                    }
-                    return new KeyElement(it.toString());
-                })
-                .toArray(RouteElement[]::new);
     }
 
     /**
@@ -60,12 +48,7 @@ public class Route {
      * @param routeKey 路由节点
      */
     public Route(@NotNull Object routeKey) {
-        this.routeKeys = new Object[] { Objects.requireNonNull(routeKey, "路由的节点不可包含 null !") };
-        this.routeElements = new RouteElement[] {
-                routeKey instanceof Integer integer ?
-                        new IndexElement(integer) :
-                        new KeyElement(routeKey.toString())
-        };
+        this(new Object[] {routeKey});
     }
 
     /**
@@ -95,12 +78,12 @@ public class Route {
     }
 
     /**
-     * 返回当前路由对象的路由节点数组;
-     * @return 路由节点数组
+     * 返回规范化后的路由 key 副本, 显式 RouteElement 会拆成其中的 key.
+     * @return 路由 key 数组
      */
     @NotNull
     public Object[] routeKeys() {
-        return routeKeys.clone();
+        return this.routeKeys.clone();
     }
 
     /**
@@ -108,7 +91,7 @@ public class Route {
      * @return 路径长度
      */
     public int length() {
-        return routeElements.length;
+        return this.routeElements.length;
     }
 
     /**
@@ -121,7 +104,7 @@ public class Route {
      */
     @NotNull
     public RouteElement<?> getRouteElement(int i) {
-        return routeElements[i];
+        return this.routeElements[i];
     }
 
     /**
@@ -134,10 +117,10 @@ public class Route {
      */
     @Nullable
     public RouteElement<?> getRouteElementOrNull(int i) {
-        if (i > length() - 1) {
+        if (i < 0 || i >= this.length()) {
             return null;
         }
-        return routeElements[i];
+        return this.routeElements[i];
     }
 
     /**
@@ -146,7 +129,7 @@ public class Route {
      */
     @NotNull
     public RouteElement<?> getLastRouteElement() {
-        return routeElements[routeElements.length - 1];
+        return this.routeElements[this.routeElements.length - 1];
     }
 
     /**
@@ -158,7 +141,7 @@ public class Route {
      */
     @NotNull
     public Object getRouteKey(int i) {
-        return routeKeys[i];
+        return this.routeKeys[i];
     }
 
     /**
@@ -167,7 +150,7 @@ public class Route {
      */
     @NotNull
     public RouteElement<?> getFirstRouteElement() {
-        return routeElements[0];
+        return this.routeElements[0];
     }
 
     /**
@@ -181,9 +164,9 @@ public class Route {
         if (route == null) {
             return this;
         }
-        Object[] newKeys = Arrays.copyOf(this.routeKeys, this.length() + route.length());
-        System.arraycopy(route.routeKeys, 0, newKeys, this.length(), route.length());
-        return new Route(newKeys);
+        Object[] newElements = Arrays.copyOf(this.routeElements, this.length() + route.length(), Object[].class);
+        System.arraycopy(route.routeElements, 0, newElements, this.length(), route.length());
+        return new Route(newElements);
     }
 
     /**
@@ -195,32 +178,22 @@ public class Route {
      */
     @NotNull
     public Route add(@NotNull Object key) {
-        Objects.requireNonNull(key, "路由的节点的值不可包含 null !");
-
-        Object[] newKeys;
-        if (key instanceof RouteElement<?> element) {
-            Objects.requireNonNull(element.key(), "路由的节点的值不可包含 null !");
-            newKeys = Arrays.copyOf(this.routeKeys, this.length() + 1);
-            newKeys[newKeys.length - 1] = element.key();
-        } else {
-            newKeys = Arrays.copyOf(this.routeKeys, this.length() + 1);
-            newKeys[newKeys.length - 1] = key;
-        }
-
-        return new Route(newKeys);
+        Object[] newElements = Arrays.copyOf(this.routeElements, this.length() + 1, Object[].class);
+        newElements[newElements.length - 1] = key;
+        return new Route(newElements);
     }
 
     /**
      * 返回该路由的父路由.
      * 创建一个新路由并复制该路由的数组（不包含最后一个节点）.
-     * 如果 <code>{@link #length()} == 1</code> 的路由调用此方法将返回 Null;
+     * 空路由或单节点路由没有父路由, 调用此方法返回 null;
      * @return 新的 Route 对象
      */
     @Nullable
     public Route parent() {
-        if (routeElements.length == 1) return null;
-        if (routeElements.length == 2) return Route.from(routeKeys[0]);
-        return Route.from(Arrays.copyOf(routeKeys, routeKeys.length - 1));
+        if (this.routeElements.length <= 1) return null;
+        Object[] parentElements = Arrays.copyOf(this.routeElements, this.routeElements.length - 1, Object[].class);
+        return new Route(parentElements);
     }
 
     /**
@@ -230,7 +203,7 @@ public class Route {
     public boolean isParentRouteOf(Route subRoute) {
         if (this.length() >= subRoute.length()) return false;
         for (int i = 0; i < this.length(); i++) {
-            if (!Objects.equals(this.getRouteElement(i).key(), subRoute.getRouteElement(i).key())) {
+            if (!Objects.equals(this.getRouteElement(i), subRoute.getRouteElement(i))) {
                 return false;
             }
         }
@@ -244,7 +217,7 @@ public class Route {
     public boolean isSubRouteOf(Route parentRoute) {
         if (this.length() <= parentRoute.length()) return false;
         for (int i = 0; i < parentRoute.length(); i++) {
-            if (!Objects.equals(this.getRouteElement(i).key(), parentRoute.getRouteElement(i).key())) {
+            if (!Objects.equals(this.getRouteElement(i), parentRoute.getRouteElement(i))) {
                 return false;
             }
         }
@@ -252,20 +225,25 @@ public class Route {
     }
 
     /**
-     * 解析当前路由打印时展示的路径名称
+     * 返回用于异常和日志的路径名称, null 显示为 {@code <unknown>}, 空路由显示为 {@code <root>}.
+     *
+     * @param path 路由
+     * @return 可读路径名称
      */
     public static String pathName(@Nullable Route path) {
-        if (path == null || path.length() == 0) return "<unknown>";
+        if (path == null) return "<unknown>";
+        if (path.length() == 0) return "<root>";
         StringBuilder builder = new StringBuilder();
-        for (Object key : path.routeKeys()) {
-            if (key instanceof Integer index && index >= 0) {
-                builder.append('[').append(index).append(']');
+        for (int i = 0; i < path.length(); i++) {
+            RouteElement<?> routeElement = path.getRouteElement(i);
+            if (routeElement instanceof IndexElement indexElement) {
+                builder.append('[').append(indexElement.key()).append(']');
                 continue;
             }
             if (!builder.isEmpty()) {
                 builder.append('.');
             }
-            builder.append(key);
+            builder.append(routeElement.key());
         }
         return "\"" + builder + "\"";
     }
@@ -273,22 +251,33 @@ public class Route {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof Route route1)) return false;
-        if (this.length() != route1.length()) return false;
-        if (this.length() == 1 && route1.length() == 1) return Objects.equals(this.getRouteKey(0), route1.getRouteKey(0));
-        return Arrays.equals(routeKeys, route1.routeKeys);
+        if (!(o instanceof Route route)) return false;
+        return Arrays.equals(this.routeElements, route.routeElements);
     }
 
     @Override
     public int hashCode() {
-        if (length() == 0) return 0;
-        return length() > 1 ? Arrays.hashCode(routeKeys) : Objects.hashCode(routeKeys[0]);
+        if (this.length() == 0) return 0;
+        return this.length() == 1 ? this.routeElements[0].hashCode() : Arrays.hashCode(this.routeElements);
     }
 
     @Override
     public String toString() {
         return "Route{" +
-                "route=" + Arrays.toString(routeKeys) +
+                "route=" + Arrays.toString(this.routeKeys) +
                 '}';
+    }
+
+    @NotNull
+    private static RouteElement<?> normalizeRouteElement(@NotNull Object routeKey) {
+        Objects.requireNonNull(routeKey, "用于路由定位的数组中不可包含 null 节点!");
+        if (routeKey instanceof RouteElement<?> routeElement) {
+            Objects.requireNonNull(routeElement.key(), "用于路由定位的数组中的 RouteElement 元素的值不可为 null !");
+            return routeElement;
+        }
+        if (routeKey instanceof Integer integer && integer >= 0) {
+            return new IndexElement(integer);
+        }
+        return new KeyElement(routeKey.toString());
     }
 }

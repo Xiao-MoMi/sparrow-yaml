@@ -59,17 +59,31 @@ public class YamlUpgradeBuilder {
         return this;
     }
 
-    // 添加忽略路由
+    // 添加一条非空忽略路由
     public YamlUpgradeBuilder addIgnoredRoute(Object... route) {
         this.ignoredRoutes.add(Route.from(route));
         return this;
     }
 
+    /**
+     * 添加一条不参与自动合并和清理的路由, {@link Route#empty()} 表示整个文档.
+     * 显式版本补丁和版本字段更新不受影响.
+     *
+     * @param route 忽略路由
+     * @return 此构建器
+     */
     public YamlUpgradeBuilder addIgnoredRoute(Route route) {
         this.ignoredRoutes.add(route);
         return this;
     }
 
+    /**
+     * 批量添加不参与自动合并和清理的路由.
+     * 集合中的 {@link Route#empty()} 表示整个文档, 显式版本补丁和版本字段更新不受影响.
+     *
+     * @param routes 忽略路由
+     * @return 此构建器
+     */
     public YamlUpgradeBuilder addIgnoredRoutes(Collection<Route> routes) {
         this.ignoredRoutes.addAll(routes);
         return this;

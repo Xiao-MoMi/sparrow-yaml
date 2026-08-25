@@ -7,6 +7,7 @@ import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.route.element.KeyElement;
 import net.momirealms.sparrow.yaml.upgrade.patch.Patch;
 import net.momirealms.sparrow.yaml.upgrade.patch.PatchContext;
 import net.momirealms.sparrow.yaml.exception.PatchValidationException;
@@ -73,6 +74,7 @@ public class YamlUpgradePipeline {
     /**
      * 根据模板文档升级本地文档, 并额外登记一组动态 Section 路由.
      * 动态 Section 路由本身仍参与补齐, 但其子节点属于用户数据, 不会被模板内容合并或清理.
+     * 集合包含 {@link Route#empty()} 时, 所有非根路由都按动态用户数据处理.
      *
      * @param localDocument 本地 YAML 文档
      * @param defDocument 模板 YAML 文档
@@ -157,7 +159,7 @@ public class YamlUpgradePipeline {
             List<Object> desiredOrder = new ArrayList<>();
             Set<Object> desiredOrderLookup = new HashSet<>();
             for (Object defKey : defKeys) {
-                Route childRoute = Route.addTo(currentRoute, defKey);
+                Route childRoute = Route.addTo(currentRoute, new KeyElement(defKey));
                 if (ignoredRouteMatcher.matches(childRoute)) {
                     if (localKeys.contains(defKey)) {
                         desiredOrder.add(defKey);
@@ -221,7 +223,7 @@ public class YamlUpgradePipeline {
         if (localNode instanceof SectionNode localSection && defNode instanceof SectionNode defSection) {
             List<Object> keysToRemove = new ArrayList<>();
             for (Object key : localSection.value().keySet()) {
-                Route childRoute = Route.addTo(currentRoute, key);
+                Route childRoute = Route.addTo(currentRoute, new KeyElement(key));
                 if (ignoredRouteMatcher.matches(childRoute)) continue;
                 
                 if (!defSection.value().containsKey(key)) {

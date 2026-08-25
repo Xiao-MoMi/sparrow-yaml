@@ -4,6 +4,8 @@ import net.momirealms.sparrow.yaml.YamlDocument;
 import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.engine.ExtendedConstructor;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.route.element.KeyElement;
+import net.momirealms.sparrow.yaml.route.element.RouteElement;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -66,12 +68,13 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
 
     /**
      * 返回仅包含该 Section 的 Key 的路由.
-     * 如果此 Section 是根节点（检查isRoot() ）, 则返回null.
+     * 根 Section 返回 {@link Route#empty()}, 其余节点保留 Key 或 Index 的实际类型.
      * @return 仅包含该 Section 的 Key 的路由
      */
     @NotNull
     public Route getKeyAsRoute() {
-        return Route.from(super.key);
+        if (this.isRoot()) return Route.empty();
+        return Route.from(this.keyRouteElement());
     }
 
     @Override
@@ -377,7 +380,8 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
      * @return 新的路由对象
      */
     public Route getSubRoute(@NotNull Object key) {
-        return Route.addTo(super.route(), key);
+        Object routeKey = key instanceof RouteElement<?> ? key : new KeyElement(key);
+        return Route.addTo(this.route(), routeKey);
     }
 
     /**

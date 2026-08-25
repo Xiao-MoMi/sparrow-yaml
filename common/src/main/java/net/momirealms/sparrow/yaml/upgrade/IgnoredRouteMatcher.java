@@ -1,6 +1,7 @@
 package net.momirealms.sparrow.yaml.upgrade;
 
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.route.element.RouteElement;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -22,11 +23,20 @@ public final class IgnoredRouteMatcher {
      * 判断给定路由是否命中某条忽略规则.
      * 只要遍历过程中命中终止节点, 即表示当前路由应被忽略;
      * 命中仅忽略后代的节点时, 只有该节点的真后代路由会被忽略.
+     *
+     * @param route 待匹配路由
+     * @return 是否命中忽略规则
      */
     public boolean matches(Route route) {
-        RouteTrieNode current = root;
+        RouteTrieNode current = this.root;
+        if (current.terminal) {
+            return true;
+        }
+        if (current.descendantsIgnored && route.length() > 0) {
+            return true;
+        }
         for (int i = 0; i < route.length(); i++) {
-            current = current.children.get(route.getRouteElement(i).key());
+            current = current.children.get(route.getRouteElement(i));
             if (current == null) {
                 return false;
             }
@@ -51,21 +61,25 @@ public final class IgnoredRouteMatcher {
         /**
          * 添加一条忽略路由.
          * 当某个节点已被标记为终止节点时, 其更深层子路径无需再单独保留.
+         * {@link Route#empty()} 表示根和所有后代路由.
+         *
+         * @param route 忽略路由
+         * @return 此构建器
          */
         public Builder add(Route route) {
-            RouteTrieNode current = root;
+            RouteTrieNode current = this.root;
             for (int i = 0; i < route.length(); i++) {
                 // 如果已经存在 "a.b", 再次添加 "a.b.c" 时, 应当被忽略.
                 if (current.terminal) {
-                    hasRoutes = true;
+                    this.hasRoutes = true;
                     return this;
                 }
-                Object key = route.getRouteElement(i).key();
-                current = current.children.computeIfAbsent(key, ignored -> new RouteTrieNode());
+                RouteElement<?> routeElement = route.getRouteElement(i);
+                current = current.children.computeIfAbsent(routeElement, ignored -> new RouteTrieNode());
             }
             current.terminal = true;
             current.children.clear();
-            hasRoutes = true;
+            this.hasRoutes = true;
             return this;
         }
 
@@ -81,20 +95,24 @@ public final class IgnoredRouteMatcher {
          * 添加一条仅忽略后代的路由.
          * 该路由本身不会被忽略, 但其下所有子路由都会被忽略;
          * 用于子节点属于动态用户数据的 Section, 让节点本身仍参与补齐, 而内容不被合并或清理.
+         * {@link Route#empty()} 表示所有非根路由.
+         *
+         * @param route 仅忽略后代的路由
+         * @return 此构建器
          */
         public Builder addDescendants(Route route) {
-            RouteTrieNode current = root;
+            RouteTrieNode current = this.root;
             for (int i = 0; i < route.length(); i++) {
                 // 如果已经存在 "a.b" 的完整忽略, 再对 "a.b.c" 添加后代忽略时, 应当被忽略.
                 if (current.terminal) {
-                    hasRoutes = true;
+                    this.hasRoutes = true;
                     return this;
                 }
-                Object key = route.getRouteElement(i).key();
-                current = current.children.computeIfAbsent(key, ignored -> new RouteTrieNode());
+                RouteElement<?> routeElement = route.getRouteElement(i);
+                current = current.children.computeIfAbsent(routeElement, ignored -> new RouteTrieNode());
             }
             current.descendantsIgnored = true;
-            hasRoutes = true;
+            this.hasRoutes = true;
             return this;
         }
 
@@ -107,12 +125,12 @@ public final class IgnoredRouteMatcher {
         }
 
         public IgnoredRouteMatcher build() {
-            return hasRoutes ? new IgnoredRouteMatcher(root) : EMPTY;
+            return this.hasRoutes ? new IgnoredRouteMatcher(this.root) : EMPTY;
         }
     }
 
     private static final class RouteTrieNode {
-        private final Map<Object, RouteTrieNode> children = new HashMap<>();
+        private final Map<RouteElement<?>, RouteTrieNode> children = new HashMap<>();
         private boolean terminal; // 标记当前节点是否对应一条完整的忽略路由
         private boolean descendantsIgnored; // 标记当前节点的所有后代路由是否被忽略, 节点本身不受影响
     }

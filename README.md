@@ -115,6 +115,8 @@ var host = document.getScalarOrNull(Route.from("database", "host"));
 String firstUser = document.get(String.class, Route.from("users", 0));
 ```
 
+`Route.empty()` 表示文档根节点；`YamlDocument#route()` 和根节点的 `getKeyAsRoute()` 都返回空路由。
+
 写入原始值时推荐显式使用 `Route`：
 
 ```java
@@ -212,7 +214,9 @@ upgraded.save(Path.of("config.yml"));
 - `updateComments(true)` 会把默认文档中的非空注释同步到已有本地节点。
 - `deleteRemovedNodes(true)` 会删除默认文档中已不存在的本地节点，默认值为 `true`。
 - `addIgnoredRoute(...)` 标记的路径不会参与合并，也不会参与清理。
+- `addIgnoredRoute(Route.empty())` 会关闭整份文档的自动合并和清理；显式 `Patch` 和目标版本字段更新仍会执行。
 - `pipeline.upgrade(local, defaults, dynamicSectionRoutes)` 可以额外登记一组动态 Section 路由：路由本身仍参与补齐（本地缺失时写入默认内容），但其子节点视为用户数据，不会被默认文档合并，也不会被清理删除。
+- `dynamicSectionRoutes` 包含 `Route.empty()` 时，根节点本身仍参与升级，但所有非根路径都视为动态用户数据。
 
 常用补丁规则：
 

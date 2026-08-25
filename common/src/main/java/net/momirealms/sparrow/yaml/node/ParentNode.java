@@ -540,22 +540,17 @@ public interface ParentNode<T extends YamlNode<?>> {
             return null; // Cannot remove root
         }
 
-        Route parentRoute = Route.empty();
-        for (int i = 0; i < route.length() - 1; i++) {
-            parentRoute = Route.addTo(parentRoute, route.getRouteElement(i).key());
-        }
-
-        YamlNode<?> parentNode = this.getNodeOrNull(parentRoute);
+        Route parentRoute = route.parent();
+        YamlNode<?> parentNode = parentRoute == null ? this.yamlNode() : this.getNodeOrNull(parentRoute);
         if (parentNode == null) return null;
 
-        Object keyToRemove = route.getRouteElement(route.length() - 1).key();
+        RouteElement<?> routeElement = route.getLastRouteElement();
+        Object keyToRemove = routeElement.key();
         
         if (parentNode instanceof SectionNode sectionNode) {
             return sectionNode.removeSubNode(keyToRemove);
-        } else if (parentNode instanceof SequenceNode sequenceNode) {
-            if (keyToRemove instanceof Integer index) {
-                return sequenceNode.removeSubNode(index);
-            }
+        } else if (parentNode instanceof SequenceNode sequenceNode && routeElement instanceof IndexElement indexElement) {
+            return sequenceNode.removeSubNode(indexElement.key());
         }
         return null;
     }
@@ -624,8 +619,6 @@ public interface ParentNode<T extends YamlNode<?>> {
      * @return 创建完成的叶子节点
      */
     default YamlNode<?> set(@NotNull Route route, @Nullable Object value) {
-        Objects.requireNonNull(route, "路由不可为 null !");
-
         YamlNode<?> currentNode = this.yamlNode();
         if (route.length() == 0) {
             return currentNode;
@@ -685,13 +678,19 @@ public interface ParentNode<T extends YamlNode<?>> {
      */
     default YamlNode<?> setAndGet(@NotNull Route route, @Nullable Object value) {
         try {
+            if (route.length() == 0) {
+                return this.yamlNode();
+            }
             Route parentRoute = route.parent();
             YamlNode<?> parentNode = parentRoute == null ? this.yamlNode() : this.getNodeOrNull(parentRoute);
+            RouteElement<?> routeElement = route.getLastRouteElement();
             if (parentNode instanceof SectionNode sectionNode) {
-                sectionNode.setSubNode(route.getRouteElement(route.length() - 1).key(), value);
+                sectionNode.setSubNode(routeElement.key(), value);
             } else if (parentNode instanceof SequenceNode sequenceNode) {
-                if (route.getRouteElement(route.length() - 1).key() instanceof Integer idx) {
-                    sequenceNode.setSubNode(idx, value);
+                if (routeElement instanceof IndexElement indexElement) {
+                    sequenceNode.setSubNode(indexElement.key(), value);
+                } else {
+                    return this.set(route, value);
                 }
             } else {
                 this.set(route, value);
