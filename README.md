@@ -42,8 +42,8 @@ YamlDocument document = yaml.load("""
           port: 25565
         """);
 
-String host = document.getString("server", "host");
-int port = document.getIntOrDefault(25565, "server", "port");
+String host = document.getString(Route.from("server", "host"));
+int port = document.getIntOrDefault(25565, Route.from("server", "port"));
 
 document.set(Route.from("server", "host"), "0.0.0.0");
 document.set(Route.from("server", "motd"), "Welcome");
@@ -103,16 +103,16 @@ Sparrow YAML 把 YAML 文档包装成三种节点：
 常用读取方法：
 
 ```java
-var node = document.getNodeOrNull("database", "host");
-var section = document.getSectionOrNull("database");
-var users = document.getSequenceOrNull("users");
-var host = document.getScalarOrNull("database", "host");
+var node = document.getNodeOrNull(Route.from("database", "host"));
+var section = document.getSectionOrNull(Route.from("database"));
+var users = document.getSequenceOrNull(Route.from("users"));
+var host = document.getScalarOrNull(Route.from("database", "host"));
 ```
 
-`Object... route` 会被转换为 `Route`。非负整数会被识别为列表索引，其它值会被转成字符串 key：
+节点 API 使用显式 `Route`。`Route.from(Object...)` 会把非负整数识别为列表索引，其它值转换为字符串 key：
 
 ```java
-String firstUser = document.get(String.class, "users", 0);
+String firstUser = document.get(String.class, Route.from("users", 0));
 ```
 
 写入原始值时推荐显式使用 `Route`：
@@ -128,7 +128,7 @@ document.set(Route.from("database", "pool"), Map.of("size", 10));
 删除节点：
 
 ```java
-document.removeNode("database", "old-key");
+document.removeNode(Route.from("database", "old-key"));
 document.removeNode(Route.from("users", 0));
 ```
 
@@ -143,7 +143,7 @@ import org.snakeyaml.engine.v2.comments.CommentType;
 import java.util.List;
 import java.util.Optional;
 
-var host = document.getScalarOrNull("database", "host");
+var host = document.getScalarOrNull(Route.from("database", "host"));
 if (host != null) {
     host.setBeforeKeyComments(List.of(
             new CommentLine(Optional.empty(), Optional.empty(), " Database host", CommentType.BLOCK)
@@ -190,7 +190,7 @@ YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
                 .convert(Route.from("admins"), node -> List.of(String.valueOf(node.value()).split(",")))
                 .defaultValue(Route.from("database", "pool-size"), 10)
                 .validate(local -> {
-                    if (local.getNodeOrNull("database", "host") == null) {
+                    if (local.getNodeOrNull(Route.from("database", "host")) == null) {
                         throw new PatchValidationException("database.host is required");
                     }
                 }))
@@ -228,7 +228,7 @@ upgraded.save(Path.of("config.yml"));
 
 ```java
 patch.patch((defDoc, localDoc, context) -> {
-    context.put("old-host", localDoc.get(String.class, "database", "host"));
+    context.put("old-host", localDoc.get(String.class, Route.from("database", "host")));
     return localDoc;
 });
 ```
@@ -292,8 +292,8 @@ NodeSerializer<BlockPos> blockPosSerializer = NodeSerializers.mapping(BlockPos.c
 
 yaml.serializers().register(BlockPos.class, blockPosSerializer);
 
-BlockPos spawn = document.get(BlockPos.class, "spawn");
-document.setAndGet(BlockPos.class, new BlockPos(0, 64, 0), "spawn");
+BlockPos spawn = document.get(BlockPos.class, Route.from("spawn"));
+document.setAndGet(BlockPos.class, new BlockPos(0, 64, 0), Route.from("spawn"));
 ```
 
 `mapping(type)` 用于 YAML 对象：
@@ -480,8 +480,8 @@ record DatabaseConfig(String host, int port) {}
 
 yaml.serializers().register(DatabaseConfig.class);
 
-DatabaseConfig config = document.get(DatabaseConfig.class, "database");
-document.setAndGet(DatabaseConfig.class, config, "database");
+DatabaseConfig config = document.get(DatabaseConfig.class, Route.from("database"));
+document.setAndGet(DatabaseConfig.class, config, Route.from("database"));
 ```
 
 普通 class 支持这些实例化方式：
@@ -549,7 +549,7 @@ class Box<T> {
 TypeRef<Box<String>> boxType = new TypeRef<>() {};
 yaml.serializers().register(boxType);
 
-Box<String> box = document.get(boxType, "box");
+Box<String> box = document.get(boxType, Route.from("box"));
 ```
 
 自动序列化支持嵌套 record/class、递归类型、`List<T>`、`Set<T>`、`Map<K, T>` 和枚举字段。Map 键会使用 `K` 对应的 serializer，并要求它编码为标量值。

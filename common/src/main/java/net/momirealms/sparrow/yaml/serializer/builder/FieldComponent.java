@@ -6,6 +6,7 @@ import net.momirealms.sparrow.yaml.exception.NodeParsingException;
 import net.momirealms.sparrow.yaml.node.ScalarNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 
 import java.util.Map;
@@ -46,7 +47,7 @@ public final class FieldComponent<T, A> implements NodeSerializerComponent<T, A>
             return NodeSerializerDecodeResult.failed();
         }
 
-        YamlNode<?> child = section.getNodeOrNull(name);
+        YamlNode<?> child = section.getNodeOrNull(Route.from(name));
         if (isMissing(child)) {
             return missing(node);
         }

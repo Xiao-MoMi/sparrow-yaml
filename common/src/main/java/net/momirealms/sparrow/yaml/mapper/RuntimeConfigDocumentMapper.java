@@ -100,7 +100,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
 
     private void validateRequiredProperties(YamlDocument document) {
         for (RequiredProperty requiredProperty : requiredProperties) {
-            if (document.getNodeOrNull(requiredProperty.key()) == null) {
+            if (document.getNodeOrNull(Route.from(requiredProperty.key())) == null) {
                 throw new MissingNodeException(requiredProperty.key(), document, requiredProperty.targetType());
             }
         }
@@ -116,7 +116,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
      */
     private void applyComments(YamlDocument doc) {
         for (CommentBinding binding : comments) {
-            YamlNode<?> node = doc.getNodeOrNull(binding.key);
+            YamlNode<?> node = doc.getNodeOrNull(Route.from(binding.key));
             if (node == null) {
                 continue;
             }

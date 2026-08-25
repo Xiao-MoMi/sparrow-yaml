@@ -412,7 +412,7 @@ class SparrowYamlAnnotationTest {
                   first: two
                 """);
 
-        assertEquals(Map.of("first", "two"), document.get(serializer, "values"));
+        assertEquals(Map.of("first", "two"), document.get(serializer, Route.from("values")));
 
         Map<String, String> values = new LinkedHashMap<>();
         values.put("FIRST", "one");
@@ -732,10 +732,10 @@ class SparrowYamlAnnotationTest {
         assertEquals("2", config.getVersion());
         assertEquals("local", config.getValue());
         assertEquals("created", config.getAdded());
-        assertEquals("2", savedDocument.getNodeOrNull("config-version").value().toString());
-        assertEquals("local", savedDocument.getNodeOrNull("value").value());
-        assertEquals("created", savedDocument.getNodeOrNull("added").value());
-        assertNull(savedDocument.getNodeOrNull("legacy"));
+        assertEquals("2", savedDocument.getNodeOrNull(Route.from("config-version")).value().toString());
+        assertEquals("local", savedDocument.getNodeOrNull(Route.from("value")).value());
+        assertEquals("created", savedDocument.getNodeOrNull(Route.from("added")).value());
+        assertNull(savedDocument.getNodeOrNull(Route.from("legacy")));
     }
 
     @Test
@@ -843,8 +843,8 @@ class SparrowYamlAnnotationTest {
         assertTrue(Files.exists(backupPath));
         assertTrue(backup.contains("config-version: 1"));
         assertTrue(backup.contains("legacy: old"));
-        assertEquals("2", savedDocument.getNodeOrNull("config-version").value().toString());
-        assertNull(savedDocument.getNodeOrNull("legacy"));
+        assertEquals("2", savedDocument.getNodeOrNull(Route.from("config-version")).value().toString());
+        assertNull(savedDocument.getNodeOrNull(Route.from("legacy")));
     }
 
     @Test

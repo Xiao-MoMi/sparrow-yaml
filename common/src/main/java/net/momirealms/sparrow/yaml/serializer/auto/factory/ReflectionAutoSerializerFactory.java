@@ -9,6 +9,7 @@ import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerBinding;
@@ -288,7 +289,7 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
 
                 // 字段注入过程
                 for (SerializableMember member : injectableArr) {
-                    YamlNode<?> child = sectionNode.getNodeOrNull(member.name());
+                    YamlNode<?> child = sectionNode.getNodeOrNull(Route.from(member.name()));
                     if (child == null) {
                         continue;
                     }

@@ -380,19 +380,9 @@ public interface ParentNode<T extends YamlNode<?>> {
         return currentNode;
     }
 
-    @Nullable
-    default YamlNode<?> getNodeOrNull(@NotNull Object... route) {
-        return this.getNodeOrNull(Route.from(route));
-    }
-
     @NotNull
     default Optional<YamlNode<?>> getNodeOptional(@NotNull Route route) {
         return Optional.ofNullable(this.getNodeOrNull(route));
-    }
-
-    @NotNull
-    default Optional<YamlNode<?>> getNodeOptional(@NotNull Object... route) {
-        return this.getNodeOptional(Route.from(route));
     }
 
     /**
@@ -410,11 +400,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return null;
     }
 
-    @Nullable
-    default ScalarNode getScalarOrNull(@NotNull Object... route) {
-        return this.getScalarOrNull(Route.from(route));
-    }
-
     /**
      * 根据路由, 从当前节点出发, 获得目标路由的节点;
      * 如果目标节点不存在, 或目标节点类型不匹配, 则返回 Null;
@@ -430,11 +415,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return null;
     }
 
-    @Nullable
-    default SectionNode getSectionOrNull(@NotNull Object... route) {
-        return this.getSectionOrNull(Route.from(route));
-    }
-
     /**
      * 根据路由, 从当前节点出发, 获得目标路由的节点;
      * 如果目标节点不存在, 或目标节点类型不匹配, 则返回 Null;
@@ -448,11 +428,6 @@ public interface ParentNode<T extends YamlNode<?>> {
             return sequenceNode;
         }
         return null;
-    }
-
-    @Nullable
-    default SequenceNode getSequenceOrNull(@NotNull Object... route) {
-        return this.getSequenceOrNull(Route.from(route));
     }
 
     /**
@@ -471,16 +446,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return yamlNode;
     }
 
-    @NotNull
-    default YamlNode<?> getNodeOrThrow(@Nullable Throwable exception, @NotNull Object... route) throws Throwable {
-        return this.getNodeOrThrow(exception, Route.from(route));
-    }
-
-    @NotNull
-    default YamlNode<?> getNodeOrThrow(@NotNull Object... route) throws Throwable {
-        return this.getNodeOrThrow(null, route);
-    }
-
     /**
      * 根据路由, 从当前节点出发, 获得目标路由的节点;
      * 如果目标节点不存在, 或目标节点类型不匹配, 则返回 Null;
@@ -494,11 +459,6 @@ public interface ParentNode<T extends YamlNode<?>> {
             return scalarNode;
         }
         throw exception != null ? exception : new NoSuchElementException("不存在的节点: " + route);
-    }
-
-    @Nullable
-    default ScalarNode getScalarOrThrow(@Nullable Throwable exception, @NotNull Object... route) throws Throwable {
-        return this.getScalarOrThrow(Route.from(route), exception);
     }
 
     /**
@@ -516,11 +476,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         throw exception != null ? exception : new NoSuchElementException("不存在的节点: " + route);
     }
 
-    @Nullable
-    default SectionNode getSectionOrThrow(@Nullable Throwable exception, @NotNull Object... route) throws Throwable {
-        return this.getSectionOrThrow(Route.from(route), exception);
-    }
-
     /**
      * 根据路由, 从当前节点出发, 获得目标路由的节点;
      * 如果目标节点不存在, 或目标节点类型不匹配, 则返回 Null;
@@ -536,11 +491,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         throw exception != null ? exception : new NoSuchElementException("不存在的节点: " + route);
     }
 
-    @Nullable
-    default SequenceNode getSequenceOrThrow(@Nullable Throwable exception, @NotNull Object... route) throws Throwable {
-        return this.getSequenceOrThrow(Route.from(route), exception);
-    }
-
     /**
      * 检查精确路由对应的节点是否存在, YAML null 也视为存在.
      *
@@ -549,16 +499,6 @@ public interface ParentNode<T extends YamlNode<?>> {
      */
     default boolean contains(@NotNull Route route) {
         return this.getNodeOrNull(route) != null;
-    }
-
-    /**
-     * 检查路径元素指定的节点是否存在.
-     *
-     * @param route 路径元素
-     * @return 节点是否存在
-     */
-    default boolean contains(@NotNull Object... route) {
-        return this.contains(Route.from(route));
     }
 
     @Nullable
@@ -590,11 +530,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return null;
     }
 
-    @Nullable
-    default YamlNode<?> removeNode(@NotNull Object... route) {
-        return this.removeNode(Route.from(route));
-    }
-
     /**
      * 根据路由, 从当前节点出发, 寻找子节点, 然后使用 SerializerRegistry 获取对应的序列化器序列化后设置其的值;
      * 如果目标节点途径的节点不存在, 则自动创建路径上所有的节点;
@@ -624,18 +559,6 @@ public interface ParentNode<T extends YamlNode<?>> {
         return this.set(route, serializer.serialize(value));
     }
 
-    default <R> YamlNode<?> set(Class<R> clazz, @Nullable R value, @NotNull Object... route) {
-        return this.set(clazz, value, Route.from(route));
-    }
-
-    default <R> YamlNode<?> set(TypeRef<R> typeRef, @Nullable R value, @NotNull Object... route) {
-        return this.set(typeRef, value, Route.from(route));
-    }
-
-    default <R> YamlNode<?> set(NodeSerializer<R> serializer, @Nullable R value, @NotNull Object... route) {
-        return this.set(serializer, value, Route.from(route));
-    }
-
     /**
      * 在指定路由处使用 SerializerRegistry 获取对应的序列化器序列化后设置节点, 并返回写入后的节点对象.
      * @param clazz 目标对象的 Class
@@ -660,18 +583,6 @@ public interface ParentNode<T extends YamlNode<?>> {
 
     default <R> YamlNode<?> setAndGet(NodeSerializer<R> serializer, @Nullable R value, @NotNull Route route) {
         return this.setAndGet(route, serializer.serialize(value));
-    }
-
-    default <R> YamlNode<?> setAndGet(Class<R> clazz, @Nullable R value, @NotNull Object... route) {
-        return this.setAndGet(clazz, value, Route.from(route));
-    }
-
-    default <R> YamlNode<?> setAndGet(TypeRef<R> typeRef, @Nullable R value, @NotNull Object... route) {
-        return this.setAndGet(typeRef, value, Route.from(route));
-    }
-
-    default <R> YamlNode<?> setAndGet(NodeSerializer<R> serializer, @Nullable R value, @NotNull Object... route) {
-        return this.setAndGet(serializer, value, Route.from(route));
     }
 
     /**
@@ -704,15 +615,15 @@ public interface ParentNode<T extends YamlNode<?>> {
                 int nextRouteKey = indexElement.key();
                 if (isLastElement) {
                     sequenceNode.setSubNode(nextRouteKey, value);
-                    return sequenceNode.getNodeOrNull(nextRouteKey);
+                    return sequenceNode.getNodeOrNull(Route.from(nextRouteKey));
                 }
 
                 RouteElement<?> childRouteElement = route.getRouteElement(i + 1);
-                YamlNode<?> targetNode = sequenceNode.getNodeOrNull(nextRouteKey);
+                YamlNode<?> targetNode = sequenceNode.getNodeOrNull(Route.from(nextRouteKey));
                 if (!matchesContainer(targetNode, childRouteElement)) {
                     targetNode = createContainer(root, childRouteElement);
                     sequenceNode.setSubNode(nextRouteKey, targetNode);
-                    targetNode = sequenceNode.getNodeOrNull(nextRouteKey);
+                    targetNode = sequenceNode.getNodeOrNull(Route.from(nextRouteKey));
                 }
                 currentNode = targetNode;
             }
@@ -720,15 +631,15 @@ public interface ParentNode<T extends YamlNode<?>> {
                 Object nextRouteKey = nextRouteElement.key();
                 if (isLastElement) {
                     sectionNode.setSubNode(nextRouteKey, value);
-                    return sectionNode.getNodeOrNull(nextRouteKey);
+                    return sectionNode.getNodeOrNull(Route.from(nextRouteKey));
                 }
 
                 RouteElement<?> childRouteElement = route.getRouteElement(i + 1);
-                YamlNode<?> targetNode = sectionNode.getNodeOrNull(nextRouteElement);
+                YamlNode<?> targetNode = sectionNode.getNodeOrNull(Route.from(nextRouteElement));
                 if (!matchesContainer(targetNode, childRouteElement)) {
                     targetNode = createContainer(root, childRouteElement);
                     sectionNode.setSubNode(nextRouteKey, targetNode);
-                    targetNode = sectionNode.getNodeOrNull(nextRouteElement);
+                    targetNode = sectionNode.getNodeOrNull(Route.from(nextRouteElement));
                 }
                 currentNode = targetNode;
             }

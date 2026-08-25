@@ -50,6 +50,7 @@ final class AsmSerializerGenerator {
     private static final String INST = "net/momirealms/sparrow/yaml/serializer/auto/factory/ObjectInstantiator";
     private static final String YN = "net/momirealms/sparrow/yaml/node/YamlNode";
     private static final String SEC = "net/momirealms/sparrow/yaml/node/SectionNode";
+    private static final String ROUTE = "net/momirealms/sparrow/yaml/route/Route";
 
     private AsmSerializerGenerator() {
     }
@@ -333,7 +334,8 @@ final class AsmSerializerGenerator {
         method.visitInsn(ICONST_0);
         method.visitLdcInsn(key);
         method.visitInsn(AASTORE);
-        method.visitMethodInsn(INVOKEVIRTUAL, SEC, "getNodeOrNull", "([Ljava/lang/Object;)L" + YN + ";", false);
+        method.visitMethodInsn(INVOKESTATIC, ROUTE, "from", "([Ljava/lang/Object;)L" + ROUTE + ";", false);
+        method.visitMethodInsn(INVOKEVIRTUAL, SEC, "getNodeOrNull", "(L" + ROUTE + ";)L" + YN + ";", false);
     }
 
     private static boolean isConstructorParameter(String yamlKey, ConstructorChoice constructor) {

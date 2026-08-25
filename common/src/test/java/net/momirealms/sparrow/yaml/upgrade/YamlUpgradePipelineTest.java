@@ -110,7 +110,7 @@ class YamlUpgradePipelineTest {
 
             extractor.writeVersion(doc, "8");
 
-            assertEquals("8", doc.getNodeOrNull("config-version").value());
+            assertEquals("8", doc.getNodeOrNull(Route.from("config-version")).value());
         }
 
         @Test
@@ -144,8 +144,8 @@ class YamlUpgradePipelineTest {
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
 
             // 3. 断言阶段 (Assert)
-            assertNull(upgraded.getNodeOrNull("flat"), "源节点应被移除");
-            assertEquals("moved", upgraded.getNodeOrNull("deep", "nested", "target").value(), "值应被移动到目标深层路由中");
+            assertNull(upgraded.getNodeOrNull(Route.from("flat")), "源节点应被移除");
+            assertEquals("moved", upgraded.getNodeOrNull(Route.from("deep", "nested", "target")).value(), "值应被移动到目标深层路由中");
         }
 
         @Test
@@ -160,11 +160,11 @@ class YamlUpgradePipelineTest {
 
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
 
-            assertNull(upgraded.getNodeOrNull("old-null"));
-            assertNotNull(upgraded.getScalarOrNull("moved-null"));
-            assertNull(upgraded.getScalarOrNull("moved-null").value());
-            assertNotNull(upgraded.getScalarOrNull("added-null"));
-            assertNull(upgraded.getScalarOrNull("added-null").value());
+            assertNull(upgraded.getNodeOrNull(Route.from("old-null")));
+            assertNotNull(upgraded.getScalarOrNull(Route.from("moved-null")));
+            assertNull(upgraded.getScalarOrNull(Route.from("moved-null")).value());
+            assertNotNull(upgraded.getScalarOrNull(Route.from("added-null")));
+            assertNull(upgraded.getScalarOrNull(Route.from("added-null")).value());
             assertFalse(dumpDoc(upgraded).contains("'null'"));
         }
 
@@ -184,7 +184,7 @@ class YamlUpgradePipelineTest {
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
 
             // 3. 断言阶段 (Assert)
-            assertEquals(9, upgraded.getNodeOrNull("settings", "threshold").value(), "转换器应成功应用并覆盖旧值");
+            assertEquals(9, upgraded.getNodeOrNull(Route.from("settings", "threshold")).value(), "转换器应成功应用并覆盖旧值");
         }
 
         @Test
@@ -216,8 +216,8 @@ class YamlUpgradePipelineTest {
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
             String dumped = dumpDoc(upgraded);
 
-            CollectionNode<?> sectionNode = (CollectionNode<?>) upgraded.getNodeOrNull("section").internalValueNode();
-            CollectionNode<?> sequenceNode = (CollectionNode<?>) upgraded.getNodeOrNull("sequence").internalValueNode();
+            CollectionNode<?> sectionNode = (CollectionNode<?>) upgraded.getNodeOrNull(Route.from("section")).internalValueNode();
+            CollectionNode<?> sequenceNode = (CollectionNode<?>) upgraded.getNodeOrNull(Route.from("sequence")).internalValueNode();
             assertEquals(FlowStyle.BLOCK, sectionNode.getFlowStyle());
             assertEquals(FlowStyle.FLOW, sequenceNode.getFlowStyle());
             assertTrue(dumped.contains("# scalar before"));
@@ -235,7 +235,7 @@ class YamlUpgradePipelineTest {
 
             YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder()
                     .addPatch(new VersionPatch(new NumberVersionMatcher(2), List.of(
-                            new DefaultValueRule(Route.from("computed"), doc -> doc.getNodeOrNull("source").value() + "-value"),
+                            new DefaultValueRule(Route.from("computed"), doc -> doc.getNodeOrNull(Route.from("source")).value() + "-value"),
                             new DefaultValueRule(Route.from("existing"), "new-value")
                     )))
                     .build();
@@ -244,8 +244,8 @@ class YamlUpgradePipelineTest {
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
 
             // 3. 断言阶段 (Assert)
-            assertEquals("prefix-value", upgraded.getNodeOrNull("computed").value(), "当节点不存在时，动态提供默认值");
-            assertEquals("keep", upgraded.getNodeOrNull("existing").value(), "当节点已存在时，不应覆盖旧值");
+            assertEquals("prefix-value", upgraded.getNodeOrNull(Route.from("computed")).value(), "当节点不存在时，动态提供默认值");
+            assertEquals("keep", upgraded.getNodeOrNull(Route.from("existing")).value(), "当节点已存在时，不应覆盖旧值");
         }
 
         @Test
@@ -282,7 +282,7 @@ class YamlUpgradePipelineTest {
             Patch storePatch = new Patch() {
                 @Override
                 public YamlDocument apply(YamlDocument defDoc, YamlDocument localDoc, PatchContext context) {
-                    context.put("source-value", localDoc.getNodeOrNull("source").value());
+                    context.put("source-value", localDoc.getNodeOrNull(Route.from("source")).value());
                     return localDoc;
                 }
 
@@ -314,7 +314,7 @@ class YamlUpgradePipelineTest {
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
 
             // 3. 断言阶段 (Assert)
-            assertEquals("copied-from-context", upgraded.getNodeOrNull("target").value(), "后续 Patch 应能读取前序 Patch 存入的上下文数据");
+            assertEquals("copied-from-context", upgraded.getNodeOrNull(Route.from("target")).value(), "后续 Patch 应能读取前序 Patch 存入的上下文数据");
         }
 
         @Test
@@ -322,7 +322,7 @@ class YamlUpgradePipelineTest {
             YamlDocument localDoc = loadDoc("config-version: 1\nold-key: moved");
             YamlDocument jarDoc = loadDoc("config-version: 2\nnew-key: default");
             ValidationRule validationRule = new ValidationRule(local -> {
-                if (!"moved".equals(local.get(String.class, "new-key"))) {
+                if (!"moved".equals(local.get(String.class, Route.from("new-key")))) {
                     throw new PatchValidationException("new-key must be relocated before validation");
                 }
             });
@@ -335,8 +335,8 @@ class YamlUpgradePipelineTest {
 
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
 
-            assertNull(upgraded.getNodeOrNull("old-key"));
-            assertEquals("moved", upgraded.get(String.class, "new-key"));
+            assertNull(upgraded.getNodeOrNull(Route.from("old-key")));
+            assertEquals("moved", upgraded.get(String.class, Route.from("new-key")));
         }
 
         @Test
@@ -347,8 +347,8 @@ class YamlUpgradePipelineTest {
 
             rule.apply(defDoc, localDoc);
 
-            assertEquals(Arrays.asList("b", null, null, "a"), localDoc.getSequenceOrNull("items").getValues());
-            assertEquals("a", localDoc.get(String.class, "items", 3));
+            assertEquals(Arrays.asList("b", null, null, "a"), localDoc.getSequenceOrNull(Route.from("items")).getValues());
+            assertEquals("a", localDoc.get(String.class, Route.from("items", 3)));
         }
 
         @Test
@@ -361,9 +361,9 @@ class YamlUpgradePipelineTest {
             new RelocateRule(Route.from("items", 1), Route.from("items", 1)).apply(defDoc, occupiedDoc);
             new RelocateRule(Route.from("source", 0), Route.from("target", 2)).apply(defDoc, crossDoc);
 
-            assertEquals(List.of("a", "b", "c"), occupiedDoc.getSequenceOrNull("items").getValues());
-            assertEquals(List.of("b"), crossDoc.getSequenceOrNull("source").getValues());
-            assertEquals(Arrays.asList("x", null, "a"), crossDoc.getSequenceOrNull("target").getValues());
+            assertEquals(List.of("a", "b", "c"), occupiedDoc.getSequenceOrNull(Route.from("items")).getValues());
+            assertEquals(List.of("b"), crossDoc.getSequenceOrNull(Route.from("source")).getValues());
+            assertEquals(Arrays.asList("x", null, "a"), crossDoc.getSequenceOrNull(Route.from("target")).getValues());
         }
     }
 
@@ -395,9 +395,9 @@ class YamlUpgradePipelineTest {
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
 
             // 3. 断言阶段 (Assert)
-            assertEquals("local", upgraded.getNodeOrNull("ignored", "value").value(), "不应使用 Jar 覆盖");
-            assertEquals(true, upgraded.getNodeOrNull("ignored", "obsolete").value(), "由于被忽略，旧的 obsolete 节点不应被清理");
-            assertNull(upgraded.getNodeOrNull("ignored", "added"), "由于被忽略，不应合并 Jar 中的新节点");
+            assertEquals("local", upgraded.getNodeOrNull(Route.from("ignored", "value")).value(), "不应使用 Jar 覆盖");
+            assertEquals(true, upgraded.getNodeOrNull(Route.from("ignored", "obsolete")).value(), "由于被忽略，旧的 obsolete 节点不应被清理");
+            assertNull(upgraded.getNodeOrNull(Route.from("ignored", "added")), "由于被忽略，不应合并 Jar 中的新节点");
         }
 
         @Test
@@ -414,7 +414,7 @@ class YamlUpgradePipelineTest {
             YamlDocument upgraded = pipeline.upgrade(localDoc, jarDoc);
 
             // 3. 断言阶段 (Assert)
-            assertEquals(true, upgraded.getNodeOrNull("legacy").value(), "关闭自动清理后，旧节点应被保留");
+            assertEquals(true, upgraded.getNodeOrNull(Route.from("legacy")).value(), "关闭自动清理后，旧节点应被保留");
         }
     }
 
@@ -434,8 +434,8 @@ class YamlUpgradePipelineTest {
 
             // 3. 断言阶段 (Assert)
             assertSame(localDoc, upgraded, "版本相同时直接返回传入的原文档对象");
-            assertEquals(true, upgraded.getNodeOrNull("untouched").value());
-            assertNull(upgraded.getNodeOrNull("added"));
+            assertEquals(true, upgraded.getNodeOrNull(Route.from("untouched")).value());
+            assertNull(upgraded.getNodeOrNull(Route.from("added")));
         }
 
         @Test
@@ -500,10 +500,10 @@ class YamlUpgradePipelineTest {
             YamlDocument upgrade = build.upgrade(localDoc, jarDoc);
 
             // 3. 断言阶段 (Assert)
-            assertEquals("root", upgrade.get(NodeSerializers.STRING, "database", "new_username"), "RelocateRule 应生效");
-            assertEquals(List.of("Catnies", "Momirealms"), upgrade.get(NodeSerializers.STRING.listOf(), "admins"), "ConverterRule 应生效");
-            assertEquals(List.of("A", "B", "C"), upgrade.get(NodeSerializers.STRING.listOf(), "new_settings_list"), "RelocateRule 结合 ConverterRule 链式调用应生效");
-            assertEquals("deep_value", upgrade.get(NodeSerializers.STRING, "deep", "nested", "target_node"), "深度 Relocate 应生效");
+            assertEquals("root", upgrade.get(NodeSerializers.STRING, Route.from("database", "new_username")), "RelocateRule 应生效");
+            assertEquals(List.of("Catnies", "Momirealms"), upgrade.get(NodeSerializers.STRING.listOf(), Route.from("admins")), "ConverterRule 应生效");
+            assertEquals(List.of("A", "B", "C"), upgrade.get(NodeSerializers.STRING.listOf(), Route.from("new_settings_list")), "RelocateRule 结合 ConverterRule 链式调用应生效");
+            assertEquals("deep_value", upgrade.get(NodeSerializers.STRING, Route.from("deep", "nested", "target_node")), "深度 Relocate 应生效");
         }
     }
 }

@@ -3,6 +3,7 @@ package net.momirealms.sparrow.yaml.serializer.auto.plan;
 import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.auto.member.SerializableMember;
 import net.momirealms.sparrow.yaml.serializer.auto.parameter.ConstructorParameter;
 import net.momirealms.sparrow.yaml.util.TypeUtils;
@@ -60,7 +61,7 @@ public class ConstructorPlan<T> implements InstantiationPlan<T> {
                 args[i] = TypeUtils.defaultValue(TypeUtils.rawType(param.type()));
                 continue;
             }
-            YamlNode<?> child = sectionNode.getNodeOrNull(param.name());
+            YamlNode<?> child = sectionNode.getNodeOrNull(Route.from(param.name()));
             Object decoded = (child != null && param.serializer() != null) ? param.serializer().deserialize(child) : null;
             args[i] = decoded != null ? decoded : TypeUtils.defaultValue(TypeUtils.rawType(param.type()));
         }

@@ -53,21 +53,21 @@ class SparrowYamlTest {
         Locale localeCountry = Locale.US;
         Locale localeVariant = new Locale("zh", "CN", "PINYIN");
         
-        doc.setAndGet(UUID.class, uuid, "uuid");
-        doc.setAndGet(Date.class, date, "date");
-        doc.setAndGet(Instant.class, instant, "instant");
-        doc.setAndGet(LocalDate.class, localDate, "local_date");
-        doc.setAndGet(LocalTime.class, localTime, "local_time");
-        doc.setAndGet(LocalDateTime.class, localDateTime, "local_date_time");
-        doc.setAndGet(Duration.class, duration, "duration");
-        doc.setAndGet(Period.class, period, "period");
-        doc.setAndGet(ZonedDateTime.class, zonedDateTime, "zoned_date_time");
-        doc.setAndGet(Locale.class, localeLanguage, "locale_language");
-        doc.setAndGet(Locale.class, localeCountry, "locale_country");
-        doc.setAndGet(Locale.class, localeVariant, "locale_variant");
-        doc.setAndGet(UUID.class, null, "skipped_uuid");
-        doc.setAndGet(Locale.class, null, "skipped_locale");
-        doc.setAndGet(LocalDate.class, null, "skipped_local_date");
+        doc.setAndGet(UUID.class, uuid, Route.from("uuid"));
+        doc.setAndGet(Date.class, date, Route.from("date"));
+        doc.setAndGet(Instant.class, instant, Route.from("instant"));
+        doc.setAndGet(LocalDate.class, localDate, Route.from("local_date"));
+        doc.setAndGet(LocalTime.class, localTime, Route.from("local_time"));
+        doc.setAndGet(LocalDateTime.class, localDateTime, Route.from("local_date_time"));
+        doc.setAndGet(Duration.class, duration, Route.from("duration"));
+        doc.setAndGet(Period.class, period, Route.from("period"));
+        doc.setAndGet(ZonedDateTime.class, zonedDateTime, Route.from("zoned_date_time"));
+        doc.setAndGet(Locale.class, localeLanguage, Route.from("locale_language"));
+        doc.setAndGet(Locale.class, localeCountry, Route.from("locale_country"));
+        doc.setAndGet(Locale.class, localeVariant, Route.from("locale_variant"));
+        doc.setAndGet(UUID.class, null, Route.from("skipped_uuid"));
+        doc.setAndGet(Locale.class, null, Route.from("skipped_locale"));
+        doc.setAndGet(LocalDate.class, null, Route.from("skipped_local_date"));
         
         java.io.StringWriter writer = new java.io.StringWriter();
         doc.save(writer);
@@ -78,21 +78,21 @@ class SparrowYamlTest {
         
         YamlDocument loadedDoc = yaml.load(dumped);
         
-        assertEquals(uuid, loadedDoc.get(java.util.UUID.class, "uuid"));
-        assertEquals(date, loadedDoc.get(java.util.Date.class, "date"));
-        assertEquals(instant, loadedDoc.get(java.time.Instant.class, "instant"));
-        assertEquals(localDate, loadedDoc.get(java.time.LocalDate.class, "local_date"));
-        assertEquals(localTime, loadedDoc.get(java.time.LocalTime.class, "local_time"));
-        assertEquals(localDateTime, loadedDoc.get(java.time.LocalDateTime.class, "local_date_time"));
-        assertEquals(duration, loadedDoc.get(java.time.Duration.class, "duration"));
-        assertEquals(period, loadedDoc.get(java.time.Period.class, "period"));
-        assertEquals(zonedDateTime, loadedDoc.get(java.time.ZonedDateTime.class, "zoned_date_time"));
-        assertEquals(localeLanguage, loadedDoc.get(java.util.Locale.class, "locale_language"));
-        assertEquals(localeCountry, loadedDoc.get(java.util.Locale.class, "locale_country"));
-        assertEquals(localeVariant, loadedDoc.get(java.util.Locale.class, "locale_variant"));
-        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.util.UUID.class, "skipped_uuid"));
-        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.util.Locale.class, "skipped_locale"));
-        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.time.LocalDate.class, "skipped_local_date"));
+        assertEquals(uuid, loadedDoc.get(java.util.UUID.class, Route.from("uuid")));
+        assertEquals(date, loadedDoc.get(java.util.Date.class, Route.from("date")));
+        assertEquals(instant, loadedDoc.get(java.time.Instant.class, Route.from("instant")));
+        assertEquals(localDate, loadedDoc.get(java.time.LocalDate.class, Route.from("local_date")));
+        assertEquals(localTime, loadedDoc.get(java.time.LocalTime.class, Route.from("local_time")));
+        assertEquals(localDateTime, loadedDoc.get(java.time.LocalDateTime.class, Route.from("local_date_time")));
+        assertEquals(duration, loadedDoc.get(java.time.Duration.class, Route.from("duration")));
+        assertEquals(period, loadedDoc.get(java.time.Period.class, Route.from("period")));
+        assertEquals(zonedDateTime, loadedDoc.get(java.time.ZonedDateTime.class, Route.from("zoned_date_time")));
+        assertEquals(localeLanguage, loadedDoc.get(java.util.Locale.class, Route.from("locale_language")));
+        assertEquals(localeCountry, loadedDoc.get(java.util.Locale.class, Route.from("locale_country")));
+        assertEquals(localeVariant, loadedDoc.get(java.util.Locale.class, Route.from("locale_variant")));
+        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.util.UUID.class, Route.from("skipped_uuid")));
+        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.util.Locale.class, Route.from("skipped_locale")));
+        assertThrows(MissingNodeException.class, () -> loadedDoc.get(java.time.LocalDate.class, Route.from("skipped_local_date")));
     }
 
     @Nested
@@ -173,7 +173,7 @@ class SparrowYamlTest {
 
             assertSame(defDocument, upgraded);
             assertTrue(Files.exists(configPath));
-            assertEquals("default", sparrowYaml.load(configPath).getNodeOrNull("value").value());
+            assertEquals("default", sparrowYaml.load(configPath).getNodeOrNull(Route.from("value")).value());
             try (var paths = Files.list(tempDir)) {
                 assertEquals(1, paths.count(), "目标文件不存在时不应创建备份文件");
             }
@@ -198,7 +198,7 @@ class SparrowYamlTest {
 
             assertSame(defDocument, upgraded);
             assertTrue(Files.exists(configPath));
-            assertEquals("default", sparrowYaml.load(configPath).getNodeOrNull("value").value());
+            assertEquals("default", sparrowYaml.load(configPath).getNodeOrNull(Route.from("value")).value());
         }
 
         @Test
@@ -225,9 +225,9 @@ class SparrowYamlTest {
 
             assertTrue(Files.exists(backupPath));
             assertTrue(Files.readString(backupPath).contains("old: keep"));
-            assertEquals("2", upgraded.getNodeOrNull("config-version").value().toString());
-            assertEquals("default", upgraded.getNodeOrNull("value").value());
-            assertNull(upgraded.getNodeOrNull("old"));
+            assertEquals("2", upgraded.getNodeOrNull(Route.from("config-version")).value().toString());
+            assertEquals("default", upgraded.getNodeOrNull(Route.from("value")).value());
+            assertNull(upgraded.getNodeOrNull(Route.from("old")));
         }
 
         @Test
@@ -256,8 +256,8 @@ class SparrowYamlTest {
             YamlDocument yamlDocument = sparrowYaml.load("single-key: \"success!\"");
 
             // 2. 执行阶段 (Act)
-            YamlNode<?> yamlNode = yamlDocument.getNodeOrNull("single-key");
-            ScalarNode scalarNode = yamlDocument.getScalarOrNull("single-key");
+            YamlNode<?> yamlNode = yamlDocument.getNodeOrNull(Route.from("single-key"));
+            ScalarNode scalarNode = yamlDocument.getScalarOrNull(Route.from("single-key"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(yamlNode);
@@ -277,9 +277,9 @@ class SparrowYamlTest {
             """);
 
             // 2. 执行阶段 (Act)
-            SectionNode sectionNode = yamlDocument.getSectionOrNull("mapping-key");
-            ScalarNode userNode = yamlDocument.getScalarOrNull("mapping-key", "user");
-            ScalarNode idNode = yamlDocument.getScalarOrNull("mapping-key", "id");
+            SectionNode sectionNode = yamlDocument.getSectionOrNull(Route.from("mapping-key"));
+            ScalarNode userNode = yamlDocument.getScalarOrNull(Route.from("mapping-key", "user"));
+            ScalarNode idNode = yamlDocument.getScalarOrNull(Route.from("mapping-key", "id"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(sectionNode);
@@ -301,18 +301,18 @@ class SparrowYamlTest {
             """);
 
             // 2. 执行阶段 (Act)
-            SequenceNode sequenceNode = yamlDocument.getSequenceOrNull("list-key");
-            SequenceNode nestedSequenceNode = yamlDocument.getSequenceOrNull("list-key", 3);
+            SequenceNode sequenceNode = yamlDocument.getSequenceOrNull(Route.from("list-key"));
+            SequenceNode nestedSequenceNode = yamlDocument.getSequenceOrNull(Route.from("list-key", 3));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(sequenceNode);
-            assertEquals("string", sequenceNode.getScalarOrNull(0).value());
-            assertEquals(888, sequenceNode.getScalarOrNull(1).value());
-            assertEquals("value", sequenceNode.getSectionOrNull(2).getScalarOrNull("map").value());
+            assertEquals("string", sequenceNode.getScalarOrNull(Route.from(0)).value());
+            assertEquals(888, sequenceNode.getScalarOrNull(Route.from(1)).value());
+            assertEquals("value", sequenceNode.getSectionOrNull(Route.from(2)).getScalarOrNull(Route.from("map")).value());
             
             assertNotNull(nestedSequenceNode);
-            assertEquals("nested", nestedSequenceNode.getScalarOrNull(0).value());
-            assertEquals(100.0, nestedSequenceNode.getScalarOrNull(1).value());
+            assertEquals("nested", nestedSequenceNode.getScalarOrNull(Route.from(0)).value());
+            assertEquals(100.0, nestedSequenceNode.getScalarOrNull(Route.from(1)).value());
         }
 
         @Test
@@ -328,11 +328,11 @@ class SparrowYamlTest {
             """);
 
             // 2. 执行阶段 (Act) & 3. 断言阶段 (Assert)
-            assertEquals("value", yamlDocument.getScalarOrThrow(null, "scalar").value());
-            assertSame(yamlDocument.getSectionOrNull("section"), yamlDocument.getSectionOrThrow(null, "section"));
-            assertSame(yamlDocument.getSequenceOrNull("sequence"), yamlDocument.getSequenceOrThrow(null, "sequence"));
-            assertThrows(NoSuchElementException.class, () -> yamlDocument.getScalarOrThrow(null, "missing"));
-            assertThrows(NoSuchElementException.class, () -> yamlDocument.getScalarOrThrow(null, "section"));
+            assertEquals("value", yamlDocument.getScalarOrThrow(Route.from("scalar"), null).value());
+            assertSame(yamlDocument.getSectionOrNull(Route.from("section")), yamlDocument.getSectionOrThrow(Route.from("section"), null));
+            assertSame(yamlDocument.getSequenceOrNull(Route.from("sequence")), yamlDocument.getSequenceOrThrow(Route.from("sequence"), null));
+            assertThrows(NoSuchElementException.class, () -> yamlDocument.getScalarOrThrow(Route.from("missing"), null));
+            assertThrows(NoSuchElementException.class, () -> yamlDocument.getScalarOrThrow(Route.from("section"), null));
         }
 
         @Test
@@ -391,7 +391,7 @@ class SparrowYamlTest {
             Map<?, ?> section = assertInstanceOf(Map.class, represented.get("section"));
             List<?> sequence = assertInstanceOf(List.class, represented.get("sequence"));
 
-            assertNull(yamlDocument.getScalarOrNull("scalar-null").representValue());
+            assertNull(yamlDocument.getScalarOrNull(Route.from("scalar-null")).representValue());
             assertTrue(represented.containsKey("scalar-null"));
             assertNull(represented.get("scalar-null"));
             assertTrue(section.containsKey("nested-null"));
@@ -452,11 +452,11 @@ class SparrowYamlTest {
             }});
 
             // 3. 断言阶段 (Assert)
-            assertEquals("value", yamlDocument.getScalarOrNull("scalar").value());
-            assertEquals("Catnies", yamlDocument.getScalarOrNull("section", "user").value());
-            assertEquals(114514, yamlDocument.getScalarOrNull("section", "id").value());
-            assertEquals("hello", yamlDocument.getScalarOrNull("list", 0).value());
-            assertEquals(100, yamlDocument.getScalarOrNull("list", 1).value());
+            assertEquals("value", yamlDocument.getScalarOrNull(Route.from("scalar")).value());
+            assertEquals("Catnies", yamlDocument.getScalarOrNull(Route.from("section", "user")).value());
+            assertEquals(114514, yamlDocument.getScalarOrNull(Route.from("section", "id")).value());
+            assertEquals("hello", yamlDocument.getScalarOrNull(Route.from("list", 0)).value());
+            assertEquals(100, yamlDocument.getScalarOrNull(Route.from("list", 1)).value());
         }
 
         @Test
@@ -473,8 +473,8 @@ class SparrowYamlTest {
 
             assertEquals("new", host.value());
             assertEquals("new", item.value());
-            assertEquals("new", yamlDocument.get(String.class, "server", "host"));
-            assertEquals("new", yamlDocument.get(String.class, "items", 0));
+            assertEquals("new", yamlDocument.get(String.class, Route.from("server", "host")));
+            assertEquals("new", yamlDocument.get(String.class, Route.from("items", 0)));
         }
 
         @Test
@@ -490,9 +490,9 @@ class SparrowYamlTest {
             yamlDocument.set(Route.from("sequence", 1), "second");
             yamlDocument.set(Route.from("items", 0, "name"), "first");
 
-            assertEquals(true, yamlDocument.get(Boolean.class, "mapping", "enabled"));
-            assertEquals("second", yamlDocument.get(String.class, "sequence", 1));
-            assertEquals("first", yamlDocument.get(String.class, "items", 0, "name"));
+            assertEquals(true, yamlDocument.get(Boolean.class, Route.from("mapping", "enabled")));
+            assertEquals("second", yamlDocument.get(String.class, Route.from("sequence", 1)));
+            assertEquals("first", yamlDocument.get(String.class, Route.from("items", 0, "name")));
         }
 
         @Test
@@ -503,12 +503,12 @@ class SparrowYamlTest {
                       value: original
                     """);
             YamlDocument targetDocument = sparrowYaml.load("");
-            SectionNode source = sourceDocument.getSectionOrNull("source");
+            SectionNode source = sourceDocument.getSectionOrNull(Route.from("source"));
 
             SectionNode sameDocumentCopy = (SectionNode) sourceDocument.set(Route.from("copy"), source);
             SectionNode otherDocumentCopy = (SectionNode) targetDocument.set(Route.from("copy"), source);
-            sameDocumentCopy.getScalarOrNull("value").setValue("same-document");
-            otherDocumentCopy.getScalarOrNull("value").setValue("other-document");
+            sameDocumentCopy.getScalarOrNull(Route.from("value")).setValue("same-document");
+            otherDocumentCopy.getScalarOrNull(Route.from("value")).setValue("other-document");
 
             assertNotSame(source, sameDocumentCopy);
             assertNotSame(source, otherDocumentCopy);
@@ -516,15 +516,15 @@ class SparrowYamlTest {
             assertNotSame(source.internalValueNode(), otherDocumentCopy.internalValueNode());
             assertSame(sourceDocument, source.root());
             assertSame(targetDocument, otherDocumentCopy.root());
-            assertEquals("original", sourceDocument.get(String.class, "source", "value"));
-            assertEquals("same-document", sourceDocument.get(String.class, "copy", "value"));
-            assertEquals("other-document", targetDocument.get(String.class, "copy", "value"));
+            assertEquals("original", sourceDocument.get(String.class, Route.from("source", "value")));
+            assertEquals("same-document", sourceDocument.get(String.class, Route.from("copy", "value")));
+            assertEquals("other-document", targetDocument.get(String.class, Route.from("copy", "value")));
 
             StringWriter sourceWriter = new StringWriter();
             sourceDocument.save(sourceWriter);
             YamlDocument reloaded = sparrowYaml.load(sourceWriter.toString());
-            assertEquals("original", reloaded.get(String.class, "source", "value"));
-            assertEquals("same-document", reloaded.get(String.class, "copy", "value"));
+            assertEquals("original", reloaded.get(String.class, Route.from("source", "value")));
+            assertEquals("same-document", reloaded.get(String.class, Route.from("copy", "value")));
         }
 
         @Test
@@ -536,21 +536,21 @@ class SparrowYamlTest {
                     alias: *base
                     """);
 
-            yamlDocument.getScalarOrNull("base", "value").setValue("new");
+            yamlDocument.getScalarOrNull(Route.from("base", "value")).setValue("new");
             yamlDocument.set(Route.from("base", "added"), true);
 
-            assertSame(yamlDocument.getNodeOrNull("base").internalValueNode(), yamlDocument.getNodeOrNull("alias").internalValueNode());
-            assertEquals("new", yamlDocument.get(String.class, "alias", "value"));
-            assertEquals(true, yamlDocument.get(Boolean.class, "alias", "added"));
+            assertSame(yamlDocument.getNodeOrNull(Route.from("base")).internalValueNode(), yamlDocument.getNodeOrNull(Route.from("alias")).internalValueNode());
+            assertEquals("new", yamlDocument.get(String.class, Route.from("alias", "value")));
+            assertEquals(true, yamlDocument.get(Boolean.class, Route.from("alias", "added")));
 
             StringWriter writer = new StringWriter();
             yamlDocument.save(writer);
             assertTrue(writer.toString().contains("*"));
             YamlDocument reloaded = sparrowYaml.load(writer.toString());
-            assertEquals("new", reloaded.get(String.class, "base", "value"));
-            assertEquals("new", reloaded.get(String.class, "alias", "value"));
-            assertEquals(true, reloaded.get(Boolean.class, "base", "added"));
-            assertEquals(true, reloaded.get(Boolean.class, "alias", "added"));
+            assertEquals("new", reloaded.get(String.class, Route.from("base", "value")));
+            assertEquals("new", reloaded.get(String.class, Route.from("alias", "value")));
+            assertEquals(true, reloaded.get(Boolean.class, Route.from("base", "added")));
+            assertEquals(true, reloaded.get(Boolean.class, Route.from("alias", "added")));
         }
 
         @Test
@@ -561,19 +561,19 @@ class SparrowYamlTest {
                     alias: *base
                     """);
 
-            yamlDocument.getSequenceOrNull("base").setSubNode(1, "b");
-            yamlDocument.getSequenceOrNull("base").removeSubNode(0);
+            yamlDocument.getSequenceOrNull(Route.from("base")).setSubNode(1, "b");
+            yamlDocument.getSequenceOrNull(Route.from("base")).removeSubNode(0);
 
-            assertSame(yamlDocument.getNodeOrNull("base").internalValueNode(), yamlDocument.getNodeOrNull("alias").internalValueNode());
-            assertEquals(List.of("b"), yamlDocument.getSequenceOrNull("base").getValues());
-            assertEquals(List.of("b"), yamlDocument.getSequenceOrNull("alias").getValues());
+            assertSame(yamlDocument.getNodeOrNull(Route.from("base")).internalValueNode(), yamlDocument.getNodeOrNull(Route.from("alias")).internalValueNode());
+            assertEquals(List.of("b"), yamlDocument.getSequenceOrNull(Route.from("base")).getValues());
+            assertEquals(List.of("b"), yamlDocument.getSequenceOrNull(Route.from("alias")).getValues());
 
             StringWriter writer = new StringWriter();
             yamlDocument.save(writer);
             assertTrue(writer.toString().contains("*"));
             YamlDocument reloaded = sparrowYaml.load(writer.toString());
-            assertEquals(List.of("b"), reloaded.getSequenceOrNull("base").getValues());
-            assertEquals(List.of("b"), reloaded.getSequenceOrNull("alias").getValues());
+            assertEquals(List.of("b"), reloaded.getSequenceOrNull(Route.from("base")).getValues());
+            assertEquals(List.of("b"), reloaded.getSequenceOrNull(Route.from("alias")).getValues());
         }
 
         @Test
@@ -585,7 +585,7 @@ class SparrowYamlTest {
               - "first"
               - "second"
             """);
-            SequenceNode sequenceNode = yamlDocument.getSequenceOrNull("sequence");
+            SequenceNode sequenceNode = yamlDocument.getSequenceOrNull(Route.from("sequence"));
 
             // 2. 执行阶段 (Act)
             sequenceNode.setSubNode(0, "modified_first"); // 修改已有
@@ -593,10 +593,10 @@ class SparrowYamlTest {
 
             // 3. 断言阶段 (Assert)
             assertEquals(5, sequenceNode.size(), "越界追加应导致列表扩容至目标大小");
-            assertEquals("modified_first", sequenceNode.getScalarOrNull(0).value());
-            assertNull(sequenceNode.getScalarOrNull(2).value(), "中间空缺的部分应使用 Null 补全");
-            assertNull(sequenceNode.getScalarOrNull(3).value());
-            assertEquals("fifth", sequenceNode.getScalarOrNull(4).value());
+            assertEquals("modified_first", sequenceNode.getScalarOrNull(Route.from(0)).value());
+            assertNull(sequenceNode.getScalarOrNull(Route.from(2)).value(), "中间空缺的部分应使用 Null 补全");
+            assertNull(sequenceNode.getScalarOrNull(Route.from(3)).value());
+            assertEquals("fifth", sequenceNode.getScalarOrNull(Route.from(4)).value());
         }
 
         @Test
@@ -612,9 +612,9 @@ class SparrowYamlTest {
             """);
 
             // 2. 执行阶段 (Act)
-            yamlDocument.getScalarOrNull("mapping", "key1").setValue("modified_value");
-            yamlDocument.getSectionOrNull("mapping").setSubNode("new_key", "new_value");
-            yamlDocument.getSequenceOrNull("list").setSubNode(1, "b");
+            yamlDocument.getScalarOrNull(Route.from("mapping", "key1")).setValue("modified_value");
+            yamlDocument.getSectionOrNull(Route.from("mapping")).setSubNode("new_key", "new_value");
+            yamlDocument.getSequenceOrNull(Route.from("list")).setSubNode(1, "b");
 
             StringWriter writer = new StringWriter();
             yamlDocument.save(writer);
@@ -637,7 +637,7 @@ class SparrowYamlTest {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             YamlDocument yamlDocument = sparrowYaml.load("");
             yamlDocument.setSubNode("test_key", "test_value");
-            ScalarNode scalarNode = yamlDocument.getScalarOrNull("test_key");
+            ScalarNode scalarNode = yamlDocument.getScalarOrNull(Route.from("test_key"));
 
             // 2. 执行阶段 (Act)
             List<CommentLine> beforeComments = new ArrayList<>();
@@ -662,7 +662,7 @@ class SparrowYamlTest {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             YamlDocument yamlDocument = sparrowYaml.load("key: old # keep me");
 
-            yamlDocument.getScalarOrNull("key").setValue("new");
+            yamlDocument.getScalarOrNull(Route.from("key")).setValue("new");
             StringWriter writer = new StringWriter();
             yamlDocument.save(writer);
 
@@ -677,16 +677,16 @@ class SparrowYamlTest {
 
             // 2. 执行阶段 (Act) - 创建 A.B.C
             yamlDocument.set(Route.from("A", "B", "C"), "value");
-            ScalarNode nodeC = yamlDocument.getScalarOrNull("A", "B", "C");
+            ScalarNode nodeC = yamlDocument.getScalarOrNull(Route.from("A", "B", "C"));
             assertEquals(Route.from("A", "B", "C"), nodeC.route(), "初始路由应匹配");
 
             // 将 B 节点复制到 D 下
-            SectionNode nodeB = yamlDocument.getSectionOrNull("A", "B");
+            SectionNode nodeB = yamlDocument.getSectionOrNull(Route.from("A", "B"));
             yamlDocument.setSubNode("D", SectionNode.createEmpty(yamlDocument));
-            SectionNode nodeD = yamlDocument.getSectionOrNull("D");
+            SectionNode nodeD = yamlDocument.getSectionOrNull(Route.from("D"));
 
             nodeD.setSubNode("B", nodeB);
-            ScalarNode copiedNodeC = yamlDocument.getScalarOrNull("D", "B", "C");
+            ScalarNode copiedNodeC = yamlDocument.getScalarOrNull(Route.from("D", "B", "C"));
 
             // 3. 断言阶段 (Assert)
             assertNotSame(nodeC, copiedNodeC);
@@ -705,20 +705,20 @@ class SparrowYamlTest {
               - 4
             """);
 
-            SequenceNode source = yamlDocument.getSequenceOrNull("source");
-            SequenceNode target = yamlDocument.getSequenceOrNull("target");
+            SequenceNode source = yamlDocument.getSequenceOrNull(Route.from("source"));
+            SequenceNode target = yamlDocument.getSequenceOrNull(Route.from("target"));
 
             // 给源节点添加内联注释
             List<CommentLine> inlineComments = new ArrayList<>();
             inlineComments.add(new CommentLine(Optional.empty(), Optional.empty(), " copied", CommentType.IN_LINE));
-            source.getScalarOrNull(0).setInlineValueComments(inlineComments);
+            source.getScalarOrNull(Route.from(0)).setInlineValueComments(inlineComments);
 
             // 2. 执行阶段 (Act)
             source.deepCopyCommentsTo(target);
             source.preserveFlowStyleTo(target);
 
             // 3. 断言阶段 (Assert)
-            assertEquals(" copied", target.getScalarOrNull(0).inlineValueComments().get(0).getValue(), "注释应被深拷贝至目标节点");
+            assertEquals(" copied", target.getScalarOrNull(Route.from(0)).inlineValueComments().get(0).getValue(), "注释应被深拷贝至目标节点");
             
             StringWriter writer = new StringWriter();
             yamlDocument.save(writer);
@@ -837,7 +837,7 @@ class SparrowYamlTest {
             // 2. 执行阶段 (Act)
             NodeSerializer<List<String>> stringListCodec = NodeSerializers.STRING.listOf();
             NodeSerializer<java.util.Map<String, List<String>>> mapOfListCodec = stringListCodec.mapOf();
-            java.util.Map<String, List<String>> users = yamlDocument.get(mapOfListCodec, "users");
+            java.util.Map<String, List<String>> users = yamlDocument.get(mapOfListCodec, Route.from("users"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(users);
@@ -860,7 +860,7 @@ class SparrowYamlTest {
                     it -> new Block(it.get(0), it.get(1), it.get(2)),
                     Block::toList
             );
-            Block block = yamlDocument.get(blockCodec, "data", "block");
+            Block block = yamlDocument.get(blockCodec, Route.from("data", "block"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(block);
@@ -889,13 +889,13 @@ class SparrowYamlTest {
                 z: 3
             """);
 
-            Block decoded = yamlDocument.get(Block.class, "data", "block");
+            Block decoded = yamlDocument.get(Block.class, Route.from("data", "block"));
             assertEquals(new Block(1, 2, 3), decoded);
 
-            yamlDocument.setAndGet(Block.class, new Block(4, 5, 6), "data", "other");
-            assertEquals(4, yamlDocument.get(NodeSerializers.INT, "data", "other", "x"));
-            assertEquals(5, yamlDocument.get(NodeSerializers.INT, "data", "other", "y"));
-            assertEquals(6, yamlDocument.get(NodeSerializers.INT, "data", "other", "z"));
+            yamlDocument.setAndGet(Block.class, new Block(4, 5, 6), Route.from("data", "other"));
+            assertEquals(4, yamlDocument.get(NodeSerializers.INT, Route.from("data", "other", "x")));
+            assertEquals(5, yamlDocument.get(NodeSerializers.INT, Route.from("data", "other", "y")));
+            assertEquals(6, yamlDocument.get(NodeSerializers.INT, Route.from("data", "other", "z")));
         }
 
         @Test
@@ -915,11 +915,11 @@ class SparrowYamlTest {
               block: [1, 2, 3]
             """);
 
-            Block decoded = yamlDocument.get(Block.class, "data", "block");
+            Block decoded = yamlDocument.get(Block.class, Route.from("data", "block"));
             assertEquals(new Block(1, 2, 3), decoded);
 
-            yamlDocument.setAndGet(Block.class, new Block(4, 5, 6), "data", "other");
-            assertEquals(List.of(4, 5, 6), yamlDocument.get(NodeSerializers.INT.listOf(), "data", "other"));
+            yamlDocument.setAndGet(Block.class, new Block(4, 5, 6), Route.from("data", "other"));
+            assertEquals(List.of(4, 5, 6), yamlDocument.get(NodeSerializers.INT.listOf(), Route.from("data", "other")));
         }
 
         @Test
@@ -939,7 +939,7 @@ class SparrowYamlTest {
               z: 3
             """);
 
-            MissingNodeException missing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(blockCodec, "block"));
+            MissingNodeException missing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(blockCodec, Route.from("block")));
             assertEquals("y", missing.key());
             assertEquals(Route.from("block", "y"), missing.path());
             assertEquals(Integer.class, missing.targetType());
@@ -962,7 +962,7 @@ class SparrowYamlTest {
               x: 1
               z: 3
             """);
-            assertEquals(new Block(1, 64, 3), missing.get(blockCodec, "block"));
+            assertEquals(new Block(1, 64, 3), missing.get(blockCodec, Route.from("block")));
 
             YamlDocument nullValue = sparrowYaml.load("""
             block:
@@ -970,7 +970,7 @@ class SparrowYamlTest {
               y: null
               z: 3
             """);
-            assertEquals(new Block(1, 64, 3), nullValue.get(blockCodec, "block"));
+            assertEquals(new Block(1, 64, 3), nullValue.get(blockCodec, Route.from("block")));
 
             YamlDocument invalid = sparrowYaml.load("""
             block:
@@ -979,7 +979,7 @@ class SparrowYamlTest {
                 nested: true
               z: 3
             """);
-            InvalidNodeException failure = assertThrows(InvalidNodeException.class, () -> invalid.get(blockCodec, "block"));
+            InvalidNodeException failure = assertThrows(InvalidNodeException.class, () -> invalid.get(blockCodec, Route.from("block")));
             assertEquals(Route.from("block", "y"), failure.path());
             assertEquals(SectionNode.class, failure.actualType());
             assertEquals(Integer.class, failure.targetType());
@@ -1012,10 +1012,10 @@ class SparrowYamlTest {
                 nested: true
             """);
 
-            assertEquals(new OptionalBlock(1, 2, Optional.of("overworld")), yamlDocument.get(blockCodec, "present"));
-            assertEquals(new OptionalBlock(3, 64, Optional.empty()), yamlDocument.get(blockCodec, "missing"));
-            assertEquals(new OptionalBlock(4, 64, Optional.empty()), yamlDocument.get(blockCodec, "null-value"));
-            assertThrows(InvalidNodeException.class, () -> yamlDocument.get(blockCodec, "invalid"));
+            assertEquals(new OptionalBlock(1, 2, Optional.of("overworld")), yamlDocument.get(blockCodec, Route.from("present")));
+            assertEquals(new OptionalBlock(3, 64, Optional.empty()), yamlDocument.get(blockCodec, Route.from("missing")));
+            assertEquals(new OptionalBlock(4, 64, Optional.empty()), yamlDocument.get(blockCodec, Route.from("null-value")));
+            assertThrows(InvalidNodeException.class, () -> yamlDocument.get(blockCodec, Route.from("invalid")));
         }
 
         @Test
@@ -1037,10 +1037,10 @@ class SparrowYamlTest {
             invalid: [6, 7, nope]
             """);
 
-            assertEquals(new OptionalSequence(1, 2, Optional.of(3)), yamlDocument.get(blockCodec, "present"));
-            assertEquals(new OptionalSequence(4, 64, Optional.empty()), yamlDocument.get(blockCodec, "missing"));
-            assertEquals(new OptionalSequence(5, 64, Optional.empty()), yamlDocument.get(blockCodec, "null-value"));
-            assertThrows(InvalidNodeException.class, () -> yamlDocument.get(blockCodec, "invalid"));
+            assertEquals(new OptionalSequence(1, 2, Optional.of(3)), yamlDocument.get(blockCodec, Route.from("present")));
+            assertEquals(new OptionalSequence(4, 64, Optional.empty()), yamlDocument.get(blockCodec, Route.from("missing")));
+            assertEquals(new OptionalSequence(5, 64, Optional.empty()), yamlDocument.get(blockCodec, Route.from("null-value")));
+            assertThrows(InvalidNodeException.class, () -> yamlDocument.get(blockCodec, Route.from("invalid")));
         }
 
         @Test
@@ -1124,7 +1124,7 @@ class SparrowYamlTest {
               z: 3
             """);
 
-            assertEquals(new Block(10, 20, 3), yamlDocument.get(blockCodec, "block"));
+            assertEquals(new Block(10, 20, 3), yamlDocument.get(blockCodec, Route.from("block")));
         }
 
         @Test
@@ -1144,7 +1144,7 @@ class SparrowYamlTest {
               - 2
             """);
 
-            MissingNodeException missing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(blockCodec, "block"));
+            MissingNodeException missing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(blockCodec, Route.from("block")));
             assertEquals(2, missing.key());
             assertEquals(Route.from("block", 2), missing.path());
             assertEquals(Integer.class, missing.targetType());
@@ -1176,11 +1176,11 @@ class SparrowYamlTest {
             sequence: [1, null, 3]
             """);
 
-            MissingNodeException fieldMissing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(mappingCodec, "mapping"));
+            MissingNodeException fieldMissing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(mappingCodec, Route.from("mapping")));
             assertEquals("y", fieldMissing.key());
             assertEquals(Route.from("mapping", "y"), fieldMissing.path());
 
-            MissingNodeException elementMissing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(sequenceCodec, "sequence"));
+            MissingNodeException elementMissing = assertThrows(MissingNodeException.class, () -> yamlDocument.get(sequenceCodec, Route.from("sequence")));
             assertEquals(1, elementMissing.key());
             assertEquals(Route.from("sequence", 1), elementMissing.path());
             assertEquals("Missing YAML list index 1 at path \"sequence[1]\", expected Integer", elementMissing.getMessage());
@@ -1214,7 +1214,7 @@ class SparrowYamlTest {
 
             InvalidNodeException mappingFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(mappingCodec, "sequence")
+                    () -> yamlDocument.get(mappingCodec, Route.from("sequence"))
             );
             assertEquals(Route.from("sequence"), mappingFailure.path());
             assertEquals(SequenceNode.class, mappingFailure.actualType());
@@ -1223,7 +1223,7 @@ class SparrowYamlTest {
 
             InvalidNodeException sequenceFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(sequenceCodec, "mapping")
+                    () -> yamlDocument.get(sequenceCodec, Route.from("mapping"))
             );
             assertEquals(Route.from("mapping"), sequenceFailure.path());
             assertEquals(SectionNode.class, sequenceFailure.actualType());
@@ -1256,7 +1256,7 @@ class SparrowYamlTest {
               z: 3
             """);
 
-            assertEquals(new Block(10, 20, 3), yamlDocument.get(blockCodec, "block"));
+            assertEquals(new Block(10, 20, 3), yamlDocument.get(blockCodec, Route.from("block")));
             InvalidNodeException invalid = assertInstanceOf(InvalidNodeException.class, failures.get(0));
             assertEquals(Route.from("block", "x"), invalid.path());
             assertEquals(SectionNode.class, invalid.actualType());
@@ -1291,7 +1291,7 @@ class SparrowYamlTest {
               - 20
             """);
 
-            assertEquals(new Block(10, 20, 30), yamlDocument.get(blockCodec, "block"));
+            assertEquals(new Block(10, 20, 30), yamlDocument.get(blockCodec, Route.from("block")));
             InvalidNodeException invalid = assertInstanceOf(InvalidNodeException.class, failures.get(0));
             assertEquals(Route.from("block", 0), invalid.path());
             assertEquals(SectionNode.class, invalid.actualType());
@@ -1330,7 +1330,7 @@ class SparrowYamlTest {
               z: 3
             """);
 
-            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, "block"));
+            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, Route.from("block")));
             assertEquals(1, failures.size());
             InvalidNodeException invalid = assertInstanceOf(InvalidNodeException.class, failures.get(0));
             assertEquals(Route.from("inner"), invalid.path());
@@ -1348,7 +1348,7 @@ class SparrowYamlTest {
               - alpha
             """);
 
-            Set<String> tags = yamlDocument.get(NodeSerializers.STRING.setOf(), "tags");
+            Set<String> tags = yamlDocument.get(NodeSerializers.STRING.setOf(), Route.from("tags"));
 
             assertEquals(List.of("alpha", "beta"), new ArrayList<>(tags));
         }
@@ -1366,7 +1366,7 @@ class SparrowYamlTest {
 
             InvalidNodeException listFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.STRING.listOf(), "mapping")
+                    () -> yamlDocument.get(NodeSerializers.STRING.listOf(), Route.from("mapping"))
             );
             assertEquals(Route.from("mapping"), listFailure.path());
             assertEquals(SectionNode.class, listFailure.actualType());
@@ -1374,7 +1374,7 @@ class SparrowYamlTest {
 
             InvalidNodeException setFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.STRING.setOf(), "scalar")
+                    () -> yamlDocument.get(NodeSerializers.STRING.setOf(), Route.from("scalar"))
             );
             assertEquals(Route.from("scalar"), setFailure.path());
             assertEquals(String.class, setFailure.actualType());
@@ -1382,7 +1382,7 @@ class SparrowYamlTest {
 
             InvalidNodeException mapFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.STRING.mapOf(), "sequence")
+                    () -> yamlDocument.get(NodeSerializers.STRING.mapOf(), Route.from("sequence"))
             );
             assertEquals(Route.from("sequence"), mapFailure.path());
             assertEquals(SequenceNode.class, mapFailure.actualType());
@@ -1399,7 +1399,7 @@ class SparrowYamlTest {
 
             InvalidNodeException blankFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.STRING, "blank")
+                    () -> yamlDocument.get(NodeSerializers.STRING, Route.from("blank"))
             );
             assertEquals(Route.from("blank"), blankFailure.path());
             assertNull(blankFailure.actualType());
@@ -1407,7 +1407,7 @@ class SparrowYamlTest {
 
             InvalidNodeException explicitFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.OBJECT, "explicit")
+                    () -> yamlDocument.get(NodeSerializers.OBJECT, Route.from("explicit"))
             );
             assertEquals(Route.from("explicit"), explicitFailure.path());
             assertNull(explicitFailure.actualType());
@@ -1423,7 +1423,7 @@ class SparrowYamlTest {
 
             InvalidNodeException failure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.UUID, "uuid")
+                    () -> yamlDocument.get(NodeSerializers.UUID, Route.from("uuid"))
             );
             assertEquals(Route.from("uuid"), failure.path());
             assertEquals(String.class, failure.actualType());
@@ -1443,7 +1443,7 @@ class SparrowYamlTest {
             );
             InvalidNodeException nullFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(nullingCodec, "value")
+                    () -> yamlDocument.get(nullingCodec, Route.from("value"))
             );
             assertEquals(Route.from("value"), nullFailure.path());
             assertEquals(String.class, nullFailure.actualType());
@@ -1458,7 +1458,7 @@ class SparrowYamlTest {
             );
             UnexpectedNodeParsingException throwingFailure = assertThrows(
                     UnexpectedNodeParsingException.class,
-                    () -> yamlDocument.get(throwingCodec, "value")
+                    () -> yamlDocument.get(throwingCodec, Route.from("value"))
             );
             assertEquals(Route.from("value"), throwingFailure.path());
             assertEquals(String.class, throwingFailure.actualType());
@@ -1483,7 +1483,7 @@ class SparrowYamlTest {
 
             UnexpectedNodeParsingException failure = assertThrows(
                     UnexpectedNodeParsingException.class,
-                    () -> yamlDocument.get(throwingCodec, "value")
+                    () -> yamlDocument.get(throwingCodec, Route.from("value"))
             );
             assertEquals(Route.from("value"), failure.path());
             assertEquals(String.class, failure.actualType());
@@ -1520,7 +1520,7 @@ class SparrowYamlTest {
               z: 3
             """);
 
-            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, "block"));
+            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, Route.from("block")));
             UnexpectedNodeParsingException failure = assertInstanceOf(UnexpectedNodeParsingException.class, failures.get(0));
             assertEquals(Route.from("block", "x"), failure.path());
             assertEquals(Integer.class, failure.actualType());
@@ -1557,7 +1557,7 @@ class SparrowYamlTest {
               - 3
             """);
 
-            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, "block"));
+            assertEquals(new Block(10, 2, 3), yamlDocument.get(blockCodec, Route.from("block")));
             UnexpectedNodeParsingException failure = assertInstanceOf(UnexpectedNodeParsingException.class, failures.get(0));
             assertEquals(Route.from("block", 0), failure.path());
             assertEquals(Integer.class, failure.actualType());
@@ -1580,7 +1580,7 @@ class SparrowYamlTest {
             value: hello
             """);
 
-            assertEquals("alternative:hello", yamlDocument.get(serializer, "value"));
+            assertEquals("alternative:hello", yamlDocument.get(serializer, Route.from("value")));
         }
 
         @Test
@@ -1601,7 +1601,7 @@ class SparrowYamlTest {
 
             AlternativesNodeException failure = assertThrows(
                     AlternativesNodeException.class,
-                    () -> yamlDocument.get(serializer, "value")
+                    () -> yamlDocument.get(serializer, Route.from("value"))
             );
             assertEquals(2, failure.failures().size());
             assertEquals(2, failure.getSuppressed().length);
@@ -1632,7 +1632,7 @@ class SparrowYamlTest {
 
             UnexpectedNodeParsingException failure = assertThrows(
                     UnexpectedNodeParsingException.class,
-                    () -> yamlDocument.get(throwingCodec, "value")
+                    () -> yamlDocument.get(throwingCodec, Route.from("value"))
             );
             assertEquals(Route.from("value"), failure.path());
             assertEquals(String.class, failure.actualType());
@@ -1663,8 +1663,8 @@ class SparrowYamlTest {
                     value -> value
             );
 
-            assertSame(stackOverflow, assertThrows(StackOverflowError.class, () -> yamlDocument.get(stackOverflowCodec, "value")));
-            assertSame(initializerFailure, assertThrows(ExceptionInInitializerError.class, () -> yamlDocument.get(initializerFailureCodec, "value")));
+            assertSame(stackOverflow, assertThrows(StackOverflowError.class, () -> yamlDocument.get(stackOverflowCodec, Route.from("value"))));
+            assertSame(initializerFailure, assertThrows(ExceptionInInitializerError.class, () -> yamlDocument.get(initializerFailureCodec, Route.from("value"))));
         }
 
         @Test
@@ -1710,11 +1710,11 @@ class SparrowYamlTest {
                 enabled: true
             """);
 
-            assertEquals("value", yamlDocument.get(NodeSerializers.OBJECT, "scalar"));
-            assertEquals(List.of("alpha", 2), yamlDocument.get(NodeSerializers.OBJECT, "sequence"));
+            assertEquals("value", yamlDocument.get(NodeSerializers.OBJECT, Route.from("scalar")));
+            assertEquals(List.of("alpha", 2), yamlDocument.get(NodeSerializers.OBJECT, Route.from("sequence")));
 
             @SuppressWarnings("unchecked")
-            Map<Object, Object> mapping = (Map<Object, Object>) yamlDocument.get(NodeSerializers.OBJECT, "mapping");
+            Map<Object, Object> mapping = (Map<Object, Object>) yamlDocument.get(NodeSerializers.OBJECT, Route.from("mapping"));
             assertEquals("cat", mapping.get("name"));
             assertEquals(Map.of("enabled", true), mapping.get("nested"));
         }
@@ -1731,7 +1731,7 @@ class SparrowYamlTest {
 
             InvalidNodeException mappingFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.SCALAR, "mapping")
+                    () -> yamlDocument.get(NodeSerializers.SCALAR, Route.from("mapping"))
             );
             assertEquals(Route.from("mapping"), mappingFailure.path());
             assertEquals(SectionNode.class, mappingFailure.actualType());
@@ -1739,7 +1739,7 @@ class SparrowYamlTest {
 
             InvalidNodeException sequenceFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.SCALAR, "sequence")
+                    () -> yamlDocument.get(NodeSerializers.SCALAR, Route.from("sequence"))
             );
             assertEquals(Route.from("sequence"), sequenceFailure.path());
             assertEquals(SequenceNode.class, sequenceFailure.actualType());
@@ -1755,7 +1755,7 @@ class SparrowYamlTest {
 
             MissingNodeException missing = assertThrows(
                     MissingNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.INT, "missing")
+                    () -> yamlDocument.get(NodeSerializers.INT, Route.from("missing"))
             );
             assertEquals("missing", missing.key());
             assertEquals(Route.from("missing"), missing.path());
@@ -1763,7 +1763,7 @@ class SparrowYamlTest {
 
             MissingNodeException classMissing = assertThrows(
                     MissingNodeException.class,
-                    () -> yamlDocument.get(Integer.class, "missing-class")
+                    () -> yamlDocument.get(Integer.class, Route.from("missing-class"))
             );
             assertEquals("missing-class", classMissing.key());
             assertEquals(Route.from("missing-class"), classMissing.path());
@@ -1772,7 +1772,7 @@ class SparrowYamlTest {
             TypeRef<List<String>> listType = new TypeRef<>() {};
             MissingNodeException typeRefMissing = assertThrows(
                     MissingNodeException.class,
-                    () -> yamlDocument.get(listType, "missing-list")
+                    () -> yamlDocument.get(listType, Route.from("missing-list"))
             );
             assertEquals("missing-list", typeRefMissing.key());
             assertEquals(Route.from("missing-list"), typeRefMissing.path());
@@ -1819,7 +1819,7 @@ class SparrowYamlTest {
                 - name: child
             """);
 
-            Tree root = yamlDocument.get(ref[0], "root");
+            Tree root = yamlDocument.get(ref[0], Route.from("root"));
 
             assertEquals("parent", root.name());
             assertEquals(List.of(new Tree("child", List.of())), root.children());
@@ -1837,14 +1837,14 @@ class SparrowYamlTest {
             invalid: "cat"
             """);
 
-            assertEquals(new NamedValue("cat"), yamlDocument.get(namedValueCodec, "value"));
-            InvalidNodeException invalid = assertThrows(InvalidNodeException.class, () -> yamlDocument.get(namedValueCodec, "invalid"));
+            assertEquals(new NamedValue("cat"), yamlDocument.get(namedValueCodec, Route.from("value")));
+            InvalidNodeException invalid = assertThrows(InvalidNodeException.class, () -> yamlDocument.get(namedValueCodec, Route.from("invalid")));
             assertEquals(Route.from("invalid"), invalid.path());
             assertEquals(String.class, invalid.actualType());
             assertEquals(Object.class, invalid.targetType());
 
-            yamlDocument.setAndGet(namedValueCodec, new NamedValue("dog"), "encoded");
-            assertEquals("name:dog", yamlDocument.get(NodeSerializers.STRING, "encoded"));
+            yamlDocument.setAndGet(namedValueCodec, new NamedValue("dog"), Route.from("encoded"));
+            assertEquals("name:dog", yamlDocument.get(NodeSerializers.STRING, Route.from("encoded")));
         }
 
         @Test
@@ -1861,10 +1861,10 @@ class SparrowYamlTest {
             csv: "10,11,12"
             """);
 
-            assertEquals(new Block(1, 2, 3), yamlDocument.get(blockCodec, "map"));
-            assertEquals(new Block(4, 5, 6), yamlDocument.get(blockCodec, "list"));
-            assertEquals(new Block(7, 8, 9), yamlDocument.get(blockCodec, "packed"));
-            assertEquals(new Block(10, 11, 12), yamlDocument.get(blockCodec, "csv"));
+            assertEquals(new Block(1, 2, 3), yamlDocument.get(blockCodec, Route.from("map")));
+            assertEquals(new Block(4, 5, 6), yamlDocument.get(blockCodec, Route.from("list")));
+            assertEquals(new Block(7, 8, 9), yamlDocument.get(blockCodec, Route.from("packed")));
+            assertEquals(new Block(10, 11, 12), yamlDocument.get(blockCodec, Route.from("csv")));
         }
 
         @Test
@@ -1907,8 +1907,8 @@ class SparrowYamlTest {
               - "world"
             """);
 
-            assertEquals(new Message("hello"), yamlDocument.get(messageCodec, "scalar"));
-            assertEquals(new Message("hello\nworld"), yamlDocument.get(messageCodec, "lines"));
+            assertEquals(new Message("hello"), yamlDocument.get(messageCodec, Route.from("scalar")));
+            assertEquals(new Message("hello\nworld"), yamlDocument.get(messageCodec, Route.from("lines")));
             assertEquals("hello\nworld", messageCodec.serialize(new Message("hello\nworld")));
         }
 
@@ -1928,7 +1928,7 @@ class SparrowYamlTest {
               - world
             """);
 
-            assertEquals(new Message("hello\nworld"), yamlDocument.get(messageCodec, "lines"));
+            assertEquals(new Message("hello\nworld"), yamlDocument.get(messageCodec, Route.from("lines")));
             assertEquals("hello\nworld", messageCodec.serialize(new Message("hello\nworld")));
         }
 
@@ -1942,7 +1942,7 @@ class SparrowYamlTest {
 
             AlternativesNodeException scalarFailure = assertThrows(
                     AlternativesNodeException.class,
-                    () -> yamlDocument.get(blockCodec, "invalid-scalar")
+                    () -> yamlDocument.get(blockCodec, Route.from("invalid-scalar"))
             );
             assertEquals(Route.from("invalid-scalar"), scalarFailure.path());
             assertEquals(String.class, scalarFailure.actualType());
@@ -1986,7 +1986,7 @@ class SparrowYamlTest {
 
             AlternativesNodeException failure = assertThrows(
                     AlternativesNodeException.class,
-                    () -> yamlDocument.get(mappingWithScalarAlternative, "block")
+                    () -> yamlDocument.get(mappingWithScalarAlternative, Route.from("block"))
             );
             assertEquals(2, failure.failures().size());
             assertInstanceOf(MissingNodeException.class, failure.failures().get(0).exception());
@@ -2015,7 +2015,7 @@ class SparrowYamlTest {
 
             AlternativesNodeException failure = assertThrows(
                     AlternativesNodeException.class,
-                    () -> yamlDocument.get(mappingOnly, "block")
+                    () -> yamlDocument.get(mappingOnly, Route.from("block"))
             );
             assertEquals(Route.from("block"), failure.path());
             assertEquals(SequenceNode.class, failure.actualType());
@@ -2038,8 +2038,8 @@ class SparrowYamlTest {
               - world
             """);
 
-            assertEquals("hello", yamlDocument.get(serializer, "scalar"));
-            assertEquals("hello,world", yamlDocument.get(serializer, "list"));
+            assertEquals("hello", yamlDocument.get(serializer, Route.from("scalar")));
+            assertEquals("hello,world", yamlDocument.get(serializer, Route.from("list")));
             assertEquals("hello,world", serializer.serialize("hello,world"));
         }
 
@@ -2053,7 +2053,7 @@ class SparrowYamlTest {
             value: hello
             """);
 
-            assertEquals("primary:hello", yamlDocument.get(serializer, "value"));
+            assertEquals("primary:hello", yamlDocument.get(serializer, Route.from("value")));
         }
 
         @Test
@@ -2075,7 +2075,7 @@ class SparrowYamlTest {
 
             InvalidNodeException numberFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.INT, "number")
+                    () -> yamlDocument.get(NodeSerializers.INT, Route.from("number"))
             );
             assertEquals(Route.from("number"), numberFailure.path());
             assertEquals(String.class, numberFailure.actualType());
@@ -2083,7 +2083,7 @@ class SparrowYamlTest {
 
             InvalidNodeException typeFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.STRING, "section")
+                    () -> yamlDocument.get(NodeSerializers.STRING, Route.from("section"))
             );
             assertEquals(Route.from("section"), typeFailure.path());
             assertEquals(SectionNode.class, typeFailure.actualType());
@@ -2091,7 +2091,7 @@ class SparrowYamlTest {
 
             InvalidNodeException boolFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.BOOLEAN, "bool")
+                    () -> yamlDocument.get(NodeSerializers.BOOLEAN, Route.from("bool"))
             );
             assertEquals(Route.from("bool"), boolFailure.path());
             assertEquals(String.class, boolFailure.actualType());
@@ -2099,7 +2099,7 @@ class SparrowYamlTest {
 
             InvalidNodeException uuidFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(NodeSerializers.UUID, "uuid")
+                    () -> yamlDocument.get(NodeSerializers.UUID, Route.from("uuid"))
             );
             assertEquals(Route.from("uuid"), uuidFailure.path());
             assertEquals(String.class, uuidFailure.actualType());
@@ -2118,7 +2118,7 @@ class SparrowYamlTest {
 
             InvalidNodeException valueFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(modeCodec, "mode")
+                    () -> yamlDocument.get(modeCodec, Route.from("mode"))
             );
             assertEquals(Route.from("mode"), valueFailure.path());
             assertEquals(String.class, valueFailure.actualType());
@@ -2127,7 +2127,7 @@ class SparrowYamlTest {
 
             InvalidNodeException typeFailure = assertThrows(
                     InvalidNodeException.class,
-                    () -> yamlDocument.get(modeCodec, "section")
+                    () -> yamlDocument.get(modeCodec, Route.from("section"))
             );
             assertEquals(Route.from("section"), typeFailure.path());
             assertEquals(SectionNode.class, typeFailure.actualType());
@@ -2142,16 +2142,16 @@ class SparrowYamlTest {
             YamlDocument yamlDocument = sparrowYaml.loadFromResource("full-test.yml");
 
             // 2. 执行阶段 (Act) & 3. 断言阶段 (Assert)
-            Integer integer1 = yamlDocument.get(NodeSerializers.INT, "test", "int");
+            Integer integer1 = yamlDocument.get(NodeSerializers.INT, Route.from("test", "int"));
             assertEquals(1314, integer1);
 
-            String string1 = yamlDocument.get(NodeSerializers.STRING, "test", "string-1");
+            String string1 = yamlDocument.get(NodeSerializers.STRING, Route.from("test", "string-1"));
             assertEquals("test", string1);
 
-            String quoted = yamlDocument.get(NodeSerializers.STRING, "test", "quoted");
+            String quoted = yamlDocument.get(NodeSerializers.STRING, Route.from("test", "quoted"));
             assertEquals("So does this quoted scalar.\n", quoted);
 
-            List<String> stringList = yamlDocument.get(NodeSerializers.STRING.listOf(), "test", "string_list");
+            List<String> stringList = yamlDocument.get(NodeSerializers.STRING.listOf(), Route.from("test", "string_list"));
             assertEquals(List.of("qwq", "awa", "fwf"), stringList);
         }
     }

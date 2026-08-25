@@ -2,6 +2,7 @@ package net.momirealms.sparrow.yaml;
 
 import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
 import net.momirealms.sparrow.yaml.node.YamlNode;
+import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
@@ -395,7 +396,7 @@ class AutoSerializerTest {
                     """);
 
             // 2. 执行阶段 (Act)
-            Models.LocationList wrapper = doc.get(Models.LocationList.class, "wrapper");
+            Models.LocationList wrapper = doc.get(Models.LocationList.class, Route.from("wrapper"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(wrapper, "反序列化后的对象不应为 null");
@@ -404,8 +405,8 @@ class AutoSerializerTest {
             assertEquals(100, wrapper.locations().get(0).pos().x());
 
             // 验证序列化编码是否正确
-            doc.setAndGet(Models.LocationList.class, new Models.LocationList(List.of(), "encoded_points"), "new_wrapper");
-            Models.LocationList encoded = doc.get(Models.LocationList.class, "new_wrapper");
+            doc.setAndGet(Models.LocationList.class, new Models.LocationList(List.of(), "encoded_points"), Route.from("new_wrapper"));
+            Models.LocationList encoded = doc.get(Models.LocationList.class, Route.from("new_wrapper"));
             assertEquals("encoded_points", encoded.name());
         }
 
@@ -423,7 +424,7 @@ class AutoSerializerTest {
                     """);
 
             // 2. 执行阶段 (Act)
-            Models.RecursiveNode node = doc.get(Models.RecursiveNode.class, "node");
+            Models.RecursiveNode node = doc.get(Models.RecursiveNode.class, Route.from("node"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(node);
@@ -445,7 +446,7 @@ class AutoSerializerTest {
                     """);
 
             // 2. 执行阶段 (Act)
-            Models.IgnoredAndRenamedRecord record = doc.get(Models.IgnoredAndRenamedRecord.class, "data");
+            Models.IgnoredAndRenamedRecord record = doc.get(Models.IgnoredAndRenamedRecord.class, Route.from("data"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(record);
@@ -464,7 +465,7 @@ class AutoSerializerTest {
                       priority: "HIGH"
                     """);
 
-            Models.TaskRecord task = doc.get(Models.TaskRecord.class, "task");
+            Models.TaskRecord task = doc.get(Models.TaskRecord.class, Route.from("task"));
             assertNotNull(task);
             assertEquals("review", task.name());
             assertEquals(Models.Priority.HIGH, task.priority());
@@ -484,7 +485,7 @@ class AutoSerializerTest {
                         - "a"
                     """);
 
-            Models.WithSetRecord record = doc.get(Models.WithSetRecord.class, "data");
+            Models.WithSetRecord record = doc.get(Models.WithSetRecord.class, Route.from("data"));
             assertNotNull(record);
             assertEquals("tagged", record.name());
             assertEquals(Set.of("a", "b"), record.tags(), "Set 应去重并正确反序列化");
@@ -508,7 +509,7 @@ class AutoSerializerTest {
                       z: 30
                     """);
 
-            Models.BlockPos pos = doc.get(Models.BlockPos.class, "pos");
+            Models.BlockPos pos = doc.get(Models.BlockPos.class, Route.from("pos"));
             assertNotNull(pos);
             assertEquals(10, pos.x());
             assertEquals(0, pos.y(), "缺少的 y 键应使用 int 默认值 0");
@@ -522,9 +523,9 @@ class AutoSerializerTest {
 
             Models.BlockPos original = new Models.BlockPos(42, 64, -100);
             YamlDocument doc = yaml.load("");
-            doc.setAndGet(Models.BlockPos.class, original, "pos");
+            doc.setAndGet(Models.BlockPos.class, original, Route.from("pos"));
 
-            Models.BlockPos decoded = doc.get(Models.BlockPos.class, "pos");
+            Models.BlockPos decoded = doc.get(Models.BlockPos.class, Route.from("pos"));
             assertEquals(original, decoded, "往返编码解码后的 Record 应相等");
         }
 
@@ -539,7 +540,7 @@ class AutoSerializerTest {
                       b: "also_ignored"
                     """);
 
-            Models.FullyIgnoredRecord record = doc.get(Models.FullyIgnoredRecord.class, "data");
+            Models.FullyIgnoredRecord record = doc.get(Models.FullyIgnoredRecord.class, Route.from("data"));
             assertNotNull(record);
             assertNull(record.a());
             assertNull(record.b());
@@ -562,7 +563,7 @@ class AutoSerializerTest {
                     """);
 
             // 2. 执行阶段 (Act)
-            Models.CustomUser user = doc.get(Models.CustomUser.class, "user");
+            Models.CustomUser user = doc.get(Models.CustomUser.class, Route.from("user"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(user);
@@ -587,7 +588,7 @@ class AutoSerializerTest {
                     """);
 
             // 2. 执行阶段 (Act)
-            Models.ExternalUser user = doc.get(Models.ExternalUser.class, "user");
+            Models.ExternalUser user = doc.get(Models.ExternalUser.class, Route.from("user"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(user);
@@ -608,7 +609,7 @@ class AutoSerializerTest {
                     """);
 
             // 2. 执行阶段 (Act)
-            Models.ImmutableAnnotatedUser user = doc.get(Models.ImmutableAnnotatedUser.class, "user");
+            Models.ImmutableAnnotatedUser user = doc.get(Models.ImmutableAnnotatedUser.class, Route.from("user"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(user);
@@ -626,7 +627,7 @@ class AutoSerializerTest {
                       name: "Alice"
                     """);
 
-            Models.ConstructorTransformsUser user = doc.get(Models.ConstructorTransformsUser.class, "user");
+            Models.ConstructorTransformsUser user = doc.get(Models.ConstructorTransformsUser.class, Route.from("user"));
 
             assertNotNull(user);
             assertEquals("Alice_ctor", user.name, "构造器参数字段不应在实例化后被字段注入覆盖");
@@ -645,7 +646,7 @@ class AutoSerializerTest {
                     """);
 
             // 2. 执行阶段 (Act)
-            Models.FinalFieldInjectionUser user = doc.get(Models.FinalFieldInjectionUser.class, "user");
+            Models.FinalFieldInjectionUser user = doc.get(Models.FinalFieldInjectionUser.class, Route.from("user"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(user);
@@ -666,7 +667,7 @@ class AutoSerializerTest {
                     """);
 
             // 执行阶段 (Act)
-            Models.AmbiguousUser user = doc.get(Models.AmbiguousUser.class, "user");
+            Models.AmbiguousUser user = doc.get(Models.AmbiguousUser.class, Route.from("user"));
 
             // 断言阶段 (Assert)
             assertNotNull(user);
@@ -684,7 +685,7 @@ class AutoSerializerTest {
                       name: "Partial Unsafe"
                     """);
 
-            Models.AmbiguousUser user = doc.get(Models.AmbiguousUser.class, "user");
+            Models.AmbiguousUser user = doc.get(Models.AmbiguousUser.class, Route.from("user"));
             assertNotNull(user);
             assertEquals("Partial Unsafe", user.name);
             assertEquals(0, user.age, "Unsafe 分配实例后，缺失的 int 字段应保持 JVM 默认值 0");
@@ -701,7 +702,7 @@ class AutoSerializerTest {
                       priority: "LOW"
                     """);
 
-            Models.TaskClass task = doc.get(Models.TaskClass.class, "task");
+            Models.TaskClass task = doc.get(Models.TaskClass.class, Route.from("task"));
             assertNotNull(task);
             assertEquals("deploy", task.name);
             assertEquals(Models.Priority.LOW, task.priority);
@@ -721,7 +722,7 @@ class AutoSerializerTest {
                         - 3
                     """);
 
-            Models.SetContainer container = doc.get(Models.SetContainer.class, "data");
+            Models.SetContainer container = doc.get(Models.SetContainer.class, Route.from("data"));
             assertNotNull(container);
             assertEquals(Set.of(1, 2, 3), container.numbers, "Set 应去重并保持整数类型");
         }
@@ -736,7 +737,7 @@ class AutoSerializerTest {
                       name: "Partial"
                     """);
 
-            Models.CustomUser user = doc.get(Models.CustomUser.class, "user");
+            Models.CustomUser user = doc.get(Models.CustomUser.class, Route.from("user"));
             assertNotNull(user);
             assertEquals("Partial", user.name);
             assertEquals(0, user.age, "缺少的 age 键应使用 int 默认值 0");
@@ -749,9 +750,9 @@ class AutoSerializerTest {
 
             Models.CustomUser original = new Models.CustomUser("RoundTrip", 99);
             YamlDocument doc = yaml.load("");
-            doc.setAndGet(Models.CustomUser.class, original, "user");
+            doc.setAndGet(Models.CustomUser.class, original, Route.from("user"));
 
-            Models.CustomUser decoded = doc.get(Models.CustomUser.class, "user");
+            Models.CustomUser decoded = doc.get(Models.CustomUser.class, Route.from("user"));
             assertEquals(original.name, decoded.name);
             assertEquals(original.age, decoded.age);
         }
@@ -794,7 +795,7 @@ class AutoSerializerTest {
                     """);
 
             // 2. 执行阶段 (Act)
-            Models.Box<String> box = doc.get(boxType, "box");
+            Models.Box<String> box = doc.get(boxType, Route.from("box"));
 
             // 3. 断言阶段 (Assert)
             assertNotNull(serializer);
@@ -836,7 +837,7 @@ class AutoSerializerTest {
                           - "inner"
                     """);
 
-            Models.Box<Models.Box<String>> result = doc.get(type, "wrapper");
+            Models.Box<Models.Box<String>> result = doc.get(type, Route.from("wrapper"));
             assertNotNull(result);
             assertNotNull(result.value);
             assertEquals("deep", result.value.value);
@@ -859,7 +860,7 @@ class AutoSerializerTest {
                           - 72
                     """);
 
-            Models.DeepNestedMap result = doc.get(Models.DeepNestedMap.class, "data");
+            Models.DeepNestedMap result = doc.get(Models.DeepNestedMap.class, Route.from("data"));
             assertNotNull(result);
             assertEquals("scores", result.name());
             assertEquals(Map.of("alice", List.of(95, 87), "bob", List.of(72)), result.scores());
@@ -878,7 +879,7 @@ class AutoSerializerTest {
                         - carol: 80
                     """);
 
-            Models.DeepNestedList result = doc.get(Models.DeepNestedList.class, "data");
+            Models.DeepNestedList result = doc.get(Models.DeepNestedList.class, Route.from("data"));
             assertNotNull(result);
             assertEquals(2, result.entries().size());
             assertEquals(Map.of("alice", 100, "bob", 90), result.entries().get(0));
@@ -945,7 +946,7 @@ class AutoSerializerTest {
                       parentField: "parent_value"
                     """);
 
-            Models.Child child = doc.get(Models.Child.class, "data");
+            Models.Child child = doc.get(Models.Child.class, Route.from("data"));
             assertNotNull(child);
             assertEquals("parent_value", child.parentField);
             assertEquals("child_value", child.childField);
@@ -953,10 +954,10 @@ class AutoSerializerTest {
             Models.Child encoded = new Models.Child();
             encoded.parentField = "encoded_parent";
             encoded.childField = "encoded_child";
-            doc.setAndGet(Models.Child.class, encoded, "encoded");
+            doc.setAndGet(Models.Child.class, encoded, Route.from("encoded"));
 
-            assertEquals("encoded_parent", doc.get(String.class, "encoded", "parentField"));
-            assertEquals("encoded_child", doc.get(String.class, "encoded", "childField"));
+            assertEquals("encoded_parent", doc.get(String.class, Route.from("encoded", "parentField")));
+            assertEquals("encoded_child", doc.get(String.class, Route.from("encoded", "childField")));
         }
 
         @Test
@@ -973,19 +974,19 @@ class AutoSerializerTest {
                       childName: "child"
                     """);
 
-            Models.AnnotatedChild child = doc.get(Models.AnnotatedChild.class, "data");
+            Models.AnnotatedChild child = doc.get(Models.AnnotatedChild.class, Route.from("data"));
             assertNotNull(child);
             assertEquals("parent", child.parentName);
             assertEquals("default_secret", child.ignoredParent);
             assertEquals("transient_secret", child.transientParent);
             assertEquals("child", child.childName);
 
-            doc.setAndGet(Models.AnnotatedChild.class, child, "encoded");
-            assertEquals("parent", doc.get(String.class, "encoded", "parent_name"));
-            assertEquals("child", doc.get(String.class, "encoded", "childName"));
-            assertNull(doc.getNodeOrNull("encoded", "ignoredParent"));
-            assertNull(doc.getNodeOrNull("encoded", "staticParent"));
-            assertNull(doc.getNodeOrNull("encoded", "transientParent"));
+            doc.setAndGet(Models.AnnotatedChild.class, child, Route.from("encoded"));
+            assertEquals("parent", doc.get(String.class, Route.from("encoded", "parent_name")));
+            assertEquals("child", doc.get(String.class, Route.from("encoded", "childName")));
+            assertNull(doc.getNodeOrNull(Route.from("encoded", "ignoredParent")));
+            assertNull(doc.getNodeOrNull(Route.from("encoded", "staticParent")));
+            assertNull(doc.getNodeOrNull(Route.from("encoded", "transientParent")));
         }
 
         @Test
@@ -1013,7 +1014,7 @@ class AutoSerializerTest {
                       childValue: "child"
                     """);
 
-            Models.StringChild child = doc.get(Models.StringChild.class, "data");
+            Models.StringChild child = doc.get(Models.StringChild.class, Route.from("data"));
             assertNotNull(child);
             assertEquals("parent", child.parentValue);
             assertEquals(List.of("one", "two"), child.parentValues);
@@ -1038,7 +1039,7 @@ class AutoSerializerTest {
                       childValue: 7
                     """);
 
-            Models.NestedGenericChild child = doc.get(Models.NestedGenericChild.class, "data");
+            Models.NestedGenericChild child = doc.get(Models.NestedGenericChild.class, Route.from("data"));
             assertNotNull(child);
             assertEquals(List.of(1, 2), child.parentValue);
             assertEquals(List.of(List.of(3, 4), List.of(5)), child.parentValues);
@@ -1057,7 +1058,7 @@ class AutoSerializerTest {
                       childField: "child"
                     """);
 
-            Models.ConstructorChild child = doc.get(Models.ConstructorChild.class, "data");
+            Models.ConstructorChild child = doc.get(Models.ConstructorChild.class, Route.from("data"));
             assertNotNull(child);
             assertEquals("parent", child.parentField);
             assertEquals("child", child.childField);
@@ -1074,7 +1075,7 @@ class AutoSerializerTest {
                       childField: "child"
                     """);
 
-            Models.UnsafeChild child = doc.get(Models.UnsafeChild.class, "data");
+            Models.UnsafeChild child = doc.get(Models.UnsafeChild.class, Route.from("data"));
             assertNotNull(child);
             assertEquals("parent", child.parentField);
             assertEquals("child", child.childField);
@@ -1087,9 +1088,9 @@ class AutoSerializerTest {
 
             Models.WithSetRecord original = new Models.WithSetRecord(Set.of("x", "y"), "set_test");
             YamlDocument doc = yaml.load("");
-            doc.setAndGet(Models.WithSetRecord.class, original, "data");
+            doc.setAndGet(Models.WithSetRecord.class, original, Route.from("data"));
 
-            Models.WithSetRecord decoded = doc.get(Models.WithSetRecord.class, "data");
+            Models.WithSetRecord decoded = doc.get(Models.WithSetRecord.class, Route.from("data"));
             assertEquals(original.tags(), decoded.tags());
             assertEquals(original.name(), decoded.name());
         }
@@ -1102,7 +1103,7 @@ class AutoSerializerTest {
             Models.CustomUser userWithNullName = new Models.CustomUser();
             userWithNullName.age = 42;
             YamlDocument doc = yaml.load("");
-            doc.setAndGet(Models.CustomUser.class, userWithNullName, "user");
+            doc.setAndGet(Models.CustomUser.class, userWithNullName, Route.from("user"));
 
             StringWriter writer = new StringWriter();
             doc.save(writer);
@@ -1111,7 +1112,7 @@ class AutoSerializerTest {
             assertFalse(dumped.contains("name:"));
 
             YamlDocument reloaded = yaml.load(dumped);
-            Models.CustomUser decoded = reloaded.get(Models.CustomUser.class, "user");
+            Models.CustomUser decoded = reloaded.get(Models.CustomUser.class, Route.from("user"));
             assertNotNull(decoded);
             assertNull(decoded.name, "null 字段应正确往返");
             assertEquals(42, decoded.age);
@@ -1185,7 +1186,7 @@ class AutoSerializerTest {
                       amount: 17
                     """);
 
-            Object result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Object result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals("adaptive", type.getField("name").get(result));
@@ -1226,7 +1227,7 @@ class AutoSerializerTest {
                       amount: 42
                     """);
 
-            Object result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Object result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals("bridge", type.getMethod("name").invoke(result));
@@ -1256,7 +1257,7 @@ class AutoSerializerTest {
                       name: "reflection"
                     """);
 
-            Object result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Object result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals("reflection", type.getField("name").get(result));
@@ -1326,7 +1327,7 @@ class AutoSerializerTest {
                       count: 7
                     """);
 
-            Models.AsmPrimitiveDefaults result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Models.AsmPrimitiveDefaults result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals(7, result.count());
@@ -1348,7 +1349,7 @@ class AutoSerializerTest {
                       ratio: 12.5
                     """);
 
-            Models.AsmWidePrimitiveFields result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Models.AsmWidePrimitiveFields result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals(922337203685477580L, result.total);
@@ -1366,7 +1367,7 @@ class AutoSerializerTest {
                       childField: "child"
                     """);
 
-            Models.Child result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Models.Child result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals("parent", result.parentField);
@@ -1390,7 +1391,7 @@ class AutoSerializerTest {
                       privateChildField: "child"
                     """);
 
-            Models.PrivateChild result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Models.PrivateChild result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals("parent", result.privateParentField());
@@ -1417,7 +1418,7 @@ class AutoSerializerTest {
                       childName: "child"
                     """);
 
-            Models.AnnotatedChild result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Models.AnnotatedChild result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals("parent", result.parentName);
@@ -1460,7 +1461,7 @@ class AutoSerializerTest {
                       childValue: "child"
                     """);
 
-            Models.StringChild result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Models.StringChild result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals("parent", result.parentValue);
@@ -1489,7 +1490,7 @@ class AutoSerializerTest {
                       childValue: 7
                     """);
 
-            Models.NestedGenericChild result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Models.NestedGenericChild result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals(List.of(1, 2), result.parentValue);
@@ -1509,7 +1510,7 @@ class AutoSerializerTest {
                       childField: "child"
                     """);
 
-            Models.ConstructorChild result = serializer.deserialize(doc.getNodeOrNull("data"));
+            Models.ConstructorChild result = serializer.deserialize(doc.getNodeOrNull(Route.from("data")));
 
             assertNotNull(result);
             assertEquals("parent", result.parentField);

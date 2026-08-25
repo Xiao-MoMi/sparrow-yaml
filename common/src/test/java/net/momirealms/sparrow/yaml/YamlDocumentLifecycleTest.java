@@ -1,5 +1,6 @@
 package net.momirealms.sparrow.yaml;
 
+import net.momirealms.sparrow.yaml.route.Route;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -27,7 +28,7 @@ class YamlDocumentLifecycleTest {
 
         assertTrue(document.isEmptyDocument());
         assertTrue(document.value().isEmpty());
-        assertNull(document.getNodeOrNull("server"));
+        assertNull(document.getNodeOrNull(Route.from("server")));
         assertFalse(document.dumpToString().contains("server"));
     }
 
@@ -37,10 +38,10 @@ class YamlDocumentLifecycleTest {
         YamlDocument document = yaml.load("server:\n  host: old\n");
 
         assertThrows(RuntimeException.class, () -> document.reload(input("server: [broken")));
-        assertEquals("old", document.getString("server", "host"));
+        assertEquals("old", document.getString(Route.from("server", "host")));
 
         assertThrows(NullPointerException.class, () -> document.reload(input("null: value\n")));
-        assertEquals("old", document.getString("server", "host"));
+        assertEquals("old", document.getString(Route.from("server", "host")));
         assertTrue(document.dumpToString().contains("host: old"));
     }
 
@@ -50,12 +51,12 @@ class YamlDocumentLifecycleTest {
         YamlDocument document = yaml.load("old: value\n");
 
         document.reload(input("base: &base\n  value: old\nalias: *base\n"));
-        document.getScalarOrNull("base", "value").setValue("new");
-        document.getSectionOrNull("base").setSubNode("added", true);
+        document.getScalarOrNull(Route.from("base", "value")).setValue("new");
+        document.getSectionOrNull(Route.from("base")).setSubNode("added", true);
 
-        assertSame(document.getNodeOrNull("base").internalValueNode(), document.getNodeOrNull("alias").internalValueNode());
-        assertEquals("new", document.getString("alias", "value"));
-        assertTrue(document.getBoolean("alias", "added"));
+        assertSame(document.getNodeOrNull(Route.from("base")).internalValueNode(), document.getNodeOrNull(Route.from("alias")).internalValueNode());
+        assertEquals("new", document.getString(Route.from("alias", "value")));
+        assertTrue(document.getBoolean(Route.from("alias", "added")));
         assertTrue(document.dumpToString().contains("*"));
     }
 
@@ -95,7 +96,7 @@ class YamlDocumentLifecycleTest {
         assertNotSame(first, second);
         assertNotSame(first.serializers(), second.serializers());
         assertEquals(writer.toString(), dumped);
-        assertEquals("sparrow", first.load(dumped).getString("name"));
+        assertEquals("sparrow", first.load(dumped).getString(Route.from("name")));
     }
 
     private static ByteArrayInputStream input(String yaml) {
