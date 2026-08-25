@@ -1,6 +1,7 @@
 package net.momirealms.sparrow.yaml.node;
 
 import net.momirealms.sparrow.yaml.YamlDocument;
+import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.route.element.IndexElement;
@@ -176,7 +177,7 @@ public interface ParentNode<T extends YamlNode<?>> {
     default <R> List<R> getList(@NotNull Class<R> elementType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
-            return null;
+            return List.of();
         }
         return node.get(this.registeredSerializer(elementType).listOf());
     }
@@ -185,7 +186,7 @@ public interface ParentNode<T extends YamlNode<?>> {
     default <R> List<R> getList(@NotNull NodeSerializer<R> elementSerializer, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
-            return null;
+            return List.of();
         }
         return node.get(elementSerializer.listOf());
     }
@@ -194,9 +195,38 @@ public interface ParentNode<T extends YamlNode<?>> {
     default <R> List<R> getList(@NotNull TypeRef<R> elementType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
-            return null;
+            return List.of();
         }
         return node.get(this.registeredSerializer(elementType).listOf());
+    }
+
+    /**
+     * 按精确路由读取 Map 列表, 嵌套集合递归表示为 Map/List, 标量保留原始 Java 值.
+     *
+     * @param route 精确路由
+     * @return 原始 Map 列表, missing 或 YAML null 返回空列表
+     * @throws InvalidNodeException 当目标不是 Sequence 或列表元素不是 Section 时
+     */
+    @NotNull
+    default List<Map<?, ?>> getMapList(@NotNull Route route) {
+        YamlNode<?> node = this.getNodeOrNull(route);
+        if (node == null || node.value() == null) {
+            return List.of();
+        }
+        if (!(node instanceof SequenceNode sequenceNode)) {
+            throw new InvalidNodeException(node, List.class);
+        }
+
+        List<YamlNode<?>> elements = sequenceNode.value();
+        List<Map<?, ?>> result = new ArrayList<>(elements.size());
+        for (int i = 0; i < elements.size(); i++) {
+            YamlNode<?> element = elements.get(i);
+            if (!(element instanceof SectionNode sectionNode)) {
+                throw new InvalidNodeException(element, Map.class);
+            }
+            result.add((Map<?, ?>) sectionNode.representValue());
+        }
+        return result;
     }
 
     /**
@@ -213,7 +243,7 @@ public interface ParentNode<T extends YamlNode<?>> {
     default <K, V> List<Map<K, V>> getMapList(@NotNull Class<K> keyType, @NotNull Class<V> valueType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
-            return null;
+            return List.of();
         }
         NodeSerializer<K> keySerializer = this.registeredSerializer(keyType);
         NodeSerializer<V> valueSerializer = this.registeredSerializer(valueType);
@@ -224,7 +254,7 @@ public interface ParentNode<T extends YamlNode<?>> {
     default <K, V> List<Map<K, V>> getMapList(@NotNull TypeRef<K> keyType, @NotNull TypeRef<V> valueType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
-            return null;
+            return List.of();
         }
         NodeSerializer<K> keySerializer = this.registeredSerializer(keyType);
         NodeSerializer<V> valueSerializer = this.registeredSerializer(valueType);

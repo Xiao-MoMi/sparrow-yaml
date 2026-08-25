@@ -46,6 +46,12 @@ class NodeConvenienceReadTest {
             invalid-map-list:
               - alpha: 1
               - invalid
+            raw-maps:
+              - name: first
+                enabled: true
+                nested:
+                  count: 2
+                values: [one, 3, null]
             scalar-number: "12"
             scalar-boolean: true
             literal:
@@ -325,6 +331,28 @@ class NodeConvenienceReadTest {
 
     @Nested
     class MapListTests {
+
+        @Test
+        void should_ReadMapListAsRecursiveRawValues() throws IOException {
+            YamlDocument document = document();
+
+            List<Map<?, ?>> maps = document.getMapList(Route.from("raw-maps"));
+
+            assertEquals(1, maps.size());
+            Map<?, ?> first = maps.get(0);
+            assertInstanceOf(String.class, first.get("name"));
+            assertInstanceOf(Boolean.class, first.get("enabled"));
+            Map<?, ?> nested = assertInstanceOf(Map.class, first.get("nested"));
+            List<?> values = assertInstanceOf(List.class, first.get("values"));
+            assertInstanceOf(Integer.class, nested.get("count"));
+            assertEquals("one", values.get(0));
+            assertEquals(3, values.get(1));
+            assertNull(values.get(2));
+            assertEquals(List.of(), document.getMapList(Route.from("missing")));
+            assertEquals(List.of(), document.getMapList(Route.from("null-value")));
+            assertThrows(InvalidNodeException.class, () -> document.getMapList(Route.from("not-list")));
+            assertThrows(InvalidNodeException.class, () -> document.getMapList(Route.from("invalid-map-list")));
+        }
 
         @Test
         void should_ReadMapListStrictlyWithRegisteredClasses() throws IOException {
