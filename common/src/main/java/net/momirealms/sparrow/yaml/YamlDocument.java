@@ -2,6 +2,7 @@ package net.momirealms.sparrow.yaml;
 
 import net.momirealms.sparrow.yaml.engine.ExtendedConstructor;
 import net.momirealms.sparrow.yaml.node.AbstractYamlNode;
+import net.momirealms.sparrow.yaml.node.NodeMutation;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import org.jetbrains.annotations.ApiStatus;
@@ -71,6 +72,11 @@ public class YamlDocument extends SectionNode {
                 this.attachNode((AbstractYamlNode<?>) child);
             }
         }
+    }
+
+    @ApiStatus.Internal
+    public void attachNodeShallow(AbstractYamlNode<?> node) {
+        this.registerNode(node);
     }
 
     @ApiStatus.Internal
@@ -178,29 +184,12 @@ public class YamlDocument extends SectionNode {
     }
 
     private void replaceRoot(YamlDocument replacement) {
-        for (YamlNode<?> child : this.value().values()) {
-            child.parentNode(null);
-        }
-        this.nodeReferences.clear();
-
-        this.valueNode = replacement.valueNode;
-        this.value = replacement.value();
-        this.copyTupleStateFrom(replacement);
-        this.initComments(null, this.valueNode);
-        for (YamlNode<?> child : this.value.values()) {
-            child.parentNode(this);
-        }
+        NodeMutation.adoptRoot(this, replacement);
     }
 
     @ApiStatus.Internal
     public void replaceRootValue(@NotNull Map<?, ?> value) {
-        YamlDocument replacement = new YamlDocument(this.sparrowYaml);
-        for (Map.Entry<?, ?> entry : value.entrySet()) {
-            replacement.setSubNode(entry.getKey(), entry.getValue());
-        }
-        this.preserveFlowStyleTo(replacement);
-        this.copyCommentsTo(replacement);
-        this.replaceRoot(replacement);
+        NodeMutation.replaceRootValue(this, value);
     }
 
     private static MappingNode createEmptyRoot(SparrowYaml sparrowYaml) {
@@ -299,25 +288,9 @@ public class YamlDocument extends SectionNode {
     }
 
     private static void prepareSequenceNode(net.momirealms.sparrow.yaml.node.SequenceNode sequenceNode, List<Runnable> restorers) {
-        org.snakeyaml.engine.v2.nodes.SequenceNode internalNode =
-                (org.snakeyaml.engine.v2.nodes.SequenceNode) sequenceNode.internalValueNode();
-        List<Node> original = new ArrayList<>(internalNode.getValue());
-        List<Node> filtered = new ArrayList<>(original.size());
-
         for (YamlNode<?> child : sequenceNode.value()) {
-            if (!shouldDump(child)) {
-                continue;
-            }
             prepareDumpNode(child, restorers);
-            filtered.add(child.internalValueNode());
         }
-
-        internalNode.getValue().clear();
-        internalNode.getValue().addAll(filtered);
-        restorers.add(() -> {
-            internalNode.getValue().clear();
-            internalNode.getValue().addAll(original);
-        });
     }
 
     private static boolean shouldDump(@Nullable YamlNode<?> node) {

@@ -2,6 +2,7 @@ package net.momirealms.sparrow.yaml.upgrade.patch;
 
 import net.momirealms.sparrow.yaml.YamlDocument;
 import net.momirealms.sparrow.yaml.node.AbstractYamlNode;
+import net.momirealms.sparrow.yaml.node.NodeMutation;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
@@ -34,7 +35,7 @@ public class RelocateRule implements Patch {
     }
 
     /**
-     * 将本地文档中的节点迁移到目标路径, 并尽量保留原节点注释与表示风格.
+     * 将本地文档中的节点移动到目标路径, 保留节点 identity、alias、注释与表示风格.
      */
     @Override
     public YamlDocument apply(YamlDocument defDoc, YamlDocument localDoc, PatchContext context) {
@@ -48,8 +49,7 @@ public class RelocateRule implements Patch {
                 currentParent = currentParent.parent();
             }
 
-            Route writeRoute = this.writeRouteBeforeRemoval(localDoc);
-            YamlNode<?> newNode = localDoc.setAndGet(writeRoute, fromNode);
+            YamlNode<?> newNode = NodeMutation.move(localDoc, this.from, this.to);
             if (newNode != null) {
                 // 如果新节点成为首个子节点, 去掉顶部多余的空白注释行.
                 if (newNode instanceof AbstractYamlNode<?> absNode) {
@@ -92,26 +92,8 @@ public class RelocateRule implements Patch {
                     defParent.copyCommentsTo(localParent);
                 }
             }
-
-            localDoc.removeNode(from);
         }
         return localDoc;
-    }
-
-    private Route writeRouteBeforeRemoval(YamlDocument localDoc) {
-        Route fromParent = this.from.parent();
-        Route toParent = this.to.parent();
-        if (fromParent == null || !fromParent.equals(toParent)
-                || !(localDoc.getNodeOrNull(fromParent) instanceof SequenceNode)) {
-            return this.to;
-        }
-        if (this.from.getLastRouteElement() instanceof IndexElement fromIndex
-                && this.to.getLastRouteElement() instanceof IndexElement toIndex
-                && fromIndex.key() < toIndex.key()) {
-            // 删除较小索引后后续元素会左移一位, 因此写入时先为最终坐标预留这一位.
-            return toParent.add(toIndex.key() + 1);
-        }
-        return this.to;
     }
 
     /**

@@ -11,10 +11,12 @@ import org.snakeyaml.engine.v2.nodes.MappingNode;
 import org.snakeyaml.engine.v2.nodes.Node;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements ParentNode<SequenceNode> {
+    private final List<YamlNode<?>> readOnlyValue;
 
     public SequenceNode(
             @NotNull ParentNode<?> parent,
@@ -24,7 +26,11 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
             @NotNull ExtendedConstructor constructor
     ) {
         super(parent, keyNode, valueNode, key, new ArrayList<>());
-        init(keyNode, valueNode, constructor);
+        this.readOnlyValue = Collections.unmodifiableList(this.value);
+        this.init(keyNode, valueNode, constructor);
+        if (parent != null) {
+            this.root().attachNodeShallow(this);
+        }
     }
 
     // 创建一个手动初始化的 SequenceNode;
@@ -37,6 +43,7 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
         this.keyNode = keyNode;
         this.valueNode = valueNode;
         this.value = new ArrayList<>();
+        this.readOnlyValue = Collections.unmodifiableList(this.value);
     }
 
     public static SequenceNode createEmpty(@NotNull YamlDocument root) {
@@ -53,11 +60,36 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
         return this;
     }
 
+    /**
+     * 返回按 index 排列的只读子节点视图.
+     *
+     * <p><strong>调用方不得修改返回的 List</strong>; 结构写入使用 {@link #setSubNode(int, Object)}
+     * 或 {@link #removeSubNode(int)}.
+     *
+     * @return 当前 Sequence 的只读子节点视图
+     */
     @Override
-    public void setValue(List<YamlNode<?>> value) {
-        this.value.forEach(it -> it.parentNode(null));
-        value.forEach(it -> it.parentNode(this));
-        this.value = value;
+    @NotNull
+    public List<YamlNode<?>> value() {
+        return this.readOnlyValue;
+    }
+
+    List<YamlNode<?>> mutableValue() {
+        return this.value;
+    }
+
+    org.snakeyaml.engine.v2.nodes.SequenceNode internalSequenceNode() {
+        return (org.snakeyaml.engine.v2.nodes.SequenceNode) this.valueNode;
+    }
+
+    /**
+     * 使用传入节点的深复制结果替换全部元素, 当前 Sequence 的注释、样式与 alias identity 保持不变.
+     *
+     * @param value 按目标 index 排列的元素
+     */
+    @Override
+    public void setValue(@NotNull List<YamlNode<?>> value) {
+        NodeMutation.replaceSequenceContents(this, value);
     }
 
     @Override
@@ -101,119 +133,22 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
     
     @Nullable
     public YamlNode<?> removeSubNode(int index) {
-        if (index < 0 || index >= size()) {
-            return null;
-        }
-        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
-        YamlNode<?> removed = this.value().remove(index);
-        if (removed != null) {
-            removed.parentNode(null);
-            
-            // 从底层的 Node 列表中移除
-            org.snakeyaml.engine.v2.nodes.SequenceNode sequenceNode = (org.snakeyaml.engine.v2.nodes.SequenceNode) this.valueNode;
-            sequenceNode.getValue().remove(index);
-            
-            // 更新后续元素的 key (index)
-            for (int i = index; i < this.size(); i++) {
-                YamlNode<?> node = this.value().get(i);
-                if (node != null) {
-                    node.key(i);
-                }
-            }
-            this.syncAliasValues(references);
-        }
-        return removed;
+        return NodeMutation.remove(this, index);
     }
     /**
-     * 在当前节点下创建一个新的子节点, 子节点的值默认为 null ;
-     * 如果当前存在这样的一个子节点, 那么会覆盖这个子节点;
-     * 如果目标索引越界, 那么会补全节点至目标节点, 补全的节点均为 ScalarNode, 值为 null ;
-     * 传入 {@link YamlNode} 时会复制节点值、注释与集合样式, 不改变源节点;
-     * @param index 目标索引;
-     * @param value 子节点的 Value;
+     * 在目标 index 写入子节点; 越界位置使用可持久化的 YAML null 补齐.
+     * 普通值替换保留当前位置的表层注释与集合样式, {@link YamlNode} 输入使用深复制.
+     *
+     * @param index 非负目标 index
+     * @param value 子节点值
+     * @throws IndexOutOfBoundsException 当 index 为负数时
      */
-    public void setSubNode(int index, Object value) {
-        this.replaceSubNode(index, value, null);
+    public void setSubNode(int index, @Nullable Object value) {
+        NodeMutation.replace(this, index, value, null);
     }
 
     void replaceSubNode(int index, @Nullable Object value, @Nullable YamlNode<?> metadataSource) {
-        List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
-        YamlNode<?> targetNode = this.createSubNode(index, value);
-        if (metadataSource != null) {
-            metadataSource.preserveFlowStyleTo(targetNode);
-            metadataSource.copyCommentsTo(targetNode);
-        }
-        YamlNode<?> yamlNode = index <= size() - 1 ? this.value().get(index) : null;
-        if (yamlNode != null) {
-            yamlNode.parentNode(null);
-        }
-        
-        org.snakeyaml.engine.v2.nodes.SequenceNode sequenceNode = (org.snakeyaml.engine.v2.nodes.SequenceNode) this.valueNode;
-        List<Node> nodes = sequenceNode.getValue();
-        
-        // 补全越界的节点为空 ScalarNode
-        if (index >= size()) {
-            for (int i = this.size(); i <= index; i++) {
-                if (i == index) {
-                    this.value().add(null);
-                    nodes.add(null); // placeholder
-                } else {
-                    ScalarNode empty = ScalarNode.emptyNode(root().sparrowYaml());
-                    empty.parentNode(this);
-                    empty.key(i);
-                    this.value().add(empty);
-                    nodes.add(empty.internalValueNode());
-                }
-            }
-        }
-        this.value().set(index, targetNode);
-        nodes.set(index, targetNode.internalValueNode());
-        this.syncAliasValues(references);
-    }
-
-    private YamlNode<?> createSubNode(int index, Object value) {
-        if (value instanceof YamlNode<?> existingNode) {
-            return AbstractYamlNode.copyOf(existingNode, this, index, null);
-        }
-        if (value instanceof Map map) {
-            SectionNode sectionNode = SectionNode.createEmpty(this.root());
-            sectionNode.parentNode(this);
-            sectionNode.key(index);
-            map.forEach(sectionNode::setSubNode);
-            return sectionNode;
-        }
-        if (value instanceof List list) {
-            SequenceNode sequenceNode = SequenceNode.createEmpty(this.root());
-            sequenceNode.parentNode(this);
-            sequenceNode.key(index);
-            for (int i = 0; i < list.size(); i++) {
-                sequenceNode.setSubNode(i, list.get(i));
-            }
-            return sequenceNode;
-        }
-        Node valueNode = this.root().sparrowYaml().standardRepresenter().represent(value);
-        if (valueNode == null || valueNode instanceof org.snakeyaml.engine.v2.nodes.ScalarNode scalarNode && scalarNode.getValue() == null) {
-            valueNode = this.root().sparrowYaml().standardRepresenter().represent("null");
-        }
-        return new net.momirealms.sparrow.yaml.node.ScalarNode(this, null, valueNode, index, value);
-    }
-
-    private void syncAliasValues(List<AbstractYamlNode<?>> references) {
-        for (int i = 0; i < references.size(); i++) {
-            AbstractYamlNode<?> reference = references.get(i);
-            if (reference == this || !(reference instanceof SequenceNode alias)) {
-                continue;
-            }
-            for (YamlNode<?> child : alias.value()) {
-                child.parentNode(null);
-            }
-            List<YamlNode<?>> values = new ArrayList<>(this.size());
-            for (int index = 0; index < this.size(); index++) {
-                YamlNode<?> child = this.value().get(index);
-                values.add(AbstractYamlNode.aliasOf(child, alias, index, child.internalKeyNode()));
-            }
-            alias.value = values;
-        }
+        NodeMutation.replace(this, index, value, metadataSource);
     }
     
     public void syncValueNode(YamlNode<?> child) {
@@ -253,6 +188,11 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
         return NodeValueProjection.sequenceValues(this);
     }
 
+    void appendPreparedChild(YamlNode<?> child) {
+        this.mutableValue().add(child);
+        this.internalSequenceNode().getValue().add(child.internalValueNode());
+    }
+
     // 初始化节点
     protected void init(@Nullable Node keyNode, @NotNull org.snakeyaml.engine.v2.nodes.SequenceNode valueNode, ExtendedConstructor constructor) {
         // 初始化注释
@@ -273,7 +213,7 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
                 node = new ScalarNode(this, null, singleNode, i, value);
             }
 
-            value().add(node);
+            this.mutableValue().add(node);
         }
     }
 

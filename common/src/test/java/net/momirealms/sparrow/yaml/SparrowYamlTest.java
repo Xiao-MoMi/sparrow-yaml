@@ -126,7 +126,7 @@ class SparrowYamlTest {
         }
 
         @Test
-        void should_SkipNullValueNodes_When_DumpingDocument() throws IOException {
+        void should_SkipMappingNullsAndPreserveSequenceNulls_When_DumpingDocument() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             YamlDocument yamlDocument = sparrowYaml.load("""
             keep: value
@@ -151,7 +151,8 @@ class SparrowYamlTest {
             assertTrue(dumped.contains("- last"));
             assertFalse(dumped.contains("drop:"));
             assertFalse(dumped.contains("blank:"));
-            assertFalse(dumped.contains("null"));
+            YamlDocument reloaded = sparrowYaml.load(dumped);
+            assertEquals(Arrays.asList("first", null, null, "last"), reloaded.getSequenceOrNull(Route.from("sequence")).getValues());
         }
 
         @Test

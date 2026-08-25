@@ -12,7 +12,6 @@ import org.snakeyaml.engine.v2.nodes.NodeTuple;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,7 +39,7 @@ class SectionNodeSynchronizationTest {
         replacement.setValue("newer");
         assertSame(replacement.internalValueNode(), mappingNode.getValue().get(0).getValueNode());
 
-        Collections.swap(mappingNode.getValue(), 0, 1);
+        document.reorderKeys(List.of("second", "first"));
         replacement.setValue("latest");
         assertSame(firstKeyNode, mappingNode.getValue().get(1).getKeyNode());
         assertSame(replacement.internalValueNode(), mappingNode.getValue().get(1).getValueNode());

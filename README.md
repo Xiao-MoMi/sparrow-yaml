@@ -125,11 +125,15 @@ document.set(Route.from("database", "ports"), List.of(3306, 3307));
 document.set(Route.from("database", "pool"), Map.of("size", 10));
 ```
 
-写入 `Map` 会创建 `SectionNode`，写入 `List` 会创建 `SequenceNode`。写入列表越界索引时，中间空位会用空标量补齐。
+写入 `Map` 会创建 `SectionNode`，写入 `List` 会创建 `SequenceNode`。写入列表越界索引时，中间空位会用 YAML null 补齐；这些 null 是真实位置，保存和重新加载后不会改变后续元素的 index。Mapping 中值为 null 的字段继续在保存时省略。
 
 对已有非根节点调用 `node.set(Class/TypeRef/NodeSerializer, value)` 时，serializer 的 Map/List/scalar 输出会替换成对应节点形状，并保留当前节点的表层注释和集合 flow style。`YamlDocument` 根节点必须保持 mapping，因此根节点的 typed set 只接受 Map 序列化结果；其它形状会在修改文档前抛出 `IllegalArgumentException`。
 
 `representValue()`、`SectionNode#getValues()` 和 `SequenceNode#getValues()` 使用同一套消费型递归投影：YAML null 转成 Java null，mapping key 保留实际 Object 类型，集合顺序保持不变。`SectionNode#getValues()` 因此返回 `Map<Object, Object>`。
+
+SnakeYAML Node 图保存结构、anchor、注释与展示样式，是文档的权威表示。`SectionNode#value()` 和 `SequenceNode#value()` 返回只读视图，结构写入必须使用 `setSubNode`、`removeSubNode`、`reorderKeys` 或 typed set。`internalValueNode()` 保留为高级 Interface，可用于读取和调整注释、flow style 等展示信息；调用方不得直接修改 Mapping/Sequence 子集合或标量内容，违反该约定的结果不由库兜底。
+
+把现有 `YamlNode` 写入其它位置时会深复制完整节点图，源节点及其所属文档保持不变，复制图内部的 anchor/alias 关系会保留。`removeNode` 返回的 detached wrapper 仍可读取值和元数据，也可以作为后续 copy 的来源；依赖 root 的读取与写入不适用于 detached wrapper。升级管线在同一文档内 relocate 时移动原节点 identity，因此仍指向该节点的 alias 会继续共享后续修改。
 
 删除节点：
 

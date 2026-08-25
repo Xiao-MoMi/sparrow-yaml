@@ -54,9 +54,6 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
         this.key = key;
         this.value = value;
         initComments(keyNode, valueNode);
-        if (parent != null) {
-            this.root().attachNode(this);
-        }
     }
 
     /**
@@ -92,7 +89,8 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
     }
 
     @Override
-    public @NotNull YamlDocument root() {
+    @NotNull
+    public YamlDocument root() {
         if (this instanceof YamlDocument doc) {
             return doc;
         }
@@ -103,13 +101,15 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
     }
 
     @Override
-    public @Nullable Node internalKeyNode() {
-        return keyNode;
+    @Nullable
+    public Node internalKeyNode() {
+        return this.keyNode;
     }
 
     @Override
-    public @Nullable Node internalValueNode() {
-        return valueNode;
+    @Nullable
+    public Node internalValueNode() {
+        return this.valueNode;
     }
 
     @ApiStatus.Internal
@@ -121,12 +121,14 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
     }
 
     @Override
-    public @Nullable ParentNode<?> parentNode() {
-        return parent;
+    @Nullable
+    public ParentNode<?> parentNode() {
+        return this.parent;
     }
 
     @Override
-    public void parentNode(ParentNode<?> parentNode) {
+    @ApiStatus.Internal
+    public void parentNode(@Nullable ParentNode<?> parentNode) {
         if (this.parent == parentNode) {
             return;
         }
@@ -140,6 +142,7 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
     }
     
     @Override
+    @ApiStatus.Internal
     public void key(Object key) {
         this.key = key;
     }
@@ -159,7 +162,7 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
 
     @Override
     public T value() {
-        return value;
+        return this.value;
     }
 
     @Override
@@ -240,40 +243,6 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
         }
     }
 
-    static YamlNode<?> copyOf(YamlNode<?> source, ParentNode<?> parent, Object key, @Nullable Node keyNode) {
-        YamlDocument root = parent.yamlNode().root();
-        AbstractYamlNode<?> target;
-        if (source instanceof SectionNode sourceSection) {
-            SectionNode copy = SectionNode.createEmpty(root);
-            copy.keyNode = keyNode;
-            copy.key = key;
-            copy.parentNode(parent);
-            for (Map.Entry<Object, YamlNode<?>> entry : sourceSection.value().entrySet()) {
-                copy.setSubNode(entry.getKey(), entry.getValue());
-            }
-            target = copy;
-        } else if (source instanceof SequenceNode sourceSequence) {
-            SequenceNode copy = SequenceNode.createEmpty(root);
-            copy.keyNode = keyNode;
-            copy.key = key;
-            copy.parentNode(parent);
-            for (int i = 0; i < sourceSequence.size(); i++) {
-                copy.setSubNode(i, sourceSequence.value().get(i));
-            }
-            target = copy;
-        } else if (source instanceof ScalarNode sourceScalar) {
-            ScalarNode copy = ScalarNode.create(root, sourceScalar.value());
-            copy.keyNode = keyNode;
-            copy.key = key;
-            copy.parentNode(parent);
-            target = copy;
-        } else {
-            throw new UnsupportedOperationException("不支持复制节点类型: " + source.getClass().getName());
-        }
-        copyMetadata(source, target);
-        return target;
-    }
-
     static YamlNode<?> aliasOf(YamlNode<?> source, ParentNode<?> parent, Object key, @Nullable Node keyNode) {
         AbstractYamlNode<?> target;
         if (source instanceof SectionNode sourceSection) {
@@ -282,8 +251,9 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
             alias.parentNode(parent);
             for (Map.Entry<Object, YamlNode<?>> entry : sourceSection.value().entrySet()) {
                 YamlNode<?> child = entry.getValue();
-                alias.value().put(entry.getKey(), aliasOf(child, alias, entry.getKey(), child.internalKeyNode()));
+                alias.mutableValue().put(entry.getKey(), aliasOf(child, alias, entry.getKey(), child.internalKeyNode()));
             }
+            alias.copyTupleStateFrom(sourceSection);
             target = alias;
         } else if (source instanceof SequenceNode sourceSequence) {
             SequenceNode alias = new SequenceNode(keyNode, (org.snakeyaml.engine.v2.nodes.SequenceNode) sourceSequence.internalValueNode());
@@ -291,7 +261,7 @@ public abstract class AbstractYamlNode<T> implements YamlNode<T> {
             alias.parentNode(parent);
             for (int i = 0; i < sourceSequence.size(); i++) {
                 YamlNode<?> child = sourceSequence.value().get(i);
-                alias.value().add(aliasOf(child, alias, i, child.internalKeyNode()));
+                alias.mutableValue().add(aliasOf(child, alias, i, child.internalKeyNode()));
             }
             target = alias;
         } else if (source instanceof ScalarNode sourceScalar) {

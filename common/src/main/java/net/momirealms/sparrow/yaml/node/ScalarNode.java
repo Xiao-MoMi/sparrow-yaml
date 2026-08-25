@@ -9,9 +9,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.snakeyaml.engine.v2.nodes.Node;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import java.util.function.Supplier;
 
 public class ScalarNode extends AbstractYamlNode<Object> {
@@ -24,6 +21,9 @@ public class ScalarNode extends AbstractYamlNode<Object> {
             @Nullable Object value
     ) {
         super(parent, keyNode, valueNode, key, value);
+        if (parent != null) {
+            this.root().attachNodeShallow(this);
+        }
     }
 
     private ScalarNode(
@@ -190,43 +190,7 @@ public class ScalarNode extends AbstractYamlNode<Object> {
 
     @Override
     public void setValue(Object value) {
-        if (value instanceof Map || value instanceof List) {
-            throw new IllegalArgumentException("不能给 ScalarNode 设置 Map 或 List 的值!");
-        }
-        this.value = value;
-        // 双向同步到底层的 SnakeYAML Node 中
-        if (this.valueNode instanceof org.snakeyaml.engine.v2.nodes.ScalarNode) {
-            YamlDocument root = this.root();
-            List<AbstractYamlNode<?>> references = root.nodeReferences(this);
-            SparrowYaml sparrowYaml = root.sparrowYaml();
-            org.snakeyaml.engine.v2.nodes.ScalarNode represented =
-                (org.snakeyaml.engine.v2.nodes.ScalarNode) sparrowYaml.standardRepresenter().represent(value);
-            represented.setBlockComments(this.beforeValueComments == null ? null : new ArrayList<>(this.beforeValueComments));
-            represented.setInLineComments(this.inlineValueComments == null ? null : new ArrayList<>(this.inlineValueComments));
-            represented.setEndComments(this.afterValueComments == null ? null : new ArrayList<>(this.afterValueComments));
-            for (int i = 0; i < references.size(); i++) {
-                AbstractYamlNode<?> reference = references.get(i);
-                if (!(reference instanceof ScalarNode alias)) {
-                    continue;
-                }
-                Node previousNode = alias.valueNode;
-                alias.value = value;
-                alias.valueNode = represented;
-                alias.initComments(alias.keyNode, represented);
-                root.rebindNode(alias, previousNode);
-            }
-            for (int i = 0; i < references.size(); i++) {
-                AbstractYamlNode<?> reference = references.get(i);
-                if (!(reference instanceof ScalarNode alias)) {
-                    continue;
-                }
-                if (alias.parent instanceof SectionNode section) {
-                    section.syncValueNode(alias);
-                } else if (alias.parent instanceof SequenceNode sequence) {
-                    sequence.syncValueNode(alias);
-                }
-            }
-        }
+        NodeMutation.replaceScalar(this, value);
     }
 
     @Override

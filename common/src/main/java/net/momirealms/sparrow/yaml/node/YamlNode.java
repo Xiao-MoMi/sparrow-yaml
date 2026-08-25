@@ -41,6 +41,8 @@ public interface YamlNode<T> {
 
     /**
      * 获取当前 Node 的 Value;
+     * Section 与 Sequence 返回只读视图, 结构修改必须使用对应的节点写入方法.
+     *
      * @return Value
      */
     T value();
@@ -55,7 +57,8 @@ public interface YamlNode<T> {
     /**
      * 设置当前节点的父节点;
      */
-    void parentNode(ParentNode<?> parentNode);
+    @ApiStatus.Internal
+    void parentNode(@Nullable ParentNode<?> parentNode);
 
     /**
      * 当前Node在整个Yaml节点的路径;
@@ -147,7 +150,8 @@ public interface YamlNode<T> {
     }
 
     /**
-     * 设置当前节点的值;
+     * 设置当前节点的值; Section 与 Sequence 会深复制传入的子节点并同步共享 alias.
+     *
      * @param value 节点值
      */
     void setValue(T value);
@@ -190,17 +194,20 @@ public interface YamlNode<T> {
     boolean isScalar();
 
     /**
-     * 当前YamlNode维护的SnakeYaml的Node对象;
-     * 因YamlNode可能为虚拟节点, 所以其可能为 Null;
-     * @return SnakeYaml NodeTuple
+     * 返回当前节点对应的 SnakeYAML key Node.
+     *
+     * @return 虚拟节点或 Sequence 元素返回 null
      */
     @Nullable
     Node internalKeyNode();
 
     /**
-     * 当前YamlNode维护的SnakeYaml的Node对象;
-     * 因YamlNode可能为虚拟节点, 所以其可能为 Null;
-     * @return SnakeYaml NodeTuple
+     * 返回保留注释、anchor 与展示样式的 SnakeYAML value Node.
+     *
+     * <p><strong>调用方不得直接修改 Mapping/Sequence 子集合或标量内容</strong>;
+     * 结构和值写入必须使用 YamlNode / ParentNode 提供的方法.
+     *
+     * @return 虚拟节点返回 null
      */
     @Nullable
     Node internalValueNode();
@@ -366,29 +373,7 @@ public interface YamlNode<T> {
     }
 
     private void setSerializedValue(@Nullable Object value) {
-        if (this instanceof ScalarNode scalarNode && !(value instanceof Map<?, ?>) && !(value instanceof List<?>)) {
-            scalarNode.setValue(value);
-            return;
-        }
-        if (this instanceof YamlDocument document) {
-            if (!(value instanceof Map<?, ?> map)) {
-                String actualType = value == null ? "null" : value.getClass().getName();
-                throw new IllegalArgumentException("YamlDocument 根节点只支持 Map 序列化结果, 实际类型: " + actualType);
-            }
-            document.replaceRootValue(map);
-            return;
-        }
-
-        ParentNode<?> parent = this.parentNode();
-        if (parent instanceof SectionNode sectionNode) {
-            sectionNode.replaceSubNode(this.key(), value, this);
-            return;
-        }
-        if (parent instanceof SequenceNode sequenceNode) {
-            sequenceNode.replaceSubNode((Integer) this.key(), value, this);
-            return;
-        }
-        throw new IllegalStateException("当前 Node 尚未挂载到可替换它的 ParentNode 上!");
+        NodeMutation.replaceSerialized(this, value);
     }
 
 }
