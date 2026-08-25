@@ -133,8 +133,16 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
      * @param value 子节点的 Value;
      */
     public void setSubNode(int index, Object value) {
+        this.replaceSubNode(index, value, null);
+    }
+
+    void replaceSubNode(int index, @Nullable Object value, @Nullable YamlNode<?> metadataSource) {
         List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
         YamlNode<?> targetNode = this.createSubNode(index, value);
+        if (metadataSource != null) {
+            metadataSource.preserveFlowStyleTo(targetNode);
+            metadataSource.copyCommentsTo(targetNode);
+        }
         YamlNode<?> yamlNode = index <= size() - 1 ? this.value().get(index) : null;
         if (yamlNode != null) {
             yamlNode.parentNode(null);
@@ -236,25 +244,13 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
     }
 
     /**
-     * 递归获取当前 Sequence 下的原始值, 最终以 List 形式返回.
-     * @return 原始 List
+     * 递归获取当前 Sequence 的普通 Java 值, YAML null 保留为 Java null.
+     *
+     * @return 按 YAML 顺序排列的 List
      */
     @NotNull
     public List<Object> getValues() {
-        List<YamlNode<?>> elements = this.value();
-        List<Object> values = new ArrayList<>(elements.size());
-        for (YamlNode<?> element : elements) {
-            if (element == null) {
-                values.add(null);
-            } else if (element instanceof SectionNode section) {
-                values.add(section.getValues());
-            } else if (element instanceof SequenceNode sequence) {
-                values.add(sequence.getValues());
-            } else {
-                values.add(element.value());
-            }
-        }
-        return values;
+        return NodeValueProjection.sequenceValues(this);
     }
 
     // 初始化节点

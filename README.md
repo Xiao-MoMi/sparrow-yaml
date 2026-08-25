@@ -127,6 +127,10 @@ document.set(Route.from("database", "pool"), Map.of("size", 10));
 
 写入 `Map` 会创建 `SectionNode`，写入 `List` 会创建 `SequenceNode`。写入列表越界索引时，中间空位会用空标量补齐。
 
+对已有非根节点调用 `node.set(Class/TypeRef/NodeSerializer, value)` 时，serializer 的 Map/List/scalar 输出会替换成对应节点形状，并保留当前节点的表层注释和集合 flow style。`YamlDocument` 根节点必须保持 mapping，因此根节点的 typed set 只接受 Map 序列化结果；其它形状会在修改文档前抛出 `IllegalArgumentException`。
+
+`representValue()`、`SectionNode#getValues()` 和 `SequenceNode#getValues()` 使用同一套消费型递归投影：YAML null 转成 Java null，mapping key 保留实际 Object 类型，集合顺序保持不变。`SectionNode#getValues()` 因此返回 `Map<Object, Object>`。
+
 删除节点：
 
 ```java
@@ -464,7 +468,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 常用组合方法：
 
 - `NodeSerializer#xmap(to, from)`：双向映射成新类型。
-- `NodeSerializers.OBJECT`：递归读取任意 YAML 值，返回 Java 标量、`List<Object>` 或 `Map<Object, Object>`。
+- `NodeSerializers.OBJECT`：严格递归读取 YAML 值，返回 Java 标量、`List<Object>` 或 `Map<Object, Object>`；任一递归位置出现 YAML null 都会抛出 `InvalidNodeException`。需要保留 null 的宽松快照时使用节点的 `representValue()` 或 `getValues()`。
 - `NodeSerializers.SCALAR`：只读取 YAML scalar 节点。
 - `listOf()`：处理 `List<T>`。
 - `setOf()`：处理 `Set<T>`，解码时保持 YAML 序列顺序。

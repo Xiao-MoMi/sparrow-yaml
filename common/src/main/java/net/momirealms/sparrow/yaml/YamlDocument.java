@@ -192,6 +192,17 @@ public class YamlDocument extends SectionNode {
         }
     }
 
+    @ApiStatus.Internal
+    public void replaceRootValue(@NotNull Map<?, ?> value) {
+        YamlDocument replacement = new YamlDocument(this.sparrowYaml);
+        for (Map.Entry<?, ?> entry : value.entrySet()) {
+            replacement.setSubNode(entry.getKey(), entry.getValue());
+        }
+        this.preserveFlowStyleTo(replacement);
+        this.copyCommentsTo(replacement);
+        this.replaceRoot(replacement);
+    }
+
     private static MappingNode createEmptyRoot(SparrowYaml sparrowYaml) {
         return (MappingNode) sparrowYaml.standardRepresenter().represent(new LinkedHashMap<>());
     }

@@ -162,9 +162,17 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
      * @param value 子节点的 Value;
      */
     public <T> void setSubNode(Object key, Object value) {
+        this.replaceSubNode(key, value, null);
+    }
+
+    void replaceSubNode(Object key, @Nullable Object value, @Nullable YamlNode<?> metadataSource) {
         List<AbstractYamlNode<?>> references = this.root().nodeReferences(this);
         Object adaptedKey = this.adaptKey(key);
         YamlNode<?> targetNode = this.createSubNode(adaptedKey, value);
+        if (metadataSource != null) {
+            metadataSource.preserveFlowStyleTo(targetNode);
+            metadataSource.copyCommentsTo(targetNode);
+        }
         YamlNode<?> yamlNode = this.value().get(adaptedKey);
         Node previousKeyNode = yamlNode == null ? null : yamlNode.internalKeyNode();
         if (yamlNode != null) {
@@ -385,25 +393,13 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
     }
 
     /**
-     * 递归获取当前 Section 下的原始值, 最终以 Map 形式返回.
-     * @return 原始 Map
+     * 递归获取当前 Section 的普通 Java 值, mapping key 保留实际类型.
+     *
+     * @return 按 YAML 顺序排列的 Map
      */
     @NotNull
-    public Map<String, Object> getValues() {
-        Map<String, Object> values = new LinkedHashMap<>();
-        for (Map.Entry<Object, YamlNode<?>> entry : this.value().entrySet()) {
-            YamlNode<?> node = entry.getValue();
-            Object rawValue;
-            if (node instanceof SectionNode section) {
-                rawValue = section.getValues();
-            } else if (node instanceof SequenceNode sequence) {
-                rawValue = sequence.getValues();
-            } else {
-                rawValue = node.value();
-            }
-            values.put(String.valueOf(entry.getKey()), rawValue);
-        }
-        return values;
+    public Map<Object, Object> getValues() {
+        return NodeValueProjection.sectionValues(this);
     }
 
     /**

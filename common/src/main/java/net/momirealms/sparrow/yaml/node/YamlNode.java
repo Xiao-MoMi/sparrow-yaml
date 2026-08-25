@@ -13,7 +13,6 @@ import org.snakeyaml.engine.v2.nodes.CollectionNode;
 import org.snakeyaml.engine.v2.nodes.Node;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -99,28 +98,52 @@ public interface YamlNode<T> {
     }
 
     /**
-     * 根据指定的 Class 从 {@link SerializerRegistry} 获取对应的序列化器，将目标对象序列化并设置到当前 YamlNode。
+     * 使用 Class 对应的 serializer 设置当前节点, 序列化结果形状变化时由 parent 替换节点.
+     * 发生替换后当前 wrapper 会脱离文档, 应从 parent 重新获取新节点.
+     * 根文档只接受 mapping 序列化结果.
+     *
+     * @param <R> 目标值类型
      * @param clazz 目标对象的 Class
      * @param value 目标对象
      */
-    @SuppressWarnings("unchecked")
-    default <R> void set(Class<R> clazz, R value) {
-        NodeSerializer<R> serializer = root().sparrowYaml().serializers().get(clazz);
+    default <R> void set(@NotNull Class<R> clazz, @Nullable R value) {
+        NodeSerializer<R> serializer = this.root().sparrowYaml().serializers().get(clazz);
         if (serializer != null) {
-            this.setValue((T) serializer.serialize(value));
+            this.setSerializedValue(serializer.serialize(value));
         } else {
-            this.setValue((T) value);
+            this.setSerializedValue(value);
         }
     }
 
-    @SuppressWarnings("unchecked")
-    default <R> void set(TypeRef<R> typeRef, R value) {
-        NodeSerializer<R> serializer = root().sparrowYaml().serializers().get(typeRef);
+    /**
+     * 使用 TypeRef 对应的 serializer 设置当前节点, 适用于携带泛型信息的目标值.
+     * 发生替换后当前 wrapper 会脱离文档, 应从 parent 重新获取新节点.
+     * 根文档只接受 mapping 序列化结果.
+     *
+     * @param <R> 目标值类型
+     * @param typeRef 目标对象的 TypeRef
+     * @param value 目标对象
+     */
+    default <R> void set(@NotNull TypeRef<R> typeRef, @Nullable R value) {
+        NodeSerializer<R> serializer = this.root().sparrowYaml().serializers().get(typeRef);
         if (serializer != null) {
-            this.setValue((T) serializer.serialize(value));
+            this.setSerializedValue(serializer.serialize(value));
         } else {
-            this.setValue((T) value);
+            this.setSerializedValue(value);
         }
+    }
+
+    /**
+     * 使用指定的 serializer 设置当前节点, 序列化结果形状变化时由 parent 替换节点.
+     * 发生替换后当前 wrapper 会脱离文档, 应从 parent 重新获取新节点.
+     * 根文档只接受 mapping 序列化结果.
+     *
+     * @param <R> 目标值类型
+     * @param serializer 指定的序列化器
+     * @param value 目标对象
+     */
+    default <R> void set(@NotNull NodeSerializer<R> serializer, @Nullable R value) {
+        this.setSerializedValue(serializer.serialize(value));
     }
 
     /**
@@ -255,23 +278,13 @@ public interface YamlNode<T> {
     List<CommentLine> afterValueComments();
 
     /**
-     * 提取当前节点可用于重新表示的 Java 值.
+     * 递归投影当前节点的普通 Java 值, 保留 mapping key 类型和 YAML null.
+     *
+     * @return Java 标量、List 或 Map
      */
+    @Nullable
     default Object representValue() {
-        if (this instanceof SectionNode section) {
-            Map<Object, Object> map = new LinkedHashMap<>();
-            for (Map.Entry<Object, YamlNode<?>> entry : section.value().entrySet()) {
-                map.put(entry.getKey(), entry.getValue().representValue());
-            }
-            return map;
-        } else if (this instanceof SequenceNode sequence) {
-            List<Object> list = new ArrayList<>();
-            for (YamlNode<?> element : sequence.value()) {
-                list.add(element.representValue());
-            }
-            return list;
-        }
-        return this.value();
+        return NodeValueProjection.represent(this);
     }
 
     /**
@@ -350,6 +363,32 @@ public interface YamlNode<T> {
 
     private static List<CommentLine> copyCommentLines(@Nullable List<CommentLine> comments) {
         return comments == null ? null : new ArrayList<>(comments);
+    }
+
+    private void setSerializedValue(@Nullable Object value) {
+        if (this instanceof ScalarNode scalarNode && !(value instanceof Map<?, ?>) && !(value instanceof List<?>)) {
+            scalarNode.setValue(value);
+            return;
+        }
+        if (this instanceof YamlDocument document) {
+            if (!(value instanceof Map<?, ?> map)) {
+                String actualType = value == null ? "null" : value.getClass().getName();
+                throw new IllegalArgumentException("YamlDocument 根节点只支持 Map 序列化结果, 实际类型: " + actualType);
+            }
+            document.replaceRootValue(map);
+            return;
+        }
+
+        ParentNode<?> parent = this.parentNode();
+        if (parent instanceof SectionNode sectionNode) {
+            sectionNode.replaceSubNode(this.key(), value, this);
+            return;
+        }
+        if (parent instanceof SequenceNode sequenceNode) {
+            sequenceNode.replaceSubNode((Integer) this.key(), value, this);
+            return;
+        }
+        throw new IllegalStateException("当前 Node 尚未挂载到可替换它的 ParentNode 上!");
     }
 
 }

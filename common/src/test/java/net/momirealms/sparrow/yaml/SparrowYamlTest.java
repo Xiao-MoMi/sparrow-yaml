@@ -357,7 +357,7 @@ class SparrowYamlTest {
             """);
 
             // 2. 执行阶段 (Act)
-            Map<String, Object> values = yamlDocument.getValues();
+            Map<Object, Object> values = yamlDocument.getValues();
 
             // 3. 断言阶段 (Assert)
             assertEquals(List.of("scalar", "number", "null-value", "section", "sequence"), new ArrayList<>(values.keySet()), "应按键的声明顺序返回");
@@ -365,9 +365,9 @@ class SparrowYamlTest {
             assertEquals(114514, values.get("number"));
             assertNull(values.get("null-value"), "Scalar 的 null 原始值应原样返回");
 
-            Map<String, Object> section = assertInstanceOf(Map.class, values.get("section"));
+            Map<Object, Object> section = assertInstanceOf(Map.class, values.get("section"));
             assertEquals("Catnies", section.get("user"));
-            Map<String, Object> nested = assertInstanceOf(Map.class, section.get("nested"));
+            Map<Object, Object> nested = assertInstanceOf(Map.class, section.get("nested"));
             assertEquals(2, nested.get("depth"));
 
             List<Object> sequence = assertInstanceOf(List.class, values.get("sequence"));
