@@ -179,13 +179,25 @@ public class SequenceNode extends AbstractYamlNode<List<YamlNode<?>>> implements
     }
 
     /**
-     * 递归获取当前 Sequence 的普通 Java 值, YAML null 保留为 Java null.
+     * 递归获取当前 Sequence 的原始 Java 值, 嵌套 mapping 使用 String key.
      *
-     * @return 按 YAML 顺序排列的 List
+     * @return 按 YAML 顺序排列的 List, YAML null 保留为 Java null
      */
     @NotNull
     public List<Object> getValues() {
-        return NodeValueProjection.sequenceValues(this);
+        List<YamlNode<?>> elements = this.value();
+        List<Object> values = new ArrayList<>(elements.size());
+        for (int i = 0; i < elements.size(); i++) {
+            YamlNode<?> node = elements.get(i);
+            if (node instanceof SectionNode sectionNode) {
+                values.add(sectionNode.getValues());
+            } else if (node instanceof SequenceNode sequenceNode) {
+                values.add(sequenceNode.getValues());
+            } else {
+                values.add(node.value());
+            }
+        }
+        return values;
     }
 
     void appendPreparedChild(YamlNode<?> child) {

@@ -36,7 +36,9 @@ class PublicApiConsumerTest {
         Supplier<Integer> defaultValueSupplier = () -> 7;
 
         document.setSubNode("server", Map.of("ports", List.of("25565", "25566")));
+        Map<String, Object> rawValues = document.getValues();
 
+        assertTrue(rawValues.containsKey("server"));
         assertEquals(25565, document.getInt(Route.from("server", "ports", 0)));
         assertEquals(25565, document.get(Integer.class, Route.from("server", "ports", 0)));
         assertEquals(25565, document.get(NodeSerializers.INT, Route.from("server", "ports", 0)));

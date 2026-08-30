@@ -131,7 +131,7 @@ document.set(Route.from("database", "pool"), Map.of("size", 10));
 
 对已有非根节点调用 `node.set(Class/TypeRef/NodeSerializer, value)` 时，serializer 的 Map/List/scalar 输出会替换成对应节点形状，并保留当前节点的表层注释和集合 flow style。`YamlDocument` 根节点必须保持 mapping，因此根节点的 typed set 只接受 Map 序列化结果；其它形状会在修改文档前抛出 `IllegalArgumentException`。
 
-`representValue()`、`SectionNode#getValues()` 和 `SequenceNode#getValues()` 使用同一套消费型递归投影：YAML null 转成 Java null，mapping key 保留实际 Object 类型，集合顺序保持不变。`SectionNode#getValues()` 因此返回 `Map<Object, Object>`。
+`SectionNode#getValues()` 返回 `Map<String, Object>`，每一层 mapping key 都使用 `String.valueOf` 转成字符串；`SequenceNode#getValues()` 对嵌套 mapping 使用相同规则。集合继续递归为 Map/List，ScalarNode 直接返回内部原始值，YAML null 转成 Java null。需要保留实际 Object key 时使用 `representValue()`。
 
 SnakeYAML Node 图保存结构、anchor、注释与展示样式，是文档的权威表示。`SectionNode#value()` 和 `SequenceNode#value()` 返回只读视图，结构写入必须使用 `setSubNode`、`removeSubNode`、`reorderKeys` 或 typed set。`internalValueNode()` 保留为高级 Interface，可用于读取和调整注释、flow style 等展示信息；调用方不得直接修改 Mapping/Sequence 子集合或标量内容，违反该约定的结果不由库兜底。
 
@@ -474,7 +474,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 常用组合方法：
 
 - `NodeSerializer#xmap(to, from)`：双向映射成新类型。
-- `NodeSerializers.OBJECT`：严格递归读取 YAML 值，返回 Java 标量、`List<Object>` 或 `Map<Object, Object>`；任一递归位置出现 YAML null 都会抛出 `InvalidNodeException`。需要保留 null 的宽松快照时使用节点的 `representValue()` 或 `getValues()`。
+- `NodeSerializers.OBJECT`：严格递归读取 YAML 值，返回 Java 标量、`List<Object>` 或 `Map<Object, Object>`；任一递归位置出现 YAML null 都会抛出 `InvalidNodeException`。需要保留 null 时可用 `representValue()` 获取 Object-key 投影，或用 `getValues()` 获取 String-key 原始值。
 - `NodeSerializers.SCALAR`：只读取 YAML scalar 节点。
 - `listOf()`：处理 `List<T>`。
 - `setOf()`：处理 `Set<T>`，解码时保持 YAML 序列顺序。

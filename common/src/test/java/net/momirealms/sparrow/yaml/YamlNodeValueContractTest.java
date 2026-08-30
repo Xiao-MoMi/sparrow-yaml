@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -118,7 +119,7 @@ class YamlNodeValueContractTest {
     }
 
     @Test
-    void should_UseOneLooseProjectionWhileKeepingObjectSerializerStrict() throws IOException {
+    void should_SeparateStringKeyRawValuesFromRepresentedObjectKeys() throws IOException {
         SparrowYaml yaml = SparrowYaml.builder().setAllowObjectKeys(true).build();
         YamlDocument document = yaml.load("""
                 1:
@@ -126,21 +127,34 @@ class YamlNodeValueContractTest {
                 sequence:
                   - null
                   - 2: value
+                typed:
+                  3: value
                 """);
 
-        Map<?, ?> values = document.getValues();
-        Map<?, ?> numericSection = assertInstanceOf(Map.class, values.get(1));
-        List<?> sequence = assertInstanceOf(List.class, values.get("sequence"));
-        Map<?, ?> sequenceSection = assertInstanceOf(Map.class, sequence.get(1));
+        Map<String, Object> values = document.getValues();
+        Map<?, ?> numericSection = assertInstanceOf(Map.class, values.get("1"));
+        List<?> sequenceValues = assertInstanceOf(List.class, values.get("sequence"));
+        Map<?, ?> sequenceValuesSection = assertInstanceOf(Map.class, sequenceValues.get(1));
+        Map<?, ?> typedValues = assertInstanceOf(Map.class, values.get("typed"));
+        Map<?, ?> represented = assertInstanceOf(Map.class, document.representValue());
+        List<?> representedSequence = assertInstanceOf(List.class, represented.get("sequence"));
+        Map<?, ?> representedSequenceSection = assertInstanceOf(Map.class, representedSequence.get(1));
+        Map<?, ?> representedTyped = assertInstanceOf(Map.class, represented.get("typed"));
         SequenceNode sequenceNode = document.getSequenceOrNull(Route.from("sequence"));
 
-        assertEquals(document.representValue(), values);
-        assertTrue(values.containsKey(1));
+        assertTrue(values.containsKey("1"));
+        assertFalse(values.containsKey(1));
         assertTrue(numericSection.containsKey("nested-null"));
         assertNull(numericSection.get("nested-null"));
-        assertNull(sequence.get(0));
-        assertEquals("value", sequenceSection.get(2));
-        assertEquals(sequenceNode.representValue(), sequenceNode.getValues());
+        assertNull(sequenceValues.get(0));
+        assertEquals("value", sequenceValuesSection.get("2"));
+        assertEquals("value", typedValues.get("3"));
+        assertTrue(represented.containsKey(1));
+        assertEquals("value", representedSequenceSection.get(2));
+        assertEquals("value", representedTyped.get(3));
+        assertEquals("value", assertInstanceOf(Map.class, sequenceNode.getValues().get(1)).get("2"));
+        assertEquals("value", assertInstanceOf(Map.class, assertInstanceOf(List.class, sequenceNode.representValue()).get(1)).get(2));
+        assertEquals(Map.of(3, "value"), document.get(NodeSerializers.STRING.mapOf(NodeSerializers.INT), Route.from("typed")));
         assertThrows(InvalidNodeException.class, () -> document.get(NodeSerializers.OBJECT));
     }
 

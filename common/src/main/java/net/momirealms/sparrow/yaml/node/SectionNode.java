@@ -292,13 +292,27 @@ public class SectionNode extends AbstractYamlNode<Map<Object, YamlNode<?>>> impl
     }
 
     /**
-     * 递归获取当前 Section 的普通 Java 值, mapping key 保留实际类型.
+     * 递归获取当前 Section 的原始 Java 值, mapping key 使用字符串形式.
      *
-     * @return 按 YAML 顺序排列的 Map
+     * @return 按 YAML 顺序排列的 String key Map
      */
     @NotNull
-    public Map<Object, Object> getValues() {
-        return NodeValueProjection.sectionValues(this);
+    public Map<String, Object> getValues() {
+        Map<Object, YamlNode<?>> nodes = this.value();
+        Map<String, Object> values = new LinkedHashMap<>(Math.max((int) (nodes.size() / 0.75f) + 1, 16));
+        for (Map.Entry<Object, YamlNode<?>> entry : nodes.entrySet()) {
+            YamlNode<?> node = entry.getValue();
+            Object rawValue;
+            if (node instanceof SectionNode sectionNode) {
+                rawValue = sectionNode.getValues();
+            } else if (node instanceof SequenceNode sequenceNode) {
+                rawValue = sequenceNode.getValues();
+            } else {
+                rawValue = node.value();
+            }
+            values.put(String.valueOf(entry.getKey()), rawValue);
+        }
+        return values;
     }
 
     /**
