@@ -276,6 +276,13 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
         
         SerializableMember[] injectableArr = injectables.toArray(new SerializableMember[0]);
         SerializableMember[] encodableArr = encodables.toArray(new SerializableMember[0]);
+        boolean[] keepInitializedDefaults = new boolean[injectableArr.length];
+        if (!(plan instanceof UnsafeInstantiationPlan<?>)) {
+            for (int i = 0; i < injectableArr.length; i++) {
+                SerializableMember member = injectableArr[i];
+                keepInitializedDefaults[i] = AutoSerializerSupport.isDefaultEnumSerializer(member.serializer(), TypeUtils.rawType(member.type()));
+            }
+        }
         int mapCapacity = Math.max((int) (encodableArr.length / 0.75f) + 1, 16);
 
         return NodeSerializer.createInternal(
@@ -288,13 +295,18 @@ public class ReflectionAutoSerializerFactory implements AutoSerializerFactory {
                 T instance = plan.instantiate(sectionNode);
 
                 // 字段注入过程
-                for (SerializableMember member : injectableArr) {
+                for (int i = 0; i < injectableArr.length; i++) {
+                    SerializableMember member = injectableArr[i];
                     YamlNode<?> child = sectionNode.getNodeOrNull(Route.from(member.name()));
                     if (child == null) {
                         continue;
                     }
-                    Object decoded = member.serializer().deserialize(child);
-                    member.set(instance, decoded != null ? decoded : TypeUtils.defaultValue(TypeUtils.rawType(member.type())));
+                    Object decoded = keepInitializedDefaults[i]
+                            ? AutoSerializerSupport.deserializeOrKeepDefault(member.serializer(), child, member, instance)
+                            : member.serializer().deserialize(child);
+                    if (decoded != null) {
+                        member.set(instance, decoded);
+                    }
                 }
 
                 return instance;

@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -287,6 +288,53 @@ class SparrowYamlAnnotationTest {
         private String online_mode;
     }
 
+    public enum CompressionStrategy {
+        ZSTD,
+        DEFLATE
+    }
+
+    @Configuration
+    public static class EnumFallbackConfig {
+        private CompressionStrategy compression = CompressionStrategy.ZSTD;
+        private String marker = "default";
+    }
+
+    @Configuration
+    public static class EnumWithoutDefaultConfig {
+        private CompressionStrategy compression;
+    }
+
+    public static class GenericEnumBase<T extends Enum<T>> {
+        protected T compression;
+    }
+
+    @Configuration
+    public static class GenericEnumFallbackConfig extends GenericEnumBase<CompressionStrategy> {
+        public GenericEnumFallbackConfig() {
+            this.compression = CompressionStrategy.ZSTD;
+        }
+    }
+
+    @Configuration
+    public static class EnumListConfig {
+        private List<CompressionStrategy> compression = List.of(CompressionStrategy.ZSTD);
+    }
+
+    @Configuration
+    public record EnumRecordConfig(CompressionStrategy compression) {
+    }
+
+    @Configuration
+    public static class UnsafeEnumConfig {
+        private CompressionStrategy compression = CompressionStrategy.ZSTD;
+
+        public UnsafeEnumConfig(String ignored) {
+        }
+
+        public UnsafeEnumConfig(int ignored) {
+        }
+    }
+
     @Test
     void testLoadObjectAndInjectComments() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
@@ -335,6 +383,15 @@ class SparrowYamlAnnotationTest {
         mapper.save(path, config);
         KeyedConfig reloaded = mapper.loadValue(path);
         assertEquals(config.values(), reloaded.values());
+    }
+
+    @Test
+    void should_KeepInitializedEnumField_When_ConfigValueIsUnknown(@TempDir Path tempDir) throws Exception {
+        assertAll(
+                () -> assertEnumFallbackContract(AutoSerializerMode.ADAPTIVE, tempDir),
+                () -> assertEnumFallbackContract(AutoSerializerMode.ASM, tempDir),
+                () -> assertEnumFallbackContract(AutoSerializerMode.REFLECTION, tempDir)
+        );
     }
 
     @Test
@@ -1091,6 +1148,81 @@ class SparrowYamlAnnotationTest {
             assertEquals("root", loaded.name);
             assertEquals("root", loaded.child.name);
         }
+    }
+
+    private static void assertEnumFallbackContract(AutoSerializerMode mode, Path tempDir) throws Exception {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().setAutoSerializerMode(mode).build();
+        YamlMapper<EnumFallbackConfig> mapper = sparrowYaml.mapper(EnumFallbackConfig.class, EnumFallbackConfig::new);
+        String modeName = mode.name().toLowerCase(Locale.ROOT);
+        Path unknownPath = tempDir.resolve("unknown-enum-" + modeName + ".yml");
+        Files.writeString(unknownPath, "compression: ZTSD\nmarker: loaded");
+
+        EnumFallbackConfig fallback = mapper.loadValue(unknownPath);
+
+        assertEquals(CompressionStrategy.ZSTD, fallback.compression);
+        assertEquals("loaded", fallback.marker);
+
+        Path emptyPath = tempDir.resolve("empty-enum-" + modeName + ".yml");
+        Files.writeString(emptyPath, "compression: ''\nmarker: loaded");
+        assertEquals(CompressionStrategy.ZSTD, mapper.loadValue(emptyPath).compression);
+
+        Path knownPath = tempDir.resolve("known-enum-" + modeName + ".yml");
+        Files.writeString(knownPath, "compression: deflate\nmarker: loaded");
+        assertEquals(CompressionStrategy.DEFLATE, mapper.loadValue(knownPath).compression);
+
+        Path wrongShapePath = tempDir.resolve("wrong-enum-shape-" + modeName + ".yml");
+        Files.writeString(wrongShapePath, "compression:\n  value: ZSTD");
+        assertThrows(InvalidNodeException.class, () -> mapper.loadValue(wrongShapePath));
+
+        Path listPath = tempDir.resolve("unknown-enum-list-" + modeName + ".yml");
+        Files.writeString(listPath, "compression: [ZSTD, ZTSD]");
+        YamlMapper<EnumListConfig> listMapper = sparrowYaml.mapper(EnumListConfig.class, EnumListConfig::new);
+        assertThrows(InvalidNodeException.class, () -> listMapper.loadValue(listPath));
+
+        Path recordPath = tempDir.resolve("unknown-enum-record-" + modeName + ".yml");
+        Files.writeString(recordPath, "compression: ZTSD");
+        YamlMapper<EnumRecordConfig> recordMapper = sparrowYaml.mapper(EnumRecordConfig.class, () -> new EnumRecordConfig(CompressionStrategy.ZSTD));
+        assertThrows(InvalidNodeException.class, () -> recordMapper.loadValue(recordPath));
+
+        Path unsafePath = tempDir.resolve("unknown-enum-unsafe-" + modeName + ".yml");
+        Files.writeString(unsafePath, "compression: ZTSD");
+        YamlMapper<UnsafeEnumConfig> unsafeMapper = sparrowYaml.mapper(UnsafeEnumConfig.class, () -> new UnsafeEnumConfig(0));
+        assertThrows(InvalidNodeException.class, () -> unsafeMapper.loadValue(unsafePath));
+
+        Path noDefaultPath = tempDir.resolve("unknown-enum-without-default-" + modeName + ".yml");
+        Files.writeString(noDefaultPath, "compression: ZTSD");
+        YamlMapper<EnumWithoutDefaultConfig> noDefaultMapper = sparrowYaml.mapper(EnumWithoutDefaultConfig.class, EnumWithoutDefaultConfig::new);
+        assertThrows(InvalidNodeException.class, () -> noDefaultMapper.loadValue(noDefaultPath));
+
+        Path genericPath = tempDir.resolve("unknown-generic-enum-" + modeName + ".yml");
+        Files.writeString(genericPath, "compression: ZTSD");
+        YamlMapper<GenericEnumFallbackConfig> genericMapper = sparrowYaml.mapper(GenericEnumFallbackConfig.class, GenericEnumFallbackConfig::new);
+        assertEquals(CompressionStrategy.ZSTD, genericMapper.loadValue(genericPath).compression);
+
+        SparrowYaml customYaml = SparrowYaml.builder().setAutoSerializerMode(mode).build();
+        customYaml.serializers().register(CompressionStrategy.class, NodeSerializer.createInternal(
+                CompressionStrategy.class,
+                node -> {
+                    throw new InvalidNodeException(node, CompressionStrategy.class);
+                },
+                Enum::name
+        ));
+        YamlMapper<EnumFallbackConfig> customMapper = customYaml.mapper(EnumFallbackConfig.class, EnumFallbackConfig::new);
+        Path customPath = tempDir.resolve("custom-enum-" + modeName + ".yml");
+        Files.writeString(customPath, "compression: DEFLATE");
+        assertThrows(InvalidNodeException.class, () -> customMapper.loadValue(customPath));
+
+        SparrowYaml delegatingYaml = SparrowYaml.builder().setAutoSerializerMode(mode).build();
+        NodeSerializer<CompressionStrategy> canonical = NodeSerializers.enumCodec(CompressionStrategy.class);
+        delegatingYaml.serializers().register(CompressionStrategy.class, NodeSerializer.createInternal(
+                CompressionStrategy.class,
+                canonical::deserialize,
+                Enum::name
+        ));
+        YamlMapper<EnumFallbackConfig> delegatingMapper = delegatingYaml.mapper(EnumFallbackConfig.class, EnumFallbackConfig::new);
+        Path delegatingPath = tempDir.resolve("delegating-enum-" + modeName + ".yml");
+        Files.writeString(delegatingPath, "compression: ZTSD");
+        assertThrows(InvalidNodeException.class, () -> delegatingMapper.loadValue(delegatingPath));
     }
 
     private static void withMissingResourcePath(String fileName, ResourcePathTest test) throws Exception {

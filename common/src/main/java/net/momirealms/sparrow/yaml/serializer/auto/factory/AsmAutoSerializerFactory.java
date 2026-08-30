@@ -144,7 +144,7 @@ public class AsmAutoSerializerFactory implements AutoSerializerFactory {
 
             Map<TypeVariable<?>, java.lang.reflect.Type> fieldVariables = field.typeVariables != null ? field.typeVariables : typeVariables;
             java.lang.reflect.Type fieldType = TypeUtils.normalize(field.genericType, fieldVariables);
-            bindings.add(new ClassMeta.FieldBinding(field, ctx.resolve(fieldType), serializerIndex++, bindings.size()));
+            bindings.add(new ClassMeta.FieldBinding(field, ctx.resolve(fieldType), TypeUtils.rawType(fieldType), serializerIndex++, bindings.size()));
         }
 
         return bindings;

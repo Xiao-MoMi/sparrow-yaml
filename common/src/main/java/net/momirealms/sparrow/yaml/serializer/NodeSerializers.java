@@ -3,12 +3,14 @@ package net.momirealms.sparrow.yaml.serializer;
 import net.momirealms.sparrow.yaml.exception.InvalidNodeException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
 import net.momirealms.sparrow.yaml.exception.NodeParsingException;
+import net.momirealms.sparrow.yaml.exception.UnknownEnumValueException;
 import net.momirealms.sparrow.yaml.node.ScalarNode;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
 import net.momirealms.sparrow.yaml.serializer.builder.MappingBuilder;
 import net.momirealms.sparrow.yaml.serializer.builder.SequenceBuilder;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -252,25 +254,36 @@ public final class NodeSerializers {
     }
 
     private static <E extends Enum<E>> NodeSerializer<E> createEnumCodec(Class<E> enumClass) {
-        return scalar(
+        return NodeSerializer.createInternal(
                 enumClass,
-                value -> {
-                    String upperValue = value.toUpperCase(Locale.ROOT);
-                    try {
-                        return Enum.valueOf(enumClass, upperValue);
-                    } catch (IllegalArgumentException ignored) {
-                        if (upperValue.equals(value)) {
-                            return null;
-                        }
-                        try {
-                            return Enum.valueOf(enumClass, value);
-                        } catch (IllegalArgumentException ignoredAgain) {
-                            return null;
-                        }
+                node -> {
+                    Object raw = scalarValue(node, enumClass);
+                    String value = raw.toString();
+                    E result = enumValue(enumClass, value);
+                    if (result == null) {
+                        throw new UnknownEnumValueException(node, enumClass);
                     }
+                    return result;
                 },
                 Enum::name
         );
+    }
+
+    @Nullable
+    private static <E extends Enum<E>> E enumValue(Class<E> enumClass, String value) {
+        String upperValue = value.toUpperCase(Locale.ROOT);
+        try {
+            return Enum.valueOf(enumClass, upperValue);
+        } catch (IllegalArgumentException ignored) {
+            if (upperValue.equals(value)) {
+                return null;
+            }
+            try {
+                return Enum.valueOf(enumClass, value);
+            } catch (IllegalArgumentException ignoredAgain) {
+                return null;
+            }
+        }
     }
 
     /**

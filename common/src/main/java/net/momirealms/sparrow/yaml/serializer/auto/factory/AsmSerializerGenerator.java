@@ -48,6 +48,7 @@ final class AsmSerializerGenerator {
     private static final String ENC = "net/momirealms/sparrow/yaml/serializer/NodeSerializer$Encoder";
     private static final String FA = "net/momirealms/sparrow/yaml/serializer/auto/accessor/FieldAccessor";
     private static final String INST = "net/momirealms/sparrow/yaml/serializer/auto/factory/ObjectInstantiator";
+    private static final String SUPPORT = "net/momirealms/sparrow/yaml/serializer/auto/factory/AutoSerializerSupport";
     private static final String YN = "net/momirealms/sparrow/yaml/node/YamlNode";
     private static final String SEC = "net/momirealms/sparrow/yaml/node/SectionNode";
     private static final String ROUTE = "net/momirealms/sparrow/yaml/route/Route";
@@ -183,7 +184,7 @@ final class AsmSerializerGenerator {
                 method.visitVarInsn(ASTORE, childVar);
                 method.visitVarInsn(ALOAD, childVar);
                 method.visitJumpInsn(IFNULL, missing);
-                emitDeserializeValue(method, generatedName, serializerIndex, descriptor, childVar, decodedVar);
+                emitDeserializeValue(method, generatedName, serializerIndex, descriptor, childVar, decodedVar, -1, -1, false);
                 method.visitVarInsn(ALOAD, decodedVar);
                 method.visitJumpInsn(GOTO, done);
                 method.visitLabel(missing);
@@ -216,7 +217,14 @@ final class AsmSerializerGenerator {
             method.visitVarInsn(ALOAD, childVar);
             method.visitJumpInsn(IFNULL, skip);
 
-            emitDeserializeValue(method, generatedName, binding.index, binding.field.descriptor, childVar, decodedVar);
+            boolean keepInitializedDefault = !constructor.unsafe
+                    && AutoSerializerSupport.isDefaultEnumSerializer(binding.serializer, binding.rawType);
+            emitDeserializeValue(method, generatedName, binding.index, binding.field.descriptor, childVar, decodedVar, binding.accessorIndex, instanceVar, keepInitializedDefault);
+            if (keepInitializedDefault) {
+                // 未知枚举返回 null, 跳过 setter 后保留构造器写入的字段初始值.
+                method.visitVarInsn(ALOAD, decodedVar);
+                method.visitJumpInsn(IFNULL, skip);
+            }
 
             emitLoadAccessor(method, generatedName, binding.accessorIndex);
             method.visitVarInsn(ALOAD, instanceVar);
@@ -232,14 +240,23 @@ final class AsmSerializerGenerator {
             int serializerIndex,
             String descriptor,
             int childVar,
-            int decodedVar
+            int decodedVar,
+            int accessorIndex,
+            int instanceVar,
+            boolean keepInitializedDefault
     ) {
         method.visitVarInsn(ALOAD, 0);
         method.visitFieldInsn(GETFIELD, generatedName, "sers", "[L" + SER + ";");
         method.visitLdcInsn(serializerIndex);
         method.visitInsn(AALOAD);
         method.visitVarInsn(ALOAD, childVar);
-        method.visitMethodInsn(INVOKEVIRTUAL, SER, "deserialize", "(L" + YN + ";)Ljava/lang/Object;", false);
+        if (keepInitializedDefault) {
+            emitLoadAccessor(method, generatedName, accessorIndex);
+            method.visitVarInsn(ALOAD, instanceVar);
+            method.visitMethodInsn(INVOKESTATIC, SUPPORT, "deserializeOrKeepDefault", "(L" + SER + ";L" + YN + ";L" + FA + ";Ljava/lang/Object;)Ljava/lang/Object;", false);
+        } else {
+            method.visitMethodInsn(INVOKEVIRTUAL, SER, "deserialize", "(L" + YN + ";)Ljava/lang/Object;", false);
+        }
         method.visitVarInsn(ASTORE, decodedVar);
 
         Label nonNull = new Label();

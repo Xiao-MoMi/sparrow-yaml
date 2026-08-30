@@ -55,16 +55,18 @@ final class ClassMeta {
     static final class FieldBinding {
         final FieldEntry field; // 字段元数据; 构造器参数占位绑定也会用合成 FieldEntry 表示.
         final NodeSerializer<?> serializer; // 字段或构造器参数对应的序列化器.
+        final Class<?> rawType; // 解析泛型变量后的字段原始类型, 合成绑定为 null.
         final int index; // 在生成类 sers 数组中的索引.
         final int accessorIndex; // 在生成类 accessors 数组中的索引, 构造器参数绑定为 -1.
 
         FieldBinding(FieldEntry field, NodeSerializer<?> serializer, int index) {
-            this(field, serializer, index, -1);
+            this(field, serializer, null, index, -1);
         }
 
-        FieldBinding(FieldEntry field, NodeSerializer<?> serializer, int index, int accessorIndex) {
+        FieldBinding(FieldEntry field, NodeSerializer<?> serializer, Class<?> rawType, int index, int accessorIndex) {
             this.field = field;
             this.serializer = serializer;
+            this.rawType = rawType;
             this.index = index;
             this.accessorIndex = accessorIndex;
         }

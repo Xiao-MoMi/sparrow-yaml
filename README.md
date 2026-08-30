@@ -279,7 +279,7 @@ var registry = yaml.serializers();
 - `Duration`
 - `Period`
 
-枚举可以通过 `NodeSerializers.enumCodec(MyEnum.class)` 获取序列化器；自动序列化 record/class 字段时也会解析枚举字段。解码先按大写名称匹配，未命中再按 `enum.name()` 的真实名称精确匹配；编码写出真实名称。
+枚举可以通过 `NodeSerializers.enumCodec(MyEnum.class)` 获取序列化器；自动序列化 record/class 字段时也会解析枚举字段。解码先按大写名称匹配，未命中再按 `enum.name()` 的真实名称精确匹配；编码写出真实名称。直接读取未知名称仍会抛出 `InvalidNodeException`。
 
 ### 自定义序列化器
 
@@ -464,6 +464,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 - 字段或元素存在但基础 serializer 解码失败时是 `InvalidNodeException`，异常会携带当前路径、当前值类型和目标 Java 类型。
 - 自定义 reader、`xmap(...)` 解码映射函数、builder 构造函数或底层依赖抛出普通 `RuntimeException` / 非致命 `LinkageError` 时是 `UnexpectedNodeParsingException`，异常会携带当前路径、当前值类型、目标 Java 类型和原始 cause。
 - 基础类型 serializer 遇到解析错误时会直接抛出 `InvalidNodeException`，不再用 `null` 表达错误值。
+- 自动反序列化普通 class 的直接枚举字段时，未知标量名称会保留构造器已经写入的非 null 字段初始值，其余字段继续加载；字段没有可用初始值，以及 record/构造器参数、Unsafe 分配、集合内枚举和自定义 serializer 仍按失败处理。
 - 字段/元素节点存在但 scalar value 为 `null` 时，会先被访问层当作缺失处理；直接读取该 scalar 节点仍是 `InvalidNodeException`。
 - `listOf()`、`setOf()`、`mapOf()` 遇到错误根节点形态时也会抛出 `InvalidNodeException`。
 - `xmap(...)` 的解码映射函数返回 `null` 时会抛出 `InvalidNodeException`，抛普通异常时会抛出 `UnexpectedNodeParsingException`。
@@ -646,6 +647,7 @@ AppConfig config = mapper.loadValue(Path.of("config.yml"));
 
 - 文件不存在时，调用 `defaultInstanceSupplier` 创建默认配置实例，将它序列化成 YAML 文件并返回该实例。
 - 文件存在时，读取文件并反序列化成配置对象。
+- 普通 class 的直接枚举字段遇到未知标量名称时，保留实际构造对象中的非 null 字段初始化值并继续读取其他字段。字段当前为 null 时仍抛出 `InvalidNodeException`，不会猜测首个枚举常量。
 - 配置了 `YamlUpgradePipeline` 时，会把 `defaultInstanceSupplier` 返回的默认实例序列化成默认文档，再用升级管线比较本地版本和目标版本；版本不同则升级、保存、再反序列化。
 - 升级时配置类中的 `Map<K, V>` 字段（含嵌套配置类中的 Map 字段）会被自动登记为动态 Section：字段本身缺失时仍会补齐默认条目，但字段内的键值属于用户数据，不会被默认实例的内容合并或清理。
 - `backupOnUpgrade(true)` 只会在实际发生升级且写回文件前备份原文件；`backupPathResolver(...)` 可以自定义备份路径，默认路径为 `原文件名.bak.<timestamp>`。
