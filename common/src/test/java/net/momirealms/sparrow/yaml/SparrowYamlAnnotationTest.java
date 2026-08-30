@@ -87,6 +87,39 @@ class SparrowYamlAnnotationTest {
         public NestedConfig getDebug() { return debug; }
     }
 
+    @Configuration(naming = Configuration.Naming.KEBAB_CASE)
+    public static class NestedCommentConfig {
+        @Comment("Do not modify this value")
+        private String configVersion = "1";
+
+        @BlankLineBefore
+        @Comment("Synchronization settings")
+        private SynchronizationSettings synchronization = new SynchronizationSettings();
+    }
+
+    // 嵌套配置类的命名风格按自身类型解析, 不继承外层
+    @Configuration(naming = Configuration.Naming.SNAKE_CASE)
+    public static class SynchronizationSettings {
+        @Comment({
+                "Number of worker threads handling per-player tasks",
+                "Tasks of one player always run on the same worker in submission order"
+        })
+        private int workerThreads = 4;
+
+        @BlankLineBefore
+        @Comment("How long to wait for pending saves")
+        private int shutdownTimeoutSeconds = 60;
+    }
+
+    @Configuration
+    public static class SelfRefNodeConfig {
+        @Comment("Node name")
+        private String name = "root";
+
+        @Comment("Child node")
+        private SelfRefNodeConfig child = null;
+    }
+
     @Configuration
     public static class VersionedConfig {
         @YamlProperty("config-version")
@@ -277,6 +310,7 @@ class SparrowYamlAnnotationTest {
         
         assertTrue(yamlString.contains("# Nested Config"));
         assertTrue(yamlString.contains("nested:"));
+        assertTrue(yamlString.contains("# Enable something"));
         assertTrue(yamlString.contains("enabled: true"));
         
         assertTrue(yamlString.contains("users:"));
@@ -962,6 +996,57 @@ class SparrowYamlAnnotationTest {
         assertTrue(yamlString.contains("24454"), yamlString);
         assertTrue(yamlString.contains("# Record port"), yamlString);
         assertTrue(yamlString.contains("# Generated record port"), yamlString);
+    }
+
+    @Test
+    void should_ApplyNestedConfigComments_When_SavingConfig() throws IOException {
+        AutoSerializerMode[] modes = {AutoSerializerMode.REFLECTION, AutoSerializerMode.ASM};
+        for (int i = 0; i < modes.length; i++) {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().setAutoSerializerMode(modes[i]).build();
+            YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+            YamlMapper<NestedCommentConfig> mapper = factory.create(NestedCommentConfig.class, NestedCommentConfig::new);
+
+            Path tempFile = Files.createTempFile("nested_comment_config_" + modes[i].name().toLowerCase(Locale.ROOT), ".yml");
+            mapper.save(tempFile, new NestedCommentConfig());
+
+            String saved = Files.readString(tempFile).replace("\r\n", "\n");
+
+            assertTrue(saved.contains("# Do not modify this value\nconfig-version: '1'"), saved);
+            assertTrue(saved.contains("\n\n# Synchronization settings\nsynchronization:"), saved);
+            assertTrue(saved.contains("  # Number of worker threads handling per-player tasks\n  # Tasks of one player always run on the same worker in submission order\n  worker_threads: 4"), saved);
+            assertTrue(saved.contains("  # How long to wait for pending saves\n  shutdown_timeout_seconds: 60"), saved);
+
+            NestedCommentConfig loaded = mapper.load(tempFile).value();
+            assertEquals(4, loaded.synchronization.workerThreads);
+            assertEquals(60, loaded.synchronization.shutdownTimeoutSeconds);
+        }
+    }
+
+    @Test
+    void should_NotOverflow_When_ConfigTypeIsSelfReferential() throws IOException {
+        AutoSerializerMode[] modes = {AutoSerializerMode.REFLECTION, AutoSerializerMode.ASM};
+        for (int i = 0; i < modes.length; i++) {
+            SparrowYaml sparrowYaml = SparrowYaml.builder().setAutoSerializerMode(modes[i]).build();
+            YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
+            YamlMapper<SelfRefNodeConfig> mapper = factory.create(SelfRefNodeConfig.class, SelfRefNodeConfig::new);
+
+            SelfRefNodeConfig config = new SelfRefNodeConfig();
+            config.child = new SelfRefNodeConfig();
+
+            Path tempFile = Files.createTempFile("self_ref_config_" + modes[i].name().toLowerCase(Locale.ROOT), ".yml");
+            mapper.save(tempFile, config);
+
+            // 自引用类型的注释只收集到首个层级, 更深层级按环切断
+            String saved = Files.readString(tempFile).replace("\r\n", "\n");
+
+            assertTrue(saved.contains("# Node name\nname: root"), saved);
+            assertTrue(saved.contains("# Child node\nchild:"), saved);
+            assertTrue(saved.contains("child:\n  name: root"), saved);
+
+            SelfRefNodeConfig loaded = mapper.load(tempFile).value();
+            assertEquals("root", loaded.name);
+            assertEquals("root", loaded.child.name);
+        }
     }
 
     private static void withMissingResourcePath(String fileName, ResourcePathTest test) throws Exception {

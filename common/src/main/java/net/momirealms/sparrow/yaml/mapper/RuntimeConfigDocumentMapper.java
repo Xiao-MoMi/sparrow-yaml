@@ -46,7 +46,7 @@ import java.util.Set;
  */
 final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     private final Class<T> type; // 配置类类型
-    private final List<CommentBinding> comments; // 保存时需要应用到顶层键的注释
+    private final List<CommentBinding> comments; // 保存时需要应用到各层级键的注释
     private final List<RequiredProperty> requiredProperties;
     private final List<Route> dynamicSectionRoutes; // 子节点属于动态用户数据的 Section 路由, 即 Map 字段对应的路由
 
@@ -112,11 +112,11 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     }
 
     /**
-     * 将收集到的 Comment 注解应用到文档顶层节点.
+     * 将收集到的 Comment 注解应用到文档各层级节点.
      */
     private void applyComments(YamlDocument doc) {
         for (CommentBinding binding : comments) {
-            YamlNode<?> node = doc.getNodeOrNull(Route.from(binding.key));
+            YamlNode<?> node = doc.getNodeOrNull(binding.route());
             if (node == null) {
                 continue;
             }
@@ -170,31 +170,43 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     }
 
     /**
-     * 收集字段或 record 组件上的 Comment 注解.
+     * 递归收集字段或 record 组件上的 Comment 注解, 包括嵌套配置类中的字段.
+     * 命名风格按字段所属类型解析, 不从外层配置类继承.
      */
     private static List<CommentBinding> collectComments(Class<?> type) {
         List<CommentBinding> result = new ArrayList<>();
+        collectComments(type, null, new HashSet<>(), result);
+        return result;
+    }
+
+    private static void collectComments(Class<?> type, Route prefix, Set<Class<?>> visiting, List<CommentBinding> result) {
+        if (!visiting.add(type)) {
+            return;
+        }
         Configuration.Naming naming = Configuration.Naming.of(type);
         if (type.isRecord()) {
             for (RecordComponent component : type.getRecordComponents()) {
                 if (component.isAnnotationPresent(YamlIgnore.class)) {
                     continue;
                 }
+                Route route = Route.addTo(prefix, yamlKey(component, naming));
                 Comment comment = component.getAnnotation(Comment.class);
                 InlineComment inlineComment = component.getAnnotation(InlineComment.class);
                 AfterComment afterComment = component.getAnnotation(AfterComment.class);
                 BlankLineBefore blankLineBefore = component.getAnnotation(BlankLineBefore.class);
                 if (comment != null || inlineComment != null || afterComment != null || blankLineBefore != null) {
                     result.add(new CommentBinding(
-                            yamlKey(component, naming),
+                            route,
                             blankLinesBefore(blankLineBefore),
                             before(comment),
                             inline(inlineComment),
                             after(afterComment)
                     ));
                 }
+                collectMemberComments(component.getGenericType(), route, visiting, result);
             }
-            return result;
+            visiting.remove(type);
+            return;
         }
 
         for (Field field : declaredFieldsInHierarchy(type)) {
@@ -202,21 +214,35 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
             if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers) || field.isAnnotationPresent(YamlIgnore.class)) {
                 continue;
             }
+            Route route = Route.addTo(prefix, yamlKey(field, naming));
             Comment comment = field.getAnnotation(Comment.class);
             InlineComment inlineComment = field.getAnnotation(InlineComment.class);
             AfterComment afterComment = field.getAnnotation(AfterComment.class);
             BlankLineBefore blankLineBefore = field.getAnnotation(BlankLineBefore.class);
             if (comment != null || inlineComment != null || afterComment != null || blankLineBefore != null) {
                 result.add(new CommentBinding(
-                        yamlKey(field, naming),
+                        route,
                         blankLinesBefore(blankLineBefore),
                         before(comment),
                         inline(inlineComment),
                         after(afterComment)
                 ));
             }
+            collectMemberComments(field.getGenericType(), route, visiting, result);
         }
-        return result;
+        visiting.remove(type);
+    }
+
+    private static void collectMemberComments(Type memberType, Route route, Set<Class<?>> visiting, List<CommentBinding> result) {
+        Class<?> rawType;
+        try {
+            rawType = TypeUtils.rawType(memberType);
+        } catch (AutoSerializerException e) {
+            return; // 无法确定原始类型的成员交由序列化层报告, 不参与注释收集.
+        }
+        if (isNestedConfigCandidate(rawType)) {
+            collectComments(rawType, route, visiting, result);
+        }
     }
 
     /**
@@ -383,9 +409,9 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     }
 
     /**
-     * 单个 YAML 键对应的注释绑定.
+     * 单个 YAML 键对应的注释绑定, route 为从文档根出发的完整路由.
      */
-    private record CommentBinding(String key, int blankLinesBefore, String[] before, String[] inline, String[] after) {
+    private record CommentBinding(Route route, int blankLinesBefore, String[] before, String[] inline, String[] after) {
     }
 
     private record RequiredProperty(String key, Class<?> targetType) {
