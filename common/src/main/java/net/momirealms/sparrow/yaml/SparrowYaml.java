@@ -1,5 +1,8 @@
 package net.momirealms.sparrow.yaml;
 
+import net.momirealms.sparrow.yaml.internal.YamlFileLifecycle;
+import net.momirealms.sparrow.yaml.mapper.YamlMapper;
+import net.momirealms.sparrow.yaml.mapper.YamlMapperFactory;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
@@ -15,8 +18,10 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class SparrowYaml {
     private final LoadSettings loadSettings;
@@ -104,18 +109,46 @@ public class SparrowYaml {
     }
 
     /**
-     * 从 Jar 的资源文件中读取并创建一个 YamlDocument;
-     * @param resourceName 资源文件, 如 "config.yml"
-     * @return YamlDocument
+     * 从 Sparrow YAML 所属 ClassLoader 的资源中读取文档.
+     *
+     * @param resourceName classpath 根目录下的资源名, 如 "config.yml"
+     * @return 读取到的 YAML 文档
+     * @throws IOException 当资源不存在或读取失败时
      */
-    public YamlDocument loadFromResource(String resourceName) throws IOException {
-        Objects.requireNonNull(resourceName, "Resource name cannot be null");
-        InputStream inputStream = getClass().getClassLoader().getResourceAsStream(resourceName);
+    @NotNull
+    public YamlDocument loadFromResource(@NotNull String resourceName) throws IOException {
+        return this.loadFromResource(this.getClass().getClassLoader(), resourceName);
+    }
+
+    /**
+     * 从指定类所属 ClassLoader 的资源中读取文档.
+     *
+     * @param resourceAnchor 定义资源归属 ClassLoader 的类, <strong>必须由非 bootstrap ClassLoader 加载</strong>
+     * @param resourceName classpath 根目录下的资源名, 如 "config.yml"
+     * @return 读取到的 YAML 文档
+     * @throws IOException 当资源不存在或读取失败时
+     */
+    @NotNull
+    public YamlDocument loadFromResource(@NotNull Class<?> resourceAnchor, @NotNull String resourceName) throws IOException {
+        return this.loadFromResource(resourceAnchor.getClassLoader(), resourceName);
+    }
+
+    /**
+     * 从指定 ClassLoader 的资源中读取文档.
+     *
+     * @param classLoader 资源所属的 ClassLoader
+     * @param resourceName classpath 根目录下的资源名, 如 "config.yml"
+     * @return 读取到的 YAML 文档
+     * @throws IOException 当资源不存在或读取失败时
+     */
+    @NotNull
+    public YamlDocument loadFromResource(@NotNull ClassLoader classLoader, @NotNull String resourceName) throws IOException {
+        InputStream inputStream = classLoader.getResourceAsStream(resourceName);
         if (inputStream == null) {
             throw new IOException("Resource not found: " + resourceName);
         }
         try (inputStream) {
-            return load(inputStream);
+            return this.load(inputStream);
         }
     }
 
@@ -136,43 +169,87 @@ public class SparrowYaml {
     }
 
     /**
-     * 读取本地文件, 传入定义文件, 然后尝试更新和保存文件, 最后返回一个完成更新的Yaml文档.
+     * 使用当前 SparrowYaml 的设置为配置类创建文件 Mapper.
+     *
+     * @param clazz 配置类
+     * @param defaultInstanceSupplier 默认配置实例提供器
+     * @param <T> 配置类型
+     * @return 使用当前 SparrowYaml 的 Mapper
+     */
+    @NotNull
+    public <T> YamlMapper<T> mapper(@NotNull Class<T> clazz, @NotNull Supplier<T> defaultInstanceSupplier) {
+        return YamlMapperFactory.builder().sparrowYaml(this).build().create(clazz, defaultInstanceSupplier);
+    }
+
+    /**
+     * 通过 File 读取或创建本地文档, 并在版本落后时升级和保存.
      *
      * @param localFile 本地文件
-     * @param defDocument 定义文件
+     * @param defDocument 当前版本的默认文档
      * @param pipeline 更新管道
-     * @param backup 是否要备份文件
-     * @return 更新完成的Yaml文档
+     * @param backup 是否在实际升级时备份原文件
+     * @return 当前版本的本地文档
+     * @throws IOException 当读取、备份或保存失败时
      */
-    public YamlDocument upgradeFile(File localFile, YamlDocument defDocument, YamlUpgradePipeline pipeline, boolean backup) throws IOException {
-        Objects.requireNonNull(localFile, "localFile");
+    @NotNull
+    public YamlDocument upgradeFile(@NotNull File localFile, @NotNull YamlDocument defDocument, @NotNull YamlUpgradePipeline pipeline, boolean backup) throws IOException {
+        return this.upgradeFile(localFile.toPath(), defDocument, pipeline, backup);
+    }
+
+    /**
+     * 通过 File 和固定备份路径读取或升级本地文档.
+     *
+     * @param localFile 本地文件
+     * @param defDocument 当前版本的默认文档
+     * @param pipeline 更新管道
+     * @param backupPath 实际升级时使用的备份路径, null 表示不备份
+     * @return 当前版本的本地文档
+     * @throws IOException 当读取、备份或保存失败时
+     */
+    @NotNull
+    public YamlDocument upgradeFile(@NotNull File localFile, @NotNull YamlDocument defDocument, @NotNull YamlUpgradePipeline pipeline, @Nullable Path backupPath) throws IOException {
+        return this.upgradeFile(localFile.toPath(), defDocument, pipeline, backupPath);
+    }
+
+    /**
+     * 通过 File 和动态备份路径读取或升级本地文档.
+     *
+     * @param localFile 本地文件
+     * @param defDocument 当前版本的默认文档
+     * @param pipeline 更新管道
+     * @param backupPathResolver 实际升级时调用的备份路径解析器, <strong>被调用时必须返回非 null Path</strong>, null 表示不备份
+     * @return 当前版本的本地文档
+     * @throws IOException 当读取、备份或保存失败时
+     */
+    @NotNull
+    public YamlDocument upgradeFile(@NotNull File localFile, @NotNull YamlDocument defDocument, @NotNull YamlUpgradePipeline pipeline, @Nullable Function<Path, Path> backupPathResolver) throws IOException {
+        return this.upgradeFile(localFile.toPath(), defDocument, pipeline, backupPathResolver);
+    }
+
+    /**
+     * 读取或创建本地文件, 并在版本落后时升级和保存文档.
+     *
+     * @param localPath 本地文件路径
+     * @param defDocument 当前版本的默认文档
+     * @param pipeline 更新管道
+     * @param backup 是否在实际升级时备份原文件
+     * @return 当前版本的本地文档
+     * @throws IOException 当读取、备份或保存失败时
+     */
+    @NotNull
+    public YamlDocument upgradeFile(@NotNull Path localPath, @NotNull YamlDocument defDocument, @NotNull YamlUpgradePipeline pipeline, boolean backup) throws IOException {
         Function<Path, Path> backupPathResolver = backup ? defaultBackupPathResolver() : null;
-        return this.upgradeFile(localFile, defDocument, pipeline, backupPathResolver);
+        return this.upgradeFile(localPath, defDocument, pipeline, backupPathResolver);
     }
 
-    public YamlDocument upgradeFile(File localFile, YamlDocument defDocument, YamlUpgradePipeline pipeline, @Nullable Path backupPath) throws IOException {
-        return this.upgradeFile(localFile, defDocument, pipeline, backupPath == null ? null : path -> backupPath);
+    @NotNull
+    public YamlDocument upgradeFile(@NotNull Path localPath, @NotNull YamlDocument defDocument, @NotNull YamlUpgradePipeline pipeline, @Nullable Path backupPath) throws IOException {
+        return this.upgradeFile(localPath, defDocument, pipeline, backupPath == null ? null : path -> backupPath);
     }
 
-    public YamlDocument upgradeFile(File localFile, YamlDocument defDocument, YamlUpgradePipeline pipeline, @Nullable Function<Path, Path> backupPathResolver) throws IOException {
-        Objects.requireNonNull(localFile, "localFile");
-        Objects.requireNonNull(defDocument, "defDocument");
-        Objects.requireNonNull(pipeline, "pipeline");
-
-        Path localPath = localFile.toPath();
-        Path backupPath = backupPathResolver != null ? backupPathResolver.apply(localPath) : null;
-        backupFileIfNeeded(localPath, backupPath);
-
-        YamlDocument localDocument = Files.exists(localPath) ? load(localPath) : null;
-        YamlDocument upgradedDocument;
-        if (localDocument == null) {
-            pipeline.writeTargetVersion(defDocument);
-            upgradedDocument = defDocument;
-        } else {
-            upgradedDocument = pipeline.upgrade(localDocument, defDocument);
-        }
-        saveDocument(localPath, upgradedDocument);
-        return upgradedDocument;
+    @NotNull
+    public YamlDocument upgradeFile(@NotNull Path localPath, @NotNull YamlDocument defDocument, @NotNull YamlUpgradePipeline pipeline, @Nullable Function<Path, Path> backupPathResolver) throws IOException {
+        return YamlFileLifecycle.load(this, localPath, () -> defDocument, pipeline, List.of(), backupPathResolver).document();
     }
 
     // 默认备份配置路径解析器
@@ -218,14 +295,6 @@ public class SparrowYaml {
             Files.createDirectories(backupParent);
         }
         Files.copy(localPath, backupPath);
-    }
-
-    private static void saveDocument(Path path, YamlDocument document) throws IOException {
-        Path parent = path.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        document.save(path);
     }
 
     /**

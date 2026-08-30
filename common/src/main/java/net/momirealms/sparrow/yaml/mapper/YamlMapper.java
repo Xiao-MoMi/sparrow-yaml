@@ -2,12 +2,13 @@ package net.momirealms.sparrow.yaml.mapper;
 
 import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.YamlDocument;
+import net.momirealms.sparrow.yaml.internal.YamlFileLifecycle;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -44,40 +45,40 @@ public class YamlMapper<T> {
     }
 
     /**
-     * 强制加载指定的配置文件, 忽略缓存的文件属性.
-     * 如果文件不存在, 会使用配置类默认值创建并保存文件.
-     * 如果配置了升级管线, 会在版本不一致时执行升级并保存结果.
+     * 重新读取配置文件, 返回本次加载的文档与配置值.
+     * 文件不存在时会用默认实例创建文件, 版本落后时会先升级再返回.
      *
      * @param path 配置文件路径
-     * @return 实例化并填充完毕的配置对象
-     * @throws IOException 如果出现 IO 异常
+     * @return 本次加载的文档与配置值
+     * @throws IOException 当读取、备份或保存失败时
      */
-    public synchronized Result<T> load(Path path) throws IOException {
-        Objects.requireNonNull(path, "path");
-        // 不存在则直接保存.
-        if (!Files.exists(path)) {
-            T defaultInstance = this.defaultInstanceSupplier.get();
-            YamlDocument defaultDocument = documentMapper.toDocument(defaultInstance, null, sparrowYaml);
-            if (upgradePipeline != null) upgradePipeline.writeTargetVersion(defaultDocument);
-            saveDocument(path, defaultDocument);
-            return new Result<>(defaultDocument, defaultInstance);
-        }
-        // 加载本地的配置, 然后尝试升级.
-        YamlDocument localDocument = sparrowYaml.load(path);
-        if (upgradePipeline != null) {
-            T defaultInstance = this.defaultInstanceSupplier.get();
-            YamlDocument defDocument = documentMapper.toDocument(defaultInstance, null, sparrowYaml);
-            if (upgradePipeline.needsUpgrade(localDocument, defDocument)) {
-                YamlDocument upgradedDocument = upgradePipeline.upgrade(localDocument, defDocument, documentMapper.dynamicSectionRoutes());
-                backupBeforeUpgrade(path);
-                saveDocument(path, upgradedDocument);
-                T upgradedInstance = documentMapper.fromDocument(upgradedDocument, sparrowYaml);
-                return new Result<>(upgradedDocument, upgradedInstance);
-            }
-        }
-        // 将文档读取为对象
-        T loadedInstance = documentMapper.fromDocument(localDocument, sparrowYaml);
-        return new Result<>(localDocument, loadedInstance);
+    @NotNull
+    public synchronized Result<T> load(@NotNull Path path) throws IOException {
+        DefaultDocumentSupplier defaultDocumentSupplier = new DefaultDocumentSupplier();
+        YamlFileLifecycle.Result fileResult = YamlFileLifecycle.load(
+                this.sparrowYaml,
+                path,
+                defaultDocumentSupplier,
+                this.upgradePipeline,
+                this.documentMapper.dynamicSectionRoutes(),
+                this.backupOnUpgrade ? this.backupPathResolver : null
+        );
+        T loadedInstance = fileResult.created()
+                ? defaultDocumentSupplier.value()
+                : this.documentMapper.fromDocument(fileResult.document(), this.sparrowYaml);
+        return new Result<>(fileResult.document(), loadedInstance);
+    }
+
+    /**
+     * 重新读取配置文件并直接返回配置值.
+     *
+     * @param path 配置文件路径
+     * @return 本次加载的配置值
+     * @throws IOException 当读取、备份或保存失败时
+    */
+    @NotNull
+    public T loadValue(@NotNull Path path) throws IOException {
+        return this.load(path).value();
     }
 
     /**
@@ -104,27 +105,18 @@ public class YamlMapper<T> {
         document.save(path);
     }
 
-    // 更新配置文件前的备份.
-    private void backupBeforeUpgrade(Path path) throws IOException {
-        if (!backupOnUpgrade) {
-            return;
-        }
-        Path backupPath = Objects.requireNonNull(backupPathResolver.apply(path), "backupPathResolver result");
-        sparrowYaml.backupFile(path, backupPath);
-    }
+    private final class DefaultDocumentSupplier implements Supplier<YamlDocument> {
+        private T value;
 
-    /**
-     * 将文档保存到指定的文件中.
-     *
-     * @param path      配置文件路径
-     * @param document  要保存的配置文档
-     */
-    private static void saveDocument(Path path, YamlDocument document) throws IOException {
-        Path parent = path.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
+        @Override
+        public YamlDocument get() {
+            this.value = YamlMapper.this.defaultInstanceSupplier.get();
+            return YamlMapper.this.documentMapper.toDocument(this.value, null, YamlMapper.this.sparrowYaml);
         }
-        document.save(path);
+
+        private T value() {
+            return this.value;
+        }
     }
 
     public record Result<T>(YamlDocument document, T value) {

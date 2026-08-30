@@ -69,6 +69,8 @@ YamlDocument fromFile = yaml.load(Path.of("config.yml"));
 YamlDocument fromString = yaml.load("key: value");
 YamlDocument fromBytes = yaml.load("key: value".getBytes());
 YamlDocument fromResource = yaml.loadFromResource("config.yml");
+YamlDocument fromOwnedResource = yaml.loadFromResource(AppConfig.class, "config.yml");
+YamlDocument fromLoaderResource = yaml.loadFromResource(AppConfig.class.getClassLoader(), "config.yml");
 YamlDocument empty = yaml.createDocument();
 String yamlText = fromString.dumpToString();
 
@@ -83,7 +85,7 @@ document.save(Path.of("config.yml"));
 ```java
 YamlDocument defaults = yaml.loadFromResource("config.yml");
 YamlDocument upgraded = yaml.upgradeFile(
-        Path.of("config.yml").toFile(),
+        Path.of("config.yml"),
         defaults,
         pipeline,
         true
@@ -627,21 +629,29 @@ YamlMapperFactory factory = YamlMapperFactory.builder()
 
 YamlMapper<AppConfig> mapper = factory.create(AppConfig.class, AppConfig::new);
 
-AppConfig config = mapper.load(Path.of("config.yml"));
+AppConfig config = mapper.loadValue(Path.of("config.yml"));
 mapper.save(Path.of("config.yml"), config);
 ```
 
-`YamlMapper#load(path)` 的行为：
+不需要升级管线或自定义备份时，可以直接复用当前 `SparrowYaml` 创建 Mapper：
+
+```java
+YamlMapper<AppConfig> mapper = yaml.mapper(AppConfig.class, AppConfig::new);
+AppConfig config = mapper.loadValue(Path.of("config.yml"));
+```
+
+需要同时访问 YAML 文档时，使用 `YamlMapper.Result<AppConfig> result = mapper.load(path)`，再分别读取 `result.document()` 和 `result.value()`。
+
+`YamlMapper#load(path)` 与 `loadValue(path)` 的行为：
 
 - 文件不存在时，调用 `defaultInstanceSupplier` 创建默认配置实例，将它序列化成 YAML 文件并返回该实例。
 - 文件存在时，读取文件并反序列化成配置对象。
 - 配置了 `YamlUpgradePipeline` 时，会把 `defaultInstanceSupplier` 返回的默认实例序列化成默认文档，再用升级管线比较本地版本和目标版本；版本不同则升级、保存、再反序列化。
 - 升级时配置类中的 `Map<K, V>` 字段（含嵌套配置类中的 Map 字段）会被自动登记为动态 Section：字段本身缺失时仍会补齐默认条目，但字段内的键值属于用户数据，不会被默认实例的内容合并或清理。
 - `backupOnUpgrade(true)` 只会在实际发生升级且写回文件前备份原文件；`backupPathResolver(...)` 可以自定义备份路径，默认路径为 `原文件名.bak.<timestamp>`。
-- 同一个 mapper 会缓存最近一次加载的实例；当路径、最后修改时间和文件大小都没变时，`load` 返回缓存实例。
-- `loadForce(path)` 会忽略缓存，强制重新读取。
+- 每次调用都会重新读取文件并创建新的配置实例, Mapper 不缓存文件内容或配置对象。
 
-`factory.create(clazz, defaultInstanceSupplier)` 的第二个参数是当前版本配置的默认实例来源。建议每次返回一个新的配置对象，例如 `AppConfig::new`；没有无参构造器或不可变配置类可以使用 lambda：
+`factory.create(clazz, defaultInstanceSupplier)` 和 `yaml.mapper(clazz, defaultInstanceSupplier)` 的第二个参数是当前版本配置的默认实例来源。建议每次返回一个新的配置对象，例如 `AppConfig::new`；没有无参构造器或不可变配置类可以使用 lambda：
 
 ```java
 YamlMapper<ImmutableConfig> mapper = factory.create(
@@ -650,7 +660,7 @@ YamlMapper<ImmutableConfig> mapper = factory.create(
 );
 ```
 
-运行期 mapper 会把根配置类字段上的 `@Comment` 和 `@BlankLineBefore` 应用到顶层 YAML key。嵌套对象自身字段上的注释目前不会被递归写入。
+运行期 mapper 会把配置类字段上的 `@Comment` 和 `@BlankLineBefore` 应用到对应 YAML key，嵌套配置对象中的字段注释也会递归写入。
 
 可用注解：
 

@@ -18,13 +18,17 @@ import org.junit.jupiter.api.Test;
 import org.snakeyaml.engine.v2.comments.CommentLine;
 import org.snakeyaml.engine.v2.comments.CommentType;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -114,6 +118,19 @@ class SparrowYamlTest {
         }
 
         @Test
+        void should_LoadResourceFromExplicitClassLoaderAndClassAnchor() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.create();
+            String resourceName = "isolated-plugin-config.yml";
+            byte[] content = "source: plugin-loader\n".getBytes();
+            PluginResourceClassLoader classLoader = new PluginResourceClassLoader(resourceName, content);
+            Class<?> resourceAnchor = classLoader.defineAnchor(classBytes(PluginResourceAnchor.class));
+
+            assertNull(SparrowYaml.class.getClassLoader().getResourceAsStream(resourceName));
+            assertEquals("plugin-loader", sparrowYaml.loadFromResource(classLoader, resourceName).getString(Route.from("source")));
+            assertEquals("plugin-loader", sparrowYaml.loadFromResource(resourceAnchor, resourceName).getString(Route.from("source")));
+        }
+
+        @Test
         void should_ReturnTrue_When_DocumentIsEmpty() throws IOException {
             // 1. 准备阶段 (Arrange)
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
@@ -191,7 +208,7 @@ class SparrowYamlTest {
                     """);
 
             YamlDocument upgraded = sparrowYaml.upgradeFile(
-                    configPath.toFile(),
+                    configPath,
                     defDocument,
                     YamlUpgradePipeline.builder().build(),
                     false
@@ -218,7 +235,7 @@ class SparrowYamlTest {
                     """);
 
             YamlDocument upgraded = sparrowYaml.upgradeFile(
-                    configPath.toFile(),
+                    configPath,
                     defDocument,
                     YamlUpgradePipeline.builder().build(),
                     backupPath
@@ -232,10 +249,57 @@ class SparrowYamlTest {
         }
 
         @Test
+        void should_NotResolveBackupOrRewriteFile_When_UpgradeFileVersionIsCurrent() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.create();
+            Path configPath = Files.createTempFile("sparrow_current_upgrade", ".yml");
+            String original = "config-version: 2\nvalue: local\nlegacy: keep\n";
+            Files.writeString(configPath, original);
+            FileTime originalModifiedTime = FileTime.fromMillis(1_700_000_000_000L);
+            Files.setLastModifiedTime(configPath, originalModifiedTime);
+            YamlDocument defDocument = sparrowYaml.load("config-version: 2\nvalue: default\n");
+            AtomicInteger resolverCalls = new AtomicInteger();
+
+            YamlDocument loaded = sparrowYaml.upgradeFile(
+                    configPath,
+                    defDocument,
+                    YamlUpgradePipeline.builder().build(),
+                    path -> {
+                        resolverCalls.incrementAndGet();
+                        return path.resolveSibling(path.getFileName() + ".bak");
+                    }
+            );
+
+            assertEquals("local", loaded.getString(Route.from("value")));
+            assertEquals(0, resolverCalls.get());
+            assertEquals(original, Files.readString(configPath));
+            assertEquals(originalModifiedTime, Files.getLastModifiedTime(configPath));
+        }
+
+        @Test
+        void should_PassOriginalPathToBackupResolver_When_PathUpgradeIsRequired() throws IOException {
+            SparrowYaml sparrowYaml = SparrowYaml.create();
+            Path configPath = Files.createTempFile("sparrow_resolver_upgrade", ".yml");
+            Path backupPath = configPath.resolveSibling(configPath.getFileName() + ".bak");
+            Files.writeString(configPath, "config-version: 1\nvalue: local\n");
+            YamlDocument defDocument = sparrowYaml.load("config-version: 2\nvalue: default\nadded: yes\n");
+            AtomicReference<Path> resolvedPath = new AtomicReference<>();
+
+            sparrowYaml.upgradeFile(configPath, defDocument, YamlUpgradePipeline.builder().build(), path -> {
+                resolvedPath.set(path);
+                return backupPath;
+            });
+
+            assertEquals(configPath, resolvedPath.get());
+            assertTrue(Files.readString(backupPath).contains("config-version: 1"));
+            assertTrue(Files.readString(configPath).contains("config-version: '2'"));
+        }
+
+        @Test
         void should_RejectBackupPath_When_ItMatchesLocalFilePath() throws IOException {
             SparrowYaml sparrowYaml = SparrowYaml.builder().build();
             Path configPath = Files.createTempFile("sparrow_same_backup", ".yml");
-            YamlDocument defDocument = sparrowYaml.load("config-version: 1\n");
+            Files.writeString(configPath, "config-version: 1\nvalue: local\n");
+            YamlDocument defDocument = sparrowYaml.load("config-version: 2\nvalue: default\n");
             YamlUpgradePipeline pipeline = YamlUpgradePipeline.builder().build();
 
             assertThrows(IllegalArgumentException.class, () -> sparrowYaml.upgradeFile(
@@ -244,6 +308,36 @@ class SparrowYamlTest {
                     pipeline,
                     configPath
             ));
+        }
+    }
+
+    private static byte[] classBytes(Class<?> type) throws IOException {
+        String resourceName = type.getName().replace('.', '/') + ".class";
+        try (InputStream inputStream = type.getClassLoader().getResourceAsStream(resourceName)) {
+            return inputStream.readAllBytes();
+        }
+    }
+
+    private static final class PluginResourceClassLoader extends ClassLoader {
+        private final String resourceName;
+        private final byte[] resource;
+
+        private PluginResourceClassLoader(String resourceName, byte[] resource) {
+            super(ClassLoader.getPlatformClassLoader());
+            this.resourceName = resourceName;
+            this.resource = resource;
+        }
+
+        private Class<?> defineAnchor(byte[] bytes) {
+            return this.defineClass(PluginResourceAnchor.class.getName(), bytes, 0, bytes.length);
+        }
+
+        @Override
+        public InputStream getResourceAsStream(String name) {
+            if (this.resourceName.equals(name)) {
+                return new ByteArrayInputStream(this.resource);
+            }
+            return super.getResourceAsStream(name);
         }
     }
 
@@ -2156,4 +2250,7 @@ class SparrowYamlTest {
             assertEquals(List.of("qwq", "awa", "fwf"), stringList);
         }
     }
+}
+
+final class PluginResourceAnchor {
 }

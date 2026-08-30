@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -321,19 +322,18 @@ class SparrowYamlAnnotationTest {
     void should_RoundTripMapWithSerializedKey_When_UsingMapper(@TempDir Path tempDir) throws Exception {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
         sparrowYaml.serializers().register(ConfigKey.class, NodeSerializers.scalar(ConfigKey.class, ConfigKey::parse, ConfigKey::asString));
-        YamlMapperFactory factory = YamlMapperFactory.builder().sparrowYaml(sparrowYaml).build();
-        YamlMapper<KeyedConfig> mapper = factory.create(KeyedConfig.class, KeyedConfig::new);
+        YamlMapper<KeyedConfig> mapper = sparrowYaml.mapper(KeyedConfig.class, KeyedConfig::new);
         Path path = tempDir.resolve("keyed-config.yml");
         Files.writeString(path, """
                 values:
                   "minecraft:stone": block
                 """);
 
-        KeyedConfig config = mapper.load(path).value();
+        KeyedConfig config = mapper.loadValue(path);
         assertEquals("block", config.values().get(new ConfigKey("minecraft", "stone")));
 
         mapper.save(path, config);
-        KeyedConfig reloaded = mapper.load(path).value();
+        KeyedConfig reloaded = mapper.loadValue(path);
         assertEquals(config.values(), reloaded.values());
     }
 
@@ -690,7 +690,7 @@ class SparrowYamlAnnotationTest {
                 server-port: 9090
                 """);
 
-        TestConfig first = mapper.load(tempFile).value();
+        TestConfig first = mapper.loadValue(tempFile);
         Files.writeString(tempFile, """
                 host: "after-with-different-size"
                 server-port: 9091
@@ -698,12 +698,46 @@ class SparrowYamlAnnotationTest {
                   - "changed"
                 """);
 
-        TestConfig second = mapper.load(tempFile).value();
+        TestConfig second = mapper.loadValue(tempFile);
 
         assertNotSame(first, second, "文件修改后 load 应返回新的配置对象");
         assertEquals("after-with-different-size", second.getHost());
         assertEquals(9091, second.getPort());
         assertEquals(List.of("changed"), second.getUsers());
+    }
+
+    @Test
+    void should_ReturnSuppliedDefaultInstance_When_LoadValueCreatesMissingFile(@TempDir Path tempDir) throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.create();
+        TestConfig supplied = new TestConfig();
+        supplied.setHost("supplied");
+        AtomicInteger supplierCalls = new AtomicInteger();
+        YamlMapper<TestConfig> mapper = sparrowYaml.mapper(TestConfig.class, () -> {
+            supplierCalls.incrementAndGet();
+            return supplied;
+        });
+
+        TestConfig loaded = mapper.loadValue(tempDir.resolve("nested").resolve("config.yml"));
+
+        assertSame(supplied, loaded);
+        assertEquals(1, supplierCalls.get());
+    }
+
+    @Test
+    void should_NotCreateDefaultInstance_When_LoadValueReadsExistingFileWithoutUpgrade() throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.create();
+        AtomicInteger supplierCalls = new AtomicInteger();
+        YamlMapper<TestConfig> mapper = sparrowYaml.mapper(TestConfig.class, () -> {
+            supplierCalls.incrementAndGet();
+            return new TestConfig();
+        });
+        Path configPath = Files.createTempFile("mapper_existing_without_upgrade", ".yml");
+        Files.writeString(configPath, "host: local\nserver-port: 25565\n");
+
+        TestConfig loaded = mapper.loadValue(configPath);
+
+        assertEquals("local", loaded.getHost());
+        assertEquals(0, supplierCalls.get());
     }
 
     @Test
@@ -853,10 +887,14 @@ class SparrowYamlAnnotationTest {
     @Test
     void should_CreateBackup_When_MapperBackupOnUpgradeIsEnabled() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        AtomicInteger resolverCalls = new AtomicInteger();
         YamlMapperFactory factory = YamlMapperFactory.builder()
                 .sparrowYaml(sparrowYaml)
                 .upgradePipeline(YamlUpgradePipeline.builder().build())
-                .backupPathResolver(path -> path.resolveSibling(path.getFileName() + ".bak"))
+                .backupPathResolver(path -> {
+                    resolverCalls.incrementAndGet();
+                    return path.resolveSibling(path.getFileName() + ".bak");
+                })
                 .backupOnUpgrade(true)
                 .build();
         YamlMapper<VersionedConfig> mapper = factory.create(VersionedConfig.class, VersionedConfig::new);
@@ -877,6 +915,7 @@ class SparrowYamlAnnotationTest {
         assertTrue(Files.exists(backupPath));
         assertTrue(backup.contains("config-version: 1"));
         assertTrue(backup.contains("legacy: old"));
+        assertEquals(1, resolverCalls.get());
         assertEquals("2", savedDocument.getNodeOrNull(Route.from("config-version")).value().toString());
         assertNull(savedDocument.getNodeOrNull(Route.from("legacy")));
     }
@@ -884,10 +923,14 @@ class SparrowYamlAnnotationTest {
     @Test
     void should_NotCreateBackup_When_MapperBackupOnUpgradeIsEnabledButVersionIsCurrent() throws IOException {
         SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        AtomicInteger resolverCalls = new AtomicInteger();
         YamlMapperFactory factory = YamlMapperFactory.builder()
                 .sparrowYaml(sparrowYaml)
                 .upgradePipeline(YamlUpgradePipeline.builder().build())
-                .backupPathResolver(path -> path.resolveSibling(path.getFileName() + ".bak"))
+                .backupPathResolver(path -> {
+                    resolverCalls.incrementAndGet();
+                    return path.resolveSibling(path.getFileName() + ".bak");
+                })
                 .backupOnUpgrade(true)
                 .build();
         YamlMapper<VersionedConfig> mapper = factory.create(VersionedConfig.class, VersionedConfig::new);
@@ -903,6 +946,7 @@ class SparrowYamlAnnotationTest {
         VersionedConfig config = mapper.load(configPath).value();
 
         assertEquals("2", config.getVersion());
+        assertEquals(0, resolverCalls.get());
         assertFalse(Files.exists(backupPath));
         assertTrue(Files.readString(configPath).contains("legacy: keep"));
     }
