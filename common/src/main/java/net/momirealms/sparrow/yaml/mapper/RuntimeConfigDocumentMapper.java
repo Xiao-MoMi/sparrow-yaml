@@ -383,11 +383,16 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
         return result;
     }
 
+    // 将每段文本拆为独立注释行, 空段保留为裸 #
     private static List<CommentLine> commentLines(String[] comments, CommentType type) {
         List<CommentLine> result = new ArrayList<>(comments.length);
-        for (String comment : comments) {
-            String value = comment.isEmpty() || comment.startsWith(" ") ? comment : " " + comment;
-            result.add(new CommentLine(Optional.empty(), Optional.empty(), value, type));
+        for (int i = 0; i < comments.length; i++) {
+            String[] lines = comments[i].split("\\r\\n|\\r|\\n", -1);
+            for (int j = 0; j < lines.length; j++) {
+                String line = lines[j];
+                String value = line.isEmpty() || line.startsWith(" ") ? line : " " + line;
+                result.add(new CommentLine(Optional.empty(), Optional.empty(), value, type));
+            }
         }
         return result;
     }

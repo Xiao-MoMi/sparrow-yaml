@@ -679,6 +679,15 @@ YamlMapper<ImmutableConfig> mapper = factory.create(
 - `@AfterComment(...)`：为字段生成后置块注释。
 - `@BlankLineBefore`：在字段前插入空行。
 
+`@Comment`、`@InlineComment` 和 `@AfterComment` 的每个字符串都支持换行：
+
+```java
+@Comment("Server port\nMust be > 1024")
+private int port = 25565;
+```
+
+这与 `@Comment({"Server port", "Must be > 1024"})` 等价。支持 LF (`\n`)、CRLF (`\r\n`) 和 CR (`\r`)，每行分别生成带 `#` 的注释；行内注释的后续行按原位置对齐。连续或首尾换行产生的空段保留为裸 `#`，真正的空白行使用 `@BlankLineBefore`。Java 字符串中的 `"\\n"` 是字面文本，会原样保留。
+
 ## 注意事项
 
 - YAML 根节点必须是 mapping。
