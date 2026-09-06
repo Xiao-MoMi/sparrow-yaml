@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -29,18 +30,21 @@ public class SparrowYaml {
     public final boolean allowObjectKey;
     private final StandardRepresenter representer;
     private final SerializerRegistry serializers;
+    private final Locale locale;
 
     private SparrowYaml(
             LoadSettings loadSettings,
             DumpSettings dumpSettings,
             boolean allowObjectKey,
-            AutoSerializerMode autoSerializerMode
+            AutoSerializerMode autoSerializerMode,
+            Locale locale
     ) {
         this.loadSettings = loadSettings;
         this.dumpSettings = dumpSettings;
         this.allowObjectKey = allowObjectKey;
         this.representer =  new StandardRepresenter(dumpSettings);
         this.serializers = new SerializerRegistry(this, autoSerializerMode);
+        this.locale = locale;
     }
 
     /**
@@ -166,6 +170,11 @@ public class SparrowYaml {
 
     public SerializerRegistry serializers() {
         return this.serializers;
+    }
+
+    @NotNull
+    public Locale locale() {
+        return this.locale;
     }
 
     /**
@@ -324,8 +333,15 @@ public class SparrowYaml {
                 .setDefaultFlowStyle(FlowStyle.BLOCK);
         private boolean allowObjectKey = false;
         private AutoSerializerMode autoSerializerMode = AutoSerializerMode.ADAPTIVE;
+        private Locale locale;
 
         // ──────────── GeneralSettings ────────────
+
+        @NotNull
+        public Builder locale(@NotNull Locale locale) {
+            this.locale = locale;
+            return this;
+        }
 
         public Builder setAutoSerializerMode(AutoSerializerMode autoSerializerMode) {
             this.autoSerializerMode = Objects.requireNonNull(autoSerializerMode, "autoSerializerMode");
@@ -513,7 +529,8 @@ public class SparrowYaml {
                     this.loadSettingsBuilder.build(),
                     this.dumpSettingsBuilder.build(),
                     this.allowObjectKey,
-                    this.autoSerializerMode
+                    this.autoSerializerMode,
+                    this.locale != null ? this.locale : Locale.getDefault()
             );
         }
     }

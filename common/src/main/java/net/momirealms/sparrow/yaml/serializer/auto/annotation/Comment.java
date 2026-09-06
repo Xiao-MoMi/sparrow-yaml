@@ -1,6 +1,7 @@
 package net.momirealms.sparrow.yaml.serializer.auto.annotation;
 
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
@@ -10,6 +11,7 @@ import java.lang.annotation.Target;
  */
 @Target({ElementType.FIELD, ElementType.RECORD_COMPONENT})
 @Retention(RetentionPolicy.RUNTIME)
+@Repeatable(Comments.class)
 public @interface Comment {
 
     /**
@@ -19,4 +21,12 @@ public @interface Comment {
      * @return 注释文本数组
      */
     String[] value();
+
+    /**
+     * 注释适用的语言标签, 如 {@code zh-CN}; 空字符串表示未匹配语言时使用的 fallback.
+     * 同一字段的前置注释中, 每种语言和 fallback 各允许声明一次.
+     *
+     * @return 语言标签
+     */
+    String lang() default "";
 }

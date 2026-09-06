@@ -23,6 +23,7 @@ import org.snakeyaml.engine.v2.comments.CommentType;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
@@ -33,6 +34,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -80,7 +82,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                 doc.setAndGet(Route.from(String.valueOf(entry.getKey())), entry.getValue());
             }
             restoreComments(doc, existingComments);
-            applyComments(doc);
+            this.applyComments(doc, yaml.locale());
 
             return doc;
         } catch (IOException e) {
@@ -114,21 +116,26 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     /**
      * 将收集到的 Comment 注解应用到文档各层级节点.
      */
-    private void applyComments(YamlDocument doc) {
-        for (CommentBinding binding : comments) {
+    private void applyComments(YamlDocument doc, Locale locale) {
+        String[] languageTags = LocalizedComments.languageTags(locale);
+        for (int i = 0; i < this.comments.size(); i++) {
+            CommentBinding binding = this.comments.get(i);
             YamlNode<?> node = doc.getNodeOrNull(binding.route());
             if (node == null) {
                 continue;
             }
-            List<CommentLine> beforeKeyComments = beforeKeyComments(binding.blankLinesBefore, binding.before);
+            String[] before = binding.before.select(languageTags);
+            String[] inline = binding.inline.select(languageTags);
+            String[] after = binding.after.select(languageTags);
+            List<CommentLine> beforeKeyComments = beforeKeyComments(binding.blankLinesBefore, before);
             if (!beforeKeyComments.isEmpty() && isNullOrEmpty(node.beforeKeyComments())) {
                 node.setBeforeKeyComments(beforeKeyComments);
             }
-            if (binding.inline.length > 0 && isNullOrEmpty(node.inlineKeyComments())) {
-                node.setInlineKeyComments(commentLines(binding.inline, CommentType.IN_LINE));
+            if (inline.length > 0 && isNullOrEmpty(node.inlineKeyComments())) {
+                node.setInlineKeyComments(commentLines(inline, CommentType.IN_LINE));
             }
-            if (binding.after.length > 0 && isNullOrEmpty(node.afterKeyComments())) {
-                node.setAfterKeyComments(commentLines(binding.after, CommentType.BLOCK));
+            if (after.length > 0 && isNullOrEmpty(node.afterKeyComments())) {
+                node.setAfterKeyComments(commentLines(after, CommentType.BLOCK));
             }
         }
     }
@@ -190,19 +197,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                     continue;
                 }
                 Route route = Route.addTo(prefix, yamlKey(component, naming));
-                Comment comment = component.getAnnotation(Comment.class);
-                InlineComment inlineComment = component.getAnnotation(InlineComment.class);
-                AfterComment afterComment = component.getAnnotation(AfterComment.class);
-                BlankLineBefore blankLineBefore = component.getAnnotation(BlankLineBefore.class);
-                if (comment != null || inlineComment != null || afterComment != null || blankLineBefore != null) {
-                    result.add(new CommentBinding(
-                            route,
-                            blankLinesBefore(blankLineBefore),
-                            before(comment),
-                            inline(inlineComment),
-                            after(afterComment)
-                    ));
-                }
+                collectCommentBinding(component, route, result);
                 collectMemberComments(component.getGenericType(), route, visiting, result);
             }
             visiting.remove(type);
@@ -215,19 +210,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                 continue;
             }
             Route route = Route.addTo(prefix, yamlKey(field, naming));
-            Comment comment = field.getAnnotation(Comment.class);
-            InlineComment inlineComment = field.getAnnotation(InlineComment.class);
-            AfterComment afterComment = field.getAnnotation(AfterComment.class);
-            BlankLineBefore blankLineBefore = field.getAnnotation(BlankLineBefore.class);
-            if (comment != null || inlineComment != null || afterComment != null || blankLineBefore != null) {
-                result.add(new CommentBinding(
-                        route,
-                        blankLinesBefore(blankLineBefore),
-                        before(comment),
-                        inline(inlineComment),
-                        after(afterComment)
-                ));
-            }
+            collectCommentBinding(field, route, result);
             collectMemberComments(field.getGenericType(), route, visiting, result);
         }
         visiting.remove(type);
@@ -401,22 +384,27 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
         return annotation == null ? 0 : annotation.value();
     }
 
-    private static String[] before(Comment comment) {
-        return comment == null ? new String[0] : comment.value();
-    }
-
-    private static String[] inline(InlineComment comment) {
-        return comment == null ? new String[0] : comment.value();
-    }
-
-    private static String[] after(AfterComment comment) {
-        return comment == null ? new String[0] : comment.value();
+    // 字段与 record 组件使用相同的注释收集规则
+    private static void collectCommentBinding(AnnotatedElement element, Route route, List<CommentBinding> result) {
+        LocalizedComments before = LocalizedComments.read(element, Comment.class, Comment::lang, Comment::value);
+        LocalizedComments inline = LocalizedComments.read(element, InlineComment.class, InlineComment::lang, InlineComment::value);
+        LocalizedComments after = LocalizedComments.read(element, AfterComment.class, AfterComment::lang, AfterComment::value);
+        BlankLineBefore blankLineBefore = element.getAnnotation(BlankLineBefore.class);
+        if (!before.isEmpty() || !inline.isEmpty() || !after.isEmpty() || blankLineBefore != null) {
+            result.add(new CommentBinding(route, blankLinesBefore(blankLineBefore), before, inline, after));
+        }
     }
 
     /**
      * 单个 YAML 键对应的注释绑定, route 为从文档根出发的完整路由.
      */
-    private record CommentBinding(Route route, int blankLinesBefore, String[] before, String[] inline, String[] after) {
+    private record CommentBinding(
+            Route route,
+            int blankLinesBefore,
+            LocalizedComments before,
+            LocalizedComments inline,
+            LocalizedComments after
+    ) {
     }
 
     private record RequiredProperty(String key, Class<?> targetType) {

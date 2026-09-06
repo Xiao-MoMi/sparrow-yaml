@@ -679,6 +679,41 @@ YamlMapper<ImmutableConfig> mapper = factory.create(
 - `@AfterComment(...)`：为字段生成后置块注释。
 - `@BlankLineBefore`：在字段前插入空行。
 
+`@Comment`、`@InlineComment` 和 `@AfterComment` 可以重复声明，通过 `lang` 选择注释语言：
+
+```java
+@Comment("English fallback")
+@Comment(lang = "zh-CN", value = "中文")
+@Comment(lang = "ja-JP", value = "日本語")
+private String host = "localhost";
+```
+
+每种注释位置分别选择语言。不带 `lang` 的注解提供 fallback，旧的单行、数组写法继续有效。
+同一位置的每种语言和 fallback 最多各声明一次；规范化后重复的标签或格式错误的标签会在创建 Mapper 时抛出 `AutoSerializerException`。
+
+语言在 SparrowYaml 上通过 `Locale` 配置，所属 Mapper 使用相同的语言：
+
+```java
+SparrowYaml yaml = SparrowYaml.builder()
+        .locale(Locale.SIMPLIFIED_CHINESE)
+        .build();
+
+YamlMapper<AppConfig> chinese = yaml.mapper(AppConfig.class, AppConfig::new);
+
+YamlMapperFactory factory = YamlMapperFactory.builder()
+        .sparrowYaml(yaml)
+        .build();
+```
+
+- 未指定语言时，SparrowYaml 在 `build()` 时读取 `Locale.getDefault()`；已经创建的对象保留当时的语言。
+- 按完整标签、显式的“语言＋文字体系”、纯语言、fallback 的顺序选择，与注解声明顺序无关。例如 `zh-Hans-CN → zh-Hans → zh → fallback`，`en-GB → en → fallback`。
+- 标签使用 BCP 47 格式，也接受 `zh_CN` 这样的下划线分隔形式；匹配时规范化大小写并忽略 Locale 扩展。
+- 不推断地区对应的文字体系，也不匹配其他地区的翻译。例如请求 `zh-TW` 不会选中只声明为 `zh-CN` 的注释。
+- 命中 `value = {}` 表示省略该位置的注释文字；没有翻译也没有 fallback 时同样不生成文字。不同翻译允许有不同的行数。
+- `@BlankLineBefore` 始终独立生效，不参与语言选择。
+- 首次创建文件和 `save(path, instance)` 使用选定语言生成注释；`save(path, existing, instance)` 继续保留已有注释，只补充空缺位置。
+- 更改语言本身不会触发文件升级。升级时是否更新已有注释仍由 `updateComments` 决定，空翻译不会清除文件中已有的注释。
+
 `@Comment`、`@InlineComment` 和 `@AfterComment` 的每个字符串都支持换行：
 
 ```java

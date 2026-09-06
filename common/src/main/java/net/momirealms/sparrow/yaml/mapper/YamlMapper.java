@@ -89,7 +89,7 @@ public class YamlMapper<T> {
      */
     public synchronized void save(Path path, T instance) throws IOException {
         Objects.requireNonNull(path, "path");
-        YamlDocument document = documentMapper.toDocument(instance, null, sparrowYaml);
+        YamlDocument document = this.documentMapper.toDocument(instance, null, this.sparrowYaml);
         if (path.getParent() != null && !Files.exists(path.getParent())) {
             Files.createDirectories(path.getParent());
         }
@@ -98,7 +98,7 @@ public class YamlMapper<T> {
 
     public synchronized void save(Path path, YamlDocument existing, T instance) throws IOException {
         Objects.requireNonNull(path, "path");
-        YamlDocument document = documentMapper.toDocument(instance, existing, sparrowYaml);
+        YamlDocument document = this.documentMapper.toDocument(instance, existing, this.sparrowYaml);
         if (path.getParent() != null && !Files.exists(path.getParent())) {
             Files.createDirectories(path.getParent());
         }
