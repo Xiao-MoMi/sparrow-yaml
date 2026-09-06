@@ -65,6 +65,21 @@ public class Route {
     }
 
     /**
+     * 将点分路径拆成 mapping key 路由, 空路径段会被保留.
+     *
+     * @param path 非空的点分路径
+     * @return 由每个 String 路径段组成的路由
+     * @throws IllegalArgumentException 当 path 是空字符串时
+     */
+    @NotNull
+    public static Route dotted(@NotNull String path) {
+        if (path.isEmpty()) {
+            throw new IllegalArgumentException("用于路由定位的点分路径不能为空!");
+        }
+        return Route.from((Object[]) path.split("\\.", -1));
+    }
+
+    /**
      * 给定一个路由对象, 为其在尾部添加新的路由节点;
      * 如果路由对象为空, 则创建一个新的节点;
      * @param route 需要添加的路由对象

@@ -206,11 +206,17 @@ class NodeConvenienceReadTest {
             assertEquals(List.of(), document.getList(NodeSerializers.INT, Route.from("empty-list")));
             assertEquals(List.of(), document.getList(Integer.class, Route.from("empty-list")));
             assertEquals(List.of(), document.getList(integerType, Route.from("empty-list")));
-            assertNull(document.getList(String.class, Route.from("missing")));
-            assertNull(document.getList(String.class, Route.from("null-value")));
-            assertNull(document.getList(NodeSerializers.INT, Route.from("missing")));
-            assertNull(document.getList(Integer.class, Route.from("missing")));
-            assertNull(document.getList(integerType, Route.from("missing")));
+            assertEquals(List.of(), document.getStringList(Route.from("empty-list")));
+            assertEquals(List.of(), document.getStringList(Route.from("missing")));
+            assertEquals(List.of(), document.getStringList(Route.from("null-value")));
+            assertEquals(List.of(), document.getList(String.class, Route.from("missing")));
+            assertEquals(List.of(), document.getList(String.class, Route.from("null-value")));
+            assertEquals(List.of(), document.getList(NodeSerializers.INT, Route.from("missing")));
+            assertEquals(List.of(), document.getList(NodeSerializers.INT, Route.from("null-value")));
+            assertEquals(List.of(), document.getList(Integer.class, Route.from("missing")));
+            assertEquals(List.of(), document.getList(Integer.class, Route.from("null-value")));
+            assertEquals(List.of(), document.getList(integerType, Route.from("missing")));
+            assertEquals(List.of(), document.getList(integerType, Route.from("null-value")));
 
             assertThrows(InvalidNodeException.class, () -> document.getList(String.class, Route.from("not-list")));
             assertThrows(InvalidNodeException.class, () -> document.getList(String.class, Route.from("invalid-list")));
@@ -367,10 +373,10 @@ class NodeConvenienceReadTest {
             assertEquals(maps, mapsByTypeRef);
             assertEquals(List.of(), document.getMapList(String.class, Integer.class, Route.from("empty-map-list")));
             assertEquals(List.of(), document.getMapList(keyType, valueType, Route.from("empty-map-list")));
-            assertNull(document.getMapList(String.class, Integer.class, Route.from("missing")));
-            assertNull(document.getMapList(String.class, Integer.class, Route.from("null-value")));
-            assertNull(document.getMapList(keyType, valueType, Route.from("missing")));
-            assertNull(document.getMapList(keyType, valueType, Route.from("null-value")));
+            assertEquals(List.of(), document.getMapList(String.class, Integer.class, Route.from("missing")));
+            assertEquals(List.of(), document.getMapList(String.class, Integer.class, Route.from("null-value")));
+            assertEquals(List.of(), document.getMapList(keyType, valueType, Route.from("missing")));
+            assertEquals(List.of(), document.getMapList(keyType, valueType, Route.from("null-value")));
             assertThrows(InvalidNodeException.class, () -> document.getMapList(String.class, Integer.class, Route.from("not-list")));
             assertThrows(InvalidNodeException.class, () -> document.getMapList(keyType, valueType, Route.from("not-list")));
             assertThrows(InvalidNodeException.class, () -> document.getMapList(String.class, Integer.class, Route.from("invalid-map-list")));
@@ -400,7 +406,8 @@ class NodeConvenienceReadTest {
             assertEquals(expected, byTypeRef);
             assertEquals(expected, bySerializer);
             assertEquals(List.of(), document.getMapList(keySerializer, valueSerializer, Route.from("empty-map-list")));
-            assertNull(document.getMapList(keySerializer, valueSerializer, Route.from("missing")));
+            assertEquals(List.of(), document.getMapList(keySerializer, valueSerializer, Route.from("missing")));
+            assertEquals(List.of(), document.getMapList(keySerializer, valueSerializer, Route.from("null-value")));
         }
     }
 

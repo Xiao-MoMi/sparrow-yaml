@@ -114,8 +114,12 @@ var host = document.getScalarOrNull(Route.from("database", "host"));
 节点 API 使用显式 `Route`。`Route.from(Object...)` 会把非负整数识别为列表索引，其它值转换为字符串 key：
 
 ```java
+String host = document.getString(Route.dotted("database.host"));
+String literal = document.getString(Route.from("database.host"));
 String firstUser = document.get(String.class, Route.from("users", 0));
 ```
+
+`Route.dotted` 只按 `.` 拆分 mapping key，不 trim，也不会把数字段推断成 index。空路径段会保留，因此 `Route.dotted("map.0")` 等于 `Route.from("map", "0")`；Sequence index 继续使用显式整数。空字符串不是有效点分路径，根路由使用 `Route.empty()`；单个包含 `.` 的 literal key 使用 `Route.from("database.host")`。
 
 `Route.empty()` 表示文档根节点；`YamlDocument#route()` 和根节点的 `getKeyAsRoute()` 都返回空路由。
 

@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteTest {
@@ -55,6 +56,52 @@ class RouteTest {
         assertEquals("\"[1]\"", Route.pathName(sequenceIndex));
         assertFalse(mappingKey.isParentRouteOf(sequenceIndex.add("child")));
         assertTrue(mappingKey.isParentRouteOf(mappingKey.add("child")));
+    }
+
+    @Test
+    void should_ParseDottedPathsAsStringKeys() {
+        Route numeric = Route.dotted("items.0.name");
+
+        assertEquals(Route.from("server", "host"), Route.dotted("server.host"));
+        assertEquals(Route.from("server"), Route.dotted("server"));
+        assertArrayEquals(new Object[] {" a ", " b "}, Route.dotted(" a . b ").routeKeys());
+        assertArrayEquals(new Object[] {"", "a"}, Route.dotted(".a").routeKeys());
+        assertArrayEquals(new Object[] {"a", "", "b"}, Route.dotted("a..b").routeKeys());
+        assertArrayEquals(new Object[] {"a", ""}, Route.dotted("a.").routeKeys());
+        assertArrayEquals(new Object[] {"", ""}, Route.dotted(".").routeKeys());
+        assertInstanceOf(KeyElement.class, numeric.getRouteElement(1));
+        assertEquals(Route.from("items", "0", "name"), numeric);
+        assertNotEquals(Route.from("items", 0, "name"), numeric);
+    }
+
+    @Test
+    void should_KeepEmptyAndLiteralPathContractsSeparate() {
+        assertThrows(IllegalArgumentException.class, () -> Route.dotted(""));
+        assertEquals(0, Route.empty().length());
+        assertEquals(1, Route.from("a.b").length());
+        assertEquals(2, Route.dotted("a.b").length());
+    }
+
+    @Test
+    void should_ReadDottedMappingPathsWithoutInferringIndexes() throws IOException {
+        YamlDocument document = SparrowYaml.builder().build().load("""
+                "a.b": literal
+                a:
+                  b: nested
+                map:
+                  "0": numeric-key
+                items:
+                  - sequence
+                "":
+                  "": empty-key
+                """);
+
+        assertEquals("literal", document.getString(Route.from("a.b")));
+        assertEquals("nested", document.getString(Route.dotted("a.b")));
+        assertEquals("numeric-key", document.getString(Route.dotted("map.0")));
+        assertNull(document.getString(Route.dotted("items.0")));
+        assertEquals("sequence", document.getString(Route.from("items", 0)));
+        assertEquals("empty-key", document.getString(Route.dotted(".")));
     }
 
     @Test

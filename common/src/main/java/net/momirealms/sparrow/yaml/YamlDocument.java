@@ -12,6 +12,7 @@ import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.LoadSettings;
 import org.snakeyaml.engine.v2.api.StreamDataWriter;
 import org.snakeyaml.engine.v2.api.YamlUnicodeReader;
+import org.snakeyaml.engine.v2.comments.CommentLine;
 import org.snakeyaml.engine.v2.composer.Composer;
 import org.snakeyaml.engine.v2.nodes.MappingNode;
 import org.snakeyaml.engine.v2.nodes.Node;
@@ -283,8 +284,16 @@ public class YamlDocument extends SectionNode {
             filtered.add(new NodeTuple(child.internalKeyNode(), child.internalValueNode()));
         }
 
+        Node firstKeyNode = filtered.isEmpty() ? null : filtered.get(0).getKeyNode();
+        List<CommentLine> firstKeyBlockComments = firstKeyNode == null ? null : firstKeyNode.getBlockComments();
         mappingNode.setValue(filtered);
-        restorers.add(() -> mappingNode.setValue(original));
+        restorers.add(() -> {
+            mappingNode.setValue(original);
+            // 序列化器会清空 Mapping 首个 key 的 block comments, 保存结束后恢复 AST
+            if (firstKeyNode != null) {
+                firstKeyNode.setBlockComments(firstKeyBlockComments);
+            }
+        });
     }
 
     private static void prepareSequenceNode(net.momirealms.sparrow.yaml.node.SequenceNode sequenceNode, List<Runnable> restorers) {

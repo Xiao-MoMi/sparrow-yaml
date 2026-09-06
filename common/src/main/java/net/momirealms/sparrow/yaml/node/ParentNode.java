@@ -155,25 +155,25 @@ public interface ParentNode<T extends YamlNode<?>> {
     }
 
     /**
-     * 按精确路由严格读取字符串列表, missing 或 YAML null 返回 null.
+     * 按精确路由严格读取字符串列表, missing、YAML null 与空 Sequence 返回空列表.
      *
      * @param route 精确路由
      * @return 转换后的字符串列表
      */
-    @Nullable
+    @NotNull
     default List<String> getStringList(@NotNull Route route) {
         return this.getList(NodeSerializers.STRING, route);
     }
 
     /**
-     * 按精确路由使用已注册的元素类型严格读取列表, missing 或 YAML null 返回 null.
+     * 按精确路由使用已注册的元素类型严格读取列表, missing、YAML null 与空 Sequence 返回空列表.
      *
      * @param elementType 元素类型
      * @param route 精确路由
      * @param <R> 元素类型
      * @return 解析后的列表
      */
-    @Nullable
+    @NotNull
     default <R> List<R> getList(@NotNull Class<R> elementType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
@@ -182,7 +182,7 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(this.registeredSerializer(elementType).listOf());
     }
 
-    @Nullable
+    @NotNull
     default <R> List<R> getList(@NotNull NodeSerializer<R> elementSerializer, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
@@ -191,7 +191,7 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(elementSerializer.listOf());
     }
 
-    @Nullable
+    @NotNull
     default <R> List<R> getList(@NotNull TypeRef<R> elementType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
@@ -237,9 +237,9 @@ public interface ParentNode<T extends YamlNode<?>> {
      * @param route 精确路由
      * @param <K> Map key 类型
      * @param <V> Map value 类型
-     * @return 解析后的 Map 列表, missing 或 YAML null 返回 null
+     * @return 解析后的 Map 列表, missing、YAML null 与空 Sequence 返回空列表
      */
-    @Nullable
+    @NotNull
     default <K, V> List<Map<K, V>> getMapList(@NotNull Class<K> keyType, @NotNull Class<V> valueType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
@@ -250,7 +250,7 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(valueSerializer.mapOf(keySerializer).listOf());
     }
 
-    @Nullable
+    @NotNull
     default <K, V> List<Map<K, V>> getMapList(@NotNull TypeRef<K> keyType, @NotNull TypeRef<V> valueType, @NotNull Route route) {
         YamlNode<?> node = this.getNodeOrNull(route);
         if (node == null || node.value() == null) {
@@ -261,7 +261,7 @@ public interface ParentNode<T extends YamlNode<?>> {
         return node.get(valueSerializer.mapOf(keySerializer).listOf());
     }
 
-    @Nullable
+    @NotNull
     default <K, V> List<Map<K, V>> getMapList(@NotNull NodeSerializer<K> keySerializer, @NotNull NodeSerializer<V> valueSerializer, @NotNull Route route) {
         return this.getList(valueSerializer.mapOf(keySerializer), route);
     }
