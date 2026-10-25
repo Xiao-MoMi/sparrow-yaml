@@ -484,6 +484,7 @@ NodeSerializer<BlockPos> serializer = NodeSerializers.mapping(BlockPos.class)
 - `listOf()`：处理 `List<T>`。
 - `setOf()`：处理 `Set<T>`，解码时保持 YAML 序列顺序。
 - `mapOf()`：处理 `Map<String, T>`；`mapOf(keySerializer)` 处理键具有标量 serializer 的 `Map<K, T>`。
+- `NodeSerializers.dispatchedMap(keySerializer, key -> valueSerializer)`：处理每个值的写法由它的键决定的 `Map<K, V>`，对应 DataFixerUpper 的 `Codec.dispatchedMap`。解码保持 YAML 中的书写顺序；未知键由 `keySerializer` 解码失败报告。编码时每个值必须能交给它的键选出的 serializer。
 - `required(name/index)` / `optional(name/index)` / `optional(name/index, value)`：声明 mapping/sequence 的字段或元素 presence。
 - `NodeSerializers.mapping(type)` / `NodeSerializers.sequence(type)`：通过 `group(...).apply(...)` 组合对象。
 - `NodeSerializers.scalar(read, write)`：处理字符串承载的值对象。

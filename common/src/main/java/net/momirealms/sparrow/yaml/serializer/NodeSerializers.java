@@ -354,6 +354,48 @@ public final class NodeSerializers {
         return new SequenceBuilder<>(type);
     }
 
+    public static <K, V> NodeSerializer<Map<K, V>> dispatchedMap(NodeSerializer<K> keySerializer, Function<? super K, ? extends NodeSerializer<? extends V>> valueSerializer) {
+        return NodeSerializer.createInternal(
+                Map.class,
+                node -> {
+                    if (!(node instanceof SectionNode section)) {
+                        throw new InvalidNodeException(node, Map.class);
+                    }
+                    Map<Object, YamlNode<?>> nodeMap = section.value();
+                    if (nodeMap == null) {
+                        throw new InvalidNodeException(node, Map.class);
+                    }
+                    // 先解码键, 再用键选出的 serializer 解码值, 结果保留文档中的书写顺序
+                    Map<K, V> result = new LinkedHashMap<>(Math.max((int) (nodeMap.size() / 0.75f) + 1, 16));
+                    for (Map.Entry<Object, YamlNode<?>> entry : nodeMap.entrySet()) {
+                        ScalarNode keyNode = ScalarNode.create(section.root(), entry.getKey());
+                        keyNode.parentNode(section);
+                        keyNode.key(entry.getKey());
+                        K key = keySerializer.deserialize(keyNode);
+                        result.put(key, valueSerializer.apply(key).deserialize(entry.getValue()));
+                    }
+                    return result;
+                },
+                value -> {
+                    Map<Object, Object> result = new LinkedHashMap<>(Math.max((int) (value.size() / 0.75f) + 1, 16));
+                    for (Map.Entry<K, V> entry : value.entrySet()) {
+                        Object encodedKey = keySerializer.serialize(entry.getKey());
+                        if (encodedKey == null || encodedKey instanceof Map || encodedKey instanceof List) {
+                            throw new IllegalArgumentException("Map key serializer must encode to a scalar value: " + entry.getKey());
+                        }
+                        result.put(encodedKey, serializeDispatched(valueSerializer.apply(entry.getKey()), entry.getValue()));
+                    }
+                    return result;
+                }
+        );
+    }
+
+    // 每个值的类型要与它的键选出的 serializer 一致, 这里按这个约定强转
+    @SuppressWarnings("unchecked")
+    private static <V> Object serializeDispatched(NodeSerializer<? extends V> serializer, V value) {
+        return ((NodeSerializer<V>) serializer).serialize(value);
+    }
+
     private static Object scalarValue(YamlNode<?> node, Class<?> targetType) {
         if (node == null) {
             throw new InvalidNodeException(null, targetType);
