@@ -5,6 +5,7 @@ import net.momirealms.sparrow.yaml.mapper.YamlMapper;
 import net.momirealms.sparrow.yaml.mapper.YamlMapperFactory;
 import net.momirealms.sparrow.yaml.serializer.SerializerRegistry;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
+import net.momirealms.sparrow.yaml.upgrade.UpgradeSchema;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,7 +19,6 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Function;
@@ -258,7 +258,7 @@ public class SparrowYaml {
 
     @NotNull
     public YamlDocument upgradeFile(@NotNull Path localPath, @NotNull YamlDocument defDocument, @NotNull YamlUpgradePipeline pipeline, @Nullable Function<Path, Path> backupPathResolver) throws IOException {
-        return YamlFileLifecycle.load(this, localPath, () -> defDocument, pipeline, List.of(), backupPathResolver).document();
+        return YamlFileLifecycle.load(this, localPath, () -> defDocument, pipeline, UpgradeSchema.empty(), backupPathResolver).document();
     }
 
     // 默认备份配置路径解析器

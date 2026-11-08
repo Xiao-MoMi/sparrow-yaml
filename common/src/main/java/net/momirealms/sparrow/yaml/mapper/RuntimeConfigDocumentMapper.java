@@ -4,6 +4,7 @@ import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.YamlDocument;
 import net.momirealms.sparrow.yaml.exception.AutoSerializerException;
 import net.momirealms.sparrow.yaml.exception.MissingNodeException;
+import net.momirealms.sparrow.yaml.exception.NodeParsingException;
 import net.momirealms.sparrow.yaml.node.SectionNode;
 import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.node.YamlNode;
@@ -17,7 +18,9 @@ import net.momirealms.sparrow.yaml.serializer.auto.annotation.InlineComment;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlConstructor;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlIgnore;
 import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
+import net.momirealms.sparrow.yaml.upgrade.UpgradeSchema;
 import net.momirealms.sparrow.yaml.util.TypeUtils;
+import org.jetbrains.annotations.NotNull;
 import org.snakeyaml.engine.v2.comments.CommentLine;
 import org.snakeyaml.engine.v2.comments.CommentType;
 
@@ -30,6 +33,7 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -50,13 +54,15 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     private final Class<T> type; // 配置类类型
     private final List<CommentBinding> comments; // 保存时需要应用到各层级键的注释
     private final List<RequiredProperty> requiredProperties;
+    private final Map<Route, Type> memberTypes;       // 配置成员路由到声明类型, 包含嵌套配置类中的成员
     private final List<Route> dynamicSectionRoutes; // 子节点属于动态用户数据的 Section 路由, 即 Map 字段对应的路由
 
     RuntimeConfigDocumentMapper(Class<T> type) {
         this.type = type;
         this.comments = collectComments(type);
         this.requiredProperties = collectRequiredProperties(type);
-        this.dynamicSectionRoutes = collectDynamicSectionRoutes(type);
+        this.memberTypes = collectMemberTypes(type);
+        this.dynamicSectionRoutes = collectDynamicSectionRoutes(this.memberTypes);
     }
 
     /**
@@ -111,6 +117,33 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     @Override
     public List<Route> dynamicSectionRoutes() {
         return this.dynamicSectionRoutes;
+    }
+
+    /**
+     * 返回升级结构信息, 本地节点与模板形状不同时, 由该路由成员的序列化器判断本地写法能否读取.
+     */
+    @Override
+    public UpgradeSchema upgradeSchema(SparrowYaml yaml) {
+        return new UpgradeSchema() {
+            @NotNull
+            @Override
+            public Collection<Route> dynamicSectionRoutes() {
+                return RuntimeConfigDocumentMapper.this.dynamicSectionRoutes;
+            }
+
+            @Override
+            public boolean accepts(@NotNull Route route, @NotNull YamlNode<?> localNode) {
+                Type memberType = RuntimeConfigDocumentMapper.this.memberTypes.get(route);
+                if (memberType == null) return false;
+                // 用成员自己的序列化器试读一次, 读得出来就说明这是它接受的写法, 包括 withAlternative 登记的候选形式.
+                try {
+                    yaml.serializers().resolve(memberType).deserialize(localNode);
+                    return true;
+                } catch (NodeParsingException e) {
+                    return false;
+                }
+            }
+        };
     }
 
     /**
@@ -249,16 +282,16 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
     }
 
     /**
-     * 收集配置类中 Map 字段对应的路由, 包含嵌套配置类中的 Map 字段.
-     * 这些路由的子节点是动态用户数据, 升级时不应被模板内容合并或清理.
+     * 收集配置类各成员的路由与声明类型, 包含嵌套配置类中的成员.
+     * Map 成员只登记自身, 其子节点属于动态用户数据.
      */
-    private static List<Route> collectDynamicSectionRoutes(Class<?> type) {
-        List<Route> result = new ArrayList<>();
-        collectDynamicSectionRoutes(type, null, new HashSet<>(), result);
-        return List.copyOf(result);
+    private static Map<Route, Type> collectMemberTypes(Class<?> type) {
+        Map<Route, Type> result = new HashMap<>();
+        collectMemberTypes(type, null, new HashSet<>(), result);
+        return Map.copyOf(result);
     }
 
-    private static void collectDynamicSectionRoutes(Class<?> type, Route prefix, Set<Class<?>> visiting, List<Route> result) {
+    private static void collectMemberTypes(Class<?> type, Route prefix, Set<Class<?>> visiting, Map<Route, Type> result) {
         if (!visiting.add(type)) {
             return;
         }
@@ -268,7 +301,7 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                 if (component.isAnnotationPresent(YamlIgnore.class)) {
                     continue;
                 }
-                collectMemberDynamicRoutes(component.getGenericType(), Route.addTo(prefix, yamlKey(component, naming)), visiting, result);
+                collectMemberType(component.getGenericType(), Route.addTo(prefix, yamlKey(component, naming)), visiting, result);
             }
         } else {
             for (Field field : declaredFieldsInHierarchy(type)) {
@@ -276,26 +309,37 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
                 if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers) || field.isAnnotationPresent(YamlIgnore.class)) {
                     continue;
                 }
-                collectMemberDynamicRoutes(field.getGenericType(), Route.addTo(prefix, yamlKey(field, naming)), visiting, result);
+                collectMemberType(field.getGenericType(), Route.addTo(prefix, yamlKey(field, naming)), visiting, result);
             }
         }
         visiting.remove(type);
     }
 
-    private static void collectMemberDynamicRoutes(Type memberType, Route route, Set<Class<?>> visiting, List<Route> result) {
+    private static void collectMemberType(Type memberType, Route route, Set<Class<?>> visiting, Map<Route, Type> result) {
         Class<?> rawType;
         try {
             rawType = TypeUtils.rawType(memberType);
         } catch (AutoSerializerException e) {
-            return; // 无法确定原始类型的成员交由序列化层报告, 不参与动态路由收集.
+            return; // 无法确定原始类型的成员交由序列化层报告, 不参与收集.
         }
-        if (rawType == Map.class) {
-            result.add(route);
-            return;
+        result.put(route, memberType);
+        if (rawType != Map.class && isNestedConfigCandidate(rawType)) {
+            collectMemberTypes(rawType, route, visiting, result);
         }
-        if (isNestedConfigCandidate(rawType)) {
-            collectDynamicSectionRoutes(rawType, route, visiting, result);
+    }
+
+    /**
+     * 从成员类型中筛出 Map 成员的路由.
+     * 这些路由的子节点是动态用户数据, 升级时不应被模板内容合并或清理.
+     */
+    private static List<Route> collectDynamicSectionRoutes(Map<Route, Type> memberTypes) {
+        List<Route> result = new ArrayList<>();
+        for (Map.Entry<Route, Type> entry : memberTypes.entrySet()) {
+            if (TypeUtils.rawType(entry.getValue()) == Map.class) {
+                result.add(entry.getKey());
+            }
         }
+        return List.copyOf(result);
     }
 
     // 判断成员类型是否可能作为嵌套配置 mapping 参与自动序列化, 与 resolver 的类型分支保持一致.

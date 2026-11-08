@@ -2,7 +2,7 @@ package net.momirealms.sparrow.yaml.internal;
 
 import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.YamlDocument;
-import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.upgrade.UpgradeSchema;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
@@ -11,7 +11,6 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collection;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -26,7 +25,7 @@ public final class YamlFileLifecycle {
             @NotNull Path path,
             @NotNull Supplier<YamlDocument> defaultDocumentSupplier,
             @Nullable YamlUpgradePipeline pipeline,
-            @NotNull Collection<Route> dynamicSectionRoutes,
+            @NotNull UpgradeSchema schema,
             @Nullable Function<Path, Path> backupPathResolver
     ) throws IOException {
         if (!Files.exists(path)) {
@@ -48,7 +47,7 @@ public final class YamlFileLifecycle {
             return new Result(localDocument, false, false, null);
         }
 
-        YamlDocument upgradedDocument = pipeline.upgrade(localDocument, defaultDocument, dynamicSectionRoutes);
+        YamlDocument upgradedDocument = pipeline.upgrade(localDocument, defaultDocument, schema);
         Path backupPath = null;
         if (backupPathResolver != null) {
             backupPath = backupPathResolver.apply(path);

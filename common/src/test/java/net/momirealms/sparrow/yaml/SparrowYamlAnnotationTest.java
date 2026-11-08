@@ -13,6 +13,7 @@ import net.momirealms.sparrow.yaml.serializer.auto.annotation.YamlProperty;
 import net.momirealms.sparrow.yaml.mapper.YamlMapper;
 import net.momirealms.sparrow.yaml.mapper.YamlMapperFactory;
 import net.momirealms.sparrow.yaml.node.SectionNode;
+import net.momirealms.sparrow.yaml.node.SequenceNode;
 import net.momirealms.sparrow.yaml.route.Route;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializer;
 import net.momirealms.sparrow.yaml.serializer.NodeSerializers;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -147,6 +149,25 @@ class SparrowYamlAnnotationTest {
 
         public Map<String, Integer> getRewards() { return rewards; }
 
+    }
+
+    public record Message(String text) {
+    }
+
+    public static class NestedMessages {
+        private Message farewell = new Message("bye");
+    }
+
+    @Configuration
+    public static class VersionedMessageConfig {
+        @YamlProperty("config-version")
+        private String version = "2";
+
+        private Message greeting = new Message("hello");
+
+        private int count = 1;
+
+        private NestedMessages nested = new NestedMessages();
     }
 
     public static class DynamicNestedConfig {
@@ -888,6 +909,43 @@ class SparrowYamlAnnotationTest {
         assertEquals(Map.of("default", 10, "vip", 100, "mvp", 500), config.getRewards(), "升级后应保留本地 Map 中用户自定义的条目");
         assertTrue(saved.contains("vip: 100"), saved);
         assertTrue(saved.contains("mvp: 500"), saved);
+    }
+
+    @Test
+    void should_KeepAlternativeShape_When_ConfigIsUpgraded(@TempDir Path tempDir) throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        NodeSerializer<Message> messageSerializer = NodeSerializers.STRING
+                .xmap(Message.class, Message::new, Message::text)
+                .withAlternative(NodeSerializers.STRING.listOf(), lines -> new Message(String.join("\n", lines)));
+        sparrowYaml.serializers().register(Message.class, messageSerializer);
+        YamlMapperFactory factory = YamlMapperFactory.builder()
+                .sparrowYaml(sparrowYaml)
+                .upgradePipeline(YamlUpgradePipeline.builder().build())
+                .build();
+        YamlMapper<VersionedMessageConfig> mapper = factory.create(VersionedMessageConfig.class, VersionedMessageConfig::new);
+
+        Path configPath = tempDir.resolve("versioned-message-config.yml");
+        Files.writeString(configPath, """
+                config-version: 1
+                greeting:
+                  - first
+                  - second
+                count:
+                  - 5
+                nested:
+                  farewell:
+                    - see
+                    - you
+                """);
+
+        mapper.load(configPath);
+        YamlDocument saved = sparrowYaml.load(configPath);
+
+        // 序列化器接受的列表写法保留, 嵌套配置中的同类字段同样保留
+        assertInstanceOf(SequenceNode.class, saved.getNodeOrNull(Route.from("greeting")));
+        assertInstanceOf(SequenceNode.class, saved.getNodeOrNull(Route.from("nested", "farewell")));
+        // int 不接受列表, 仍被模板值替换
+        assertEquals(1, ((Number) saved.getNodeOrNull(Route.from("count")).value()).intValue());
     }
 
     @Test

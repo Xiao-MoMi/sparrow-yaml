@@ -68,7 +68,7 @@ public class YamlUpgradePipeline {
      * @return 升级后的 YAML 文档, 也就是 localDocument .
      */
     public YamlDocument upgrade(YamlDocument localDocument, YamlDocument defDocument) {
-        return this.upgrade(localDocument, defDocument, List.of());
+        return this.upgrade(localDocument, defDocument, UpgradeSchema.empty());
     }
 
     /**
@@ -80,15 +80,31 @@ public class YamlUpgradePipeline {
      * @param defDocument 模板 YAML 文档
      * @param dynamicSectionRoutes 子节点属于动态用户数据的 Section 路由
      * @return 升级后的 YAML 文档, 也就是 localDocument .
+     * @deprecated 使用 {@link #upgrade(YamlDocument, YamlDocument, UpgradeSchema)}.
+     *             {@link net.momirealms.sparrow.yaml.mapper.YamlMapper} 只调用新重载, 子类重写本方法不会再影响映射器的升级流程.
      */
+    @Deprecated(since = "1.0.24")
     public YamlDocument upgrade(YamlDocument localDocument, YamlDocument defDocument, Collection<Route> dynamicSectionRoutes) {
+        return this.upgrade(localDocument, defDocument, UpgradeSchema.of(dynamicSectionRoutes));
+    }
+
+    /**
+     * 根据模板文档升级本地文档, 动态路由和本地写法的兼容判断由配置类型的结构信息提供.
+     * 本地节点与模板节点形状不同, 但仍能被目标类型读取时, 保留本地节点.
+     *
+     * @param localDocument 本地 YAML 文档
+     * @param defDocument 模板 YAML 文档
+     * @param schema 配置类型提供的结构信息
+     * @return 升级后的 YAML 文档, 也就是 localDocument .
+     */
+    public YamlDocument upgrade(YamlDocument localDocument, YamlDocument defDocument, UpgradeSchema schema) {
         String localVersion = versionExtractor.extractVersion(localDocument);
         String targetVersion = versionExtractor.extractTargetVersion(defDocument);
         if (localVersion.equals(targetVersion)) {
             return localDocument;
         }
 
-        ResolvedUpgradePlan upgradePlan = this.resolveUpgradePlan(localVersion, dynamicSectionRoutes);
+        ResolvedUpgradePlan upgradePlan = this.resolveUpgradePlan(localVersion, schema.dynamicSectionRoutes());
         PatchContext patchContext = new PatchContext();
 
         // 打版本 Patch
@@ -104,7 +120,7 @@ public class YamlUpgradePipeline {
 
         // 合并和清理节点
         IgnoredRouteMatcher ignoredRouteMatcher = upgradePlan.ignoredRouteMatcher();
-        this.merge(localDocument, defDocument, Route.empty(), ignoredRouteMatcher);
+        this.merge(localDocument, defDocument, Route.empty(), ignoredRouteMatcher, schema);
         if (options.deleteRemovedNodes()) {
             clean(localDocument, defDocument, Route.empty(), ignoredRouteMatcher);
         }
@@ -149,7 +165,7 @@ public class YamlUpgradePipeline {
      * 以模板文档为准合并本地节点.
      * 保留本地已有值, 仅补齐缺失节点并按需要同步注释和顺序.
      */
-    private void merge(YamlNode<?> localNode, YamlNode<?> defNode, Route currentRoute, IgnoredRouteMatcher ignoredRouteMatcher) {
+    private void merge(YamlNode<?> localNode, YamlNode<?> defNode, Route currentRoute, IgnoredRouteMatcher ignoredRouteMatcher, UpgradeSchema schema) {
         if (ignoredRouteMatcher.matches(currentRoute)) return;
 
         if (defNode instanceof SectionNode defSection && localNode instanceof SectionNode localSection) {
@@ -176,7 +192,7 @@ public class YamlUpgradePipeline {
                 if (childLocalNode == null) {
                     copyNodeTo(localSection, defKey, childDefNode);
                 } else {
-                    merge(childLocalNode, childDefNode, childRoute, ignoredRouteMatcher);
+                    merge(childLocalNode, childDefNode, childRoute, ignoredRouteMatcher, schema);
                     if (options.updateComments()) {
                         childDefNode.copyNonEmptyCommentsTo(childLocalNode);
                     }
@@ -200,6 +216,12 @@ public class YamlUpgradePipeline {
             }
         }
         else if (defNode instanceof ScalarNode && localNode instanceof ScalarNode) {
+            if (options.updateComments()) {
+                defNode.copyNonEmptyCommentsTo(localNode);
+            }
+        }
+        // 形状不同但目标类型能读取本地写法, 保留用户值并只同步注释.
+        else if (schema.accepts(currentRoute, localNode)) {
             if (options.updateComments()) {
                 defNode.copyNonEmptyCommentsTo(localNode);
             }

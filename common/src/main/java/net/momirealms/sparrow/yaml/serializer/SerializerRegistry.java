@@ -2,11 +2,13 @@ package net.momirealms.sparrow.yaml.serializer;
 
 import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerBinding;
+import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerContext;
 import net.momirealms.sparrow.yaml.serializer.auto.AutoSerializerMode;
 import net.momirealms.sparrow.yaml.serializer.auto.factory.AdaptiveAutoSerializerFactory;
 import net.momirealms.sparrow.yaml.serializer.auto.factory.AsmAutoSerializerFactory;
 import net.momirealms.sparrow.yaml.serializer.auto.factory.AutoSerializerFactory;
 import net.momirealms.sparrow.yaml.serializer.auto.factory.ReflectionAutoSerializerFactory;
+import net.momirealms.sparrow.yaml.serializer.auto.resolver.ReflectionTypeSerializerResolver;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Type;
@@ -151,6 +153,19 @@ public class SerializerRegistry {
     @SuppressWarnings("unchecked")
     public <T> NodeSerializer<T> get(Type type) {
         return (NodeSerializer<T>) serializers.get(type);
+    }
+
+    /**
+     * 按配置成员使用的同一套规则解析 Java Type 对应的序列化器.
+     * 已注册的类型直接复用, List, Set, Map 与嵌套配置类按自动序列化规则组合生成.
+     *
+     * @param type 目标的 Java Type
+     * @param <T>  目标类型
+     * @return 对应的序列化器
+     * @throws net.momirealms.sparrow.yaml.exception.AutoSerializerException 当该类型无法自动序列化时
+     */
+    public <T> NodeSerializer<T> resolve(Type type) {
+        return new AutoSerializerContext(this, new ReflectionTypeSerializerResolver(this.autoSerializerFactory)).resolve(type);
     }
 
     /**

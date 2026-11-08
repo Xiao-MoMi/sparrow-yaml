@@ -3,6 +3,7 @@ package net.momirealms.sparrow.yaml.mapper;
 import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.YamlDocument;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.upgrade.UpgradeSchema;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -38,5 +39,15 @@ public interface ConfigDocumentMapper<T> {
      */
     default List<Route> dynamicSectionRoutes() {
         return List.of();
+    }
+
+    /**
+     * 返回升级时使用的结构信息. 默认只登记 {@link #dynamicSectionRoutes()}, 形状与模板不同的本地节点仍会被替换.
+     *
+     * @param yaml 提供序列化器注册表的 SparrowYaml 实例
+     * @return 升级结构信息
+     */
+    default UpgradeSchema upgradeSchema(SparrowYaml yaml) {
+        return UpgradeSchema.of(this.dynamicSectionRoutes());
     }
 }

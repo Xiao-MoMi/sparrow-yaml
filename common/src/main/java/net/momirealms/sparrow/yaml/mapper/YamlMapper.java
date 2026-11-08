@@ -60,7 +60,7 @@ public class YamlMapper<T> {
                 path,
                 defaultDocumentSupplier,
                 this.upgradePipeline,
-                this.documentMapper.dynamicSectionRoutes(),
+                this.documentMapper.upgradeSchema(this.sparrowYaml),
                 this.backupOnUpgrade ? this.backupPathResolver : null
         );
         T loadedInstance = fileResult.created()

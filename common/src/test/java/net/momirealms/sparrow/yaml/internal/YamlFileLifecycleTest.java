@@ -4,13 +4,13 @@ import net.momirealms.sparrow.yaml.SparrowYaml;
 import net.momirealms.sparrow.yaml.YamlDocument;
 import net.momirealms.sparrow.yaml.exception.YamlUpgradeException;
 import net.momirealms.sparrow.yaml.route.Route;
+import net.momirealms.sparrow.yaml.upgrade.UpgradeSchema;
 import net.momirealms.sparrow.yaml.upgrade.YamlUpgradePipeline;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,7 +34,7 @@ class YamlFileLifecycleTest {
                 path,
                 () -> defaults,
                 YamlUpgradePipeline.builder().build(),
-                List.of(),
+                UpgradeSchema.empty(),
                 target -> {
                     resolverCalls.incrementAndGet();
                     return target.resolveSibling(target.getFileName() + ".bak");
@@ -62,7 +62,7 @@ class YamlFileLifecycleTest {
                 path,
                 () -> defaults,
                 YamlUpgradePipeline.builder().build(),
-                List.of(),
+                UpgradeSchema.empty(),
                 target -> {
                     resolverCalls.incrementAndGet();
                     return target.resolveSibling(target.getFileName() + ".bak");
@@ -89,7 +89,7 @@ class YamlFileLifecycleTest {
                 path,
                 () -> defaults,
                 YamlUpgradePipeline.builder().build(),
-                List.of(),
+                UpgradeSchema.empty(),
                 target -> backupPath
         );
 
@@ -120,7 +120,7 @@ class YamlFileLifecycleTest {
                 path,
                 () -> defaults,
                 pipeline,
-                List.of(),
+                UpgradeSchema.empty(),
                 target -> {
                     resolverCalls.incrementAndGet();
                     return backupPath;
