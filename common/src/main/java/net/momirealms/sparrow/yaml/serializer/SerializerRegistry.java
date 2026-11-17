@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SerializerRegistry {
     private final SparrowYaml holder;
     private final Map<Type, NodeSerializer<?>> serializers = new ConcurrentHashMap<>();
+    private final Map<Type, NodeSerializer<?>> explicitSerializers = new ConcurrentHashMap<>(); // 调用方通过 register 显式登记的序列化器, 不含自动生成的
     private final AutoSerializerFactory autoSerializerFactory;
 
     public SerializerRegistry(SparrowYaml holder) {
@@ -60,6 +61,7 @@ public class SerializerRegistry {
     public <T> boolean register(Class<T> clazz, NodeSerializer<T> serializer) {
         if (!serializers.containsKey(clazz)) {
             serializers.put(clazz, serializer);
+            explicitSerializers.put(clazz, serializer);
             return true;
         }
         return false;
@@ -78,9 +80,22 @@ public class SerializerRegistry {
         Type type = typeRef.type();
         if (!serializers.containsKey(type)) {
             serializers.put(type, serializer);
+            explicitSerializers.put(type, serializer);
             return true;
         }
         return false;
+    }
+
+    /**
+     * 判断某个类型当前使用的序列化器是不是调用方通过 register 显式登记的.
+     * 自动序列化器生成后也会存进注册表, 但它不算显式登记; 显式登记的序列化器被注销或覆盖后同样不算.
+     *
+     * @param type 目标的 Java Type
+     * @return 该类型当前的序列化器由调用方显式登记时返回 true
+     */
+    public boolean isExplicit(Type type) {
+        NodeSerializer<?> explicit = explicitSerializers.get(type);
+        return explicit != null && explicit == serializers.get(type);
     }
 
     /**

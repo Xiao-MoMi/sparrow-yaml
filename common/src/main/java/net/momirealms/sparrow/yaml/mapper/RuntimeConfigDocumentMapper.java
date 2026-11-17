@@ -121,14 +121,23 @@ final class RuntimeConfigDocumentMapper<T> implements ConfigDocumentMapper<T> {
 
     /**
      * 返回升级结构信息, 本地节点与模板形状不同时, 由该路由成员的序列化器判断本地写法能否读取.
+     * 类型带有显式登记序列化器的成员是一个完整的值, 它内部的写法归那个序列化器管, 与 Map 成员一样登记为动态路由:
+     * 本地缺失时整个补入, 本地已有时原样保留, 模板不往里面合并, 清理也不会删它的子节点.
      */
     @Override
     public UpgradeSchema upgradeSchema(SparrowYaml yaml) {
+        List<Route> dynamicRoutes = new ArrayList<>(this.dynamicSectionRoutes);
+        for (Map.Entry<Route, Type> entry : this.memberTypes.entrySet()) {
+            Type memberType = entry.getValue();
+            if (TypeUtils.rawType(memberType) != Map.class && yaml.serializers().isExplicit(memberType)) {
+                dynamicRoutes.add(entry.getKey());
+            }
+        }
         return new UpgradeSchema() {
             @NotNull
             @Override
             public Collection<Route> dynamicSectionRoutes() {
-                return RuntimeConfigDocumentMapper.this.dynamicSectionRoutes;
+                return dynamicRoutes;
             }
 
             @Override

@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -149,6 +150,23 @@ class SparrowYamlAnnotationTest {
 
         public Map<String, Integer> getRewards() { return rewards; }
 
+    }
+
+    public record Badge(String item, Optional<String> name) {
+    }
+
+    @Configuration
+    public static class VersionedValueConfig {
+        @YamlProperty("config-version")
+        private String version = "2";
+
+        private Badge first = new Badge("stone", Optional.of("模板名称"));
+
+        private Badge second = new Badge("dirt", Optional.of("新增条目"));
+
+        public Badge getFirst() { return first; }
+
+        public Badge getSecond() { return second; }
     }
 
     public record Message(String text) {
@@ -946,6 +964,39 @@ class SparrowYamlAnnotationTest {
         assertInstanceOf(SequenceNode.class, saved.getNodeOrNull(Route.from("nested", "farewell")));
         // int 不接受列表, 仍被模板值替换
         assertEquals(1, ((Number) saved.getNodeOrNull(Route.from("count")).value()).intValue());
+    }
+
+    @Test
+    void should_KeepExplicitSerializerMemberWhole_When_ConfigIsUpgraded(@TempDir Path tempDir) throws IOException {
+        SparrowYaml sparrowYaml = SparrowYaml.builder().build();
+        sparrowYaml.serializers().register(Badge.class, NodeSerializers.mapping(Badge.class)
+                .group(
+                        NodeSerializers.STRING.required("item").forGetter(Badge::item),
+                        NodeSerializers.STRING.optional("name").forGetter(Badge::name)
+                )
+                .apply(Badge::new));
+        YamlMapperFactory factory = YamlMapperFactory.builder()
+                .sparrowYaml(sparrowYaml)
+                .upgradePipeline(YamlUpgradePipeline.builder().build())
+                .build();
+        YamlMapper<VersionedValueConfig> mapper = factory.create(VersionedValueConfig.class, VersionedValueConfig::new);
+
+        Path configPath = tempDir.resolve("versioned-value-config.yml");
+        Files.writeString(configPath, """
+                config-version: 1
+                first:
+                  item: diamond
+                  note: local
+                """);
+
+        VersionedValueConfig config = mapper.load(configPath).value();
+        String saved = Files.readString(configPath).replace("\r\n", "\n");
+
+        assertEquals(new Badge("diamond", Optional.empty()), config.getFirst(), "本地已有的成员应原样保留, 模板不往里面补可选键");
+        assertEquals(new Badge("dirt", Optional.of("新增条目")), config.getSecond(), "本地缺失的成员应整个补入");
+        assertFalse(saved.contains("模板名称"), saved);
+        assertTrue(saved.contains("note: local"), saved);
+        assertTrue(saved.contains("新增条目"), saved);
     }
 
     @Test
